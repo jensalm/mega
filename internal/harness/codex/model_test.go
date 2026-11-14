@@ -2,6 +2,8 @@ package codex
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,5 +181,17 @@ func TestEveryLaunchAndTurnPassesTheRequestWithNoConfigRead(t *testing.T) {
 	// launch or a turn.
 	if reads := sent("config/read"); len(reads) != 0 {
 		t.Errorf("config/read sent %d times", len(reads))
+	}
+}
+
+// a configured codex path that does not exist is named with what to do and
+// where it is set.
+func TestAMissingCodexPathIsNamed(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "bin", "codex")
+	where := "in '/c/mega.yaml', the config file mega read"
+	err := New(Config{Binary: gone, Where: where}).Check(os.Environ())
+	want := fmt.Sprintf("'codex' cannot run: '%s' does not exist; install Codex, or set codex.binary %s, to where it is", gone, where)
+	if err == nil || err.Error() != want || !errors.Is(err, harness.ErrExecutableMissing) {
+		t.Errorf("got  %v\nwant %q", err, want)
 	}
 }

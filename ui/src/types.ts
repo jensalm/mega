@@ -45,6 +45,8 @@ export interface ProjectEnvironment {
   // and short of, the approval's, when they differ.
   resolved?: { at: string; source: string; changed: string[]; fingerprint?: string; error?: string; added?: string[]; removed?: string[] }
   missing: { harness: string; executable: string; reason: string }[]
+  // a resolution is running now.
+  resolving?: boolean
 }
 
 // a running runtime's launch environment: names and fingerprints only.
@@ -256,6 +258,18 @@ export interface Workspace {
   needs_you: string[]
   // the "shut down when idle" gate and what is in its way.
   shutdown?: ShutdownGate
+  // whether each harness can run in the operator's shell environment, as
+  // mega's start-up check found it; absent until that check has run.
+  harnesses?: HarnessStatus[]
+}
+
+// HarnessStatus is one harness: where its programs were found, or why it
+// cannot run.
+export interface HarnessStatus {
+  name: string
+  found: boolean
+  where?: string
+  reason?: string
 }
 
 // Blocker is one conversation holding the shutdown gate, by kind.

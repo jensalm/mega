@@ -654,6 +654,37 @@ pre {
   max-width: 960px;
 }
 
+/* the empty workspace's page: where to begin, and what mega needs. */
+.first-run {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.first-run p,
+.first-run h2 {
+  margin: 0;
+}
+
+.first-run h2 {
+  font-size: calc(15px * var(--fs));
+}
+
+.first-run ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.first-run li {
+  overflow-wrap: anywhere;
+}
+
+.first-run li.found {
+  color: var(--muted);
+}
+
 .detail {
   display: flex;
   flex-direction: column;
@@ -697,11 +728,15 @@ pre {
   margin: 0 0 8px;
 }
 
+/* a dialog never outgrows the window: it scrolls inside, and its actions
+   stay in view at its foot. */
 dialog {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: inherit;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 18px 20px;
   width: min(480px, calc(100vw - 32px));
 }
@@ -742,6 +777,14 @@ dialog label {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+dialog .actions {
+  background: var(--bg);
+  bottom: -18px;
+  margin-bottom: -18px;
+  padding: 8px 0 18px;
+  position: sticky;
 }
 
 /* a conversation row is indented one level: its mark starts under its

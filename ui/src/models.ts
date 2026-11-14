@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getModels } from './api'
+import { ApiError, getModels } from './api'
 import type { ModelOption, Models } from './types'
 
 // the model lists, per project and harness, for the page's life. the service
@@ -21,25 +21,34 @@ function load(projectId: string, harness: string, fresh: boolean): Promise<Model
 export interface ModelsState {
   models: Models | null
   error: string | null
+  // errorCode is the service's code for the refusal: executable_missing says
+  // the harness cannot run here at all.
+  errorCode: string | null
 }
 
 // useModels loads what a harness offers for a project's checkout. a harness
 // that cannot list its models leaves the list empty and says why.
 export function useModels(projectId: string, harness: string, fresh = false): ModelsState {
-  const [state, setState] = useState<ModelsState & { key: string }>({ key: '', models: null, error: null })
+  const [state, setState] = useState<ModelsState & { key: string }>({ key: '', models: null, error: null, errorCode: null })
   const key = `${projectId}\n${harness}`
   useEffect(() => {
     let current = true
     load(projectId, harness, fresh).then(
-      (models) => current && setState({ key, models, error: null }),
+      (models) => current && setState({ key, models, error: null, errorCode: null }),
       (failure: unknown) =>
-        current && setState({ key, models: null, error: failure instanceof Error ? failure.message : String(failure) }),
+        current &&
+        setState({
+          key,
+          models: null,
+          error: failure instanceof Error ? failure.message : String(failure),
+          errorCode: failure instanceof ApiError ? failure.code : null,
+        }),
     )
     return () => {
       current = false
     }
   }, [projectId, harness, fresh, key])
-  return state.key === key ? state : { models: null, error: null }
+  return state.key === key ? state : { models: null, error: null, errorCode: null }
 }
 
 // findModel finds a model by the id a request names, or by the id it

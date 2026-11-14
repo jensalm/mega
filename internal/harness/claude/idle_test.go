@@ -203,7 +203,7 @@ func TestIdleLaunchThatNeverAnswersIsStopped(t *testing.T) {
 	if err := os.WriteFile(node, []byte("#!/bin/sh\nsleep 30 &\nexec sleep 30\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	h := New(Config{Node: node, Shim: shim, Executable: "/x"})
+	h := New(Config{Node: node, Shim: shim, Executable: "/bin/true"})
 
 	sink := &exitSink{exited: make(chan error, 1)}
 	rt, err := h.Launch(harness.Spec{Env: os.Environ(), Find: os.Environ(), Cwd: t.TempDir(), NativeID: "s-1", Idle: true}, sink)

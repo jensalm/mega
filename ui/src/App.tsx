@@ -9,12 +9,13 @@ import type { About, StreamFrame, Workspace } from './types'
 import { AdoptDialog } from './components/AdoptDialog'
 import { ConversationView } from './components/ConversationView'
 import { LaunchDialog } from './components/LaunchDialog'
+import { FirstRun } from './components/FirstRun'
 import { ProjectDetail } from './components/ProjectDetail'
 import { RegisterProjectDialog } from './components/RegisterProjectDialog'
 import { SidePanel } from './components/SidePanel'
 import { ShutdownBanner } from './components/Gate'
 import { pendingReason, shutDownReason } from './gate'
-import { environmentReason, missingReason } from './checkout'
+import { claudeCannotRun, environmentReason, missingReason } from './checkout'
 import { showTab, tabState } from './favicon'
 import { productName } from './brand'
 import { waitingLabel, type Waiting } from './waiting'
@@ -474,16 +475,14 @@ export function App() {
         onLaunch={() => setLaunching(selectedProject.id)}
         onAdopt={() => setAdopting(selectedProject.id)}
         heldBy={heldBy ?? missingReason(selectedProject) ?? environmentReason(selectedProject)}
+        firstConversation={conversations.length === 0}
+        claudeCannotRun={claudeCannotRun(selectedProject, workspace?.harnesses)}
       />
     )
   } else if (workspace === null) {
     main = <Unknown knowledge={knowledge} error={loadError} waiting={[streamWaiting, workspaceWaiting]} />
   } else {
-    main = (
-      <p className="placeholder">
-        {projects.length === 0 ? 'Register a project from an existing checkout to begin.' : 'Select a project or a conversation.'}
-      </p>
-    )
+    main = projects.length === 0 ? <FirstRun status={workspace.harnesses} /> : <p className="placeholder">Select a project or a conversation.</p>
   }
 
   return (

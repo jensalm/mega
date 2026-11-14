@@ -2,6 +2,7 @@ package claude
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 // each claude launch failure comes before or while starting the shim, so each
 // is classified as not started; nothing is wrapped as a blanket.
 func TestLaunchFailuresBeforeTheShimAreNotStarted(t *testing.T) {
-	missingShim := New(Config{Node: "node", Shim: filepath.Join(t.TempDir(), "absent"), Executable: "/x"})
+	missingShim := New(Config{Node: "node", Shim: filepath.Join(t.TempDir(), "absent"), Executable: "/bin/true"})
 	if _, err := missingShim.Launch(harness.Spec{Env: os.Environ(), Find: os.Environ(), Cwd: t.TempDir()}, &recordingSink{}); !errors.Is(err, harness.ErrNotStarted) {
 		t.Errorf("missing shim: %v", err)
 	}
@@ -25,7 +26,7 @@ func TestLaunchFailuresBeforeTheShimAreNotStarted(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	missingNode := New(Config{Node: filepath.Join(t.TempDir(), "no-node"), Shim: shim, Executable: "/x"})
+	missingNode := New(Config{Node: filepath.Join(t.TempDir(), "no-node"), Shim: shim, Executable: "/bin/true"})
 	if _, err := missingNode.Launch(harness.Spec{Env: os.Environ(), Find: os.Environ(), Cwd: t.TempDir()}, &recordingSink{}); !errors.Is(err, harness.ErrNotStarted) {
 		t.Errorf("node that cannot start: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestLaunchFailuresBeforeTheShimAreNotStarted(t *testing.T) {
 // installed.
 func TestCheckNamesWhatIsMissing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	h := New(Config{Node: "node", Shim: t.TempDir(), Executable: "/x"})
+	h := New(Config{Node: "node", Shim: t.TempDir(), Executable: "/bin/true"})
 	var missing *harness.MissingError
 	if err := h.Check(os.Environ()); !errors.As(err, &missing) || missing.Executable != "node" {
 		t.Errorf("no node: %v", err)
@@ -44,7 +45,7 @@ func TestCheckNamesWhatIsMissing(t *testing.T) {
 	if err := os.WriteFile(node, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	h = New(Config{Node: node, Shim: t.TempDir(), Executable: "/x"})
+	h = New(Config{Node: node, Shim: t.TempDir(), Executable: "/bin/true"})
 	if err := h.Check(os.Environ()); !errors.As(err, &missing) || missing.Executable != "the claude shim" {
 		t.Errorf("no shim: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestCheckNamesWhatIsMissing(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := New(Config{Node: node, Shim: shim, Executable: "/x"}).Check(os.Environ()); err != nil {
+	if err := New(Config{Node: node, Shim: shim, Executable: "/bin/true"}).Check(os.Environ()); err != nil {
 		t.Errorf("all present: %v", err)
 	}
 }
@@ -91,6 +92,40 @@ func TestAScriptClaudeExecutableIsRefused(t *testing.T) {
 		_, err := h.Launch(harness.Spec{Env: os.Environ(), Find: os.Environ(), Cwd: t.TempDir()}, &recordingSink{})
 		if !errors.Is(err, harness.ErrNotStarted) || !errors.As(err, &missing) {
 			t.Errorf("%s: launch said %v", name, err)
+		}
+	}
+}
+
+// a configured claude code path that does not exist, or is not an
+// executable file, is named before anything runs, with what to do and where
+// it is set; the sdk is never left to fail on it.
+func TestAMissingClaudeCodeIsNamed(t *testing.T) {
+	shim := t.TempDir()
+	if err := os.WriteFile(filepath.Join(shim, shimScript), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	where := "in '/c/mega.yaml', the config file mega read"
+	gone := filepath.Join(t.TempDir(), "versions", "2.1.318")
+	plain := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(plain, []byte("not a program"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for path, what := range map[string]string{gone: "does not exist", plain: "is not an executable file"} {
+		h := New(Config{Node: "node", Shim: shim, Executable: path, Where: where})
+		err := h.Check(os.Environ())
+		var missing *harness.MissingError
+		if !errors.As(err, &missing) || missing.Executable != path {
+			t.Fatalf("%s: %v", path, err)
+		}
+		want := fmt.Sprintf("'claude' cannot run: '%s' %s; install Claude Code, or set claude.executable %s, to where it is", path, what, where)
+		if err.Error() != want {
+			t.Errorf("got  %q\nwant %q", err.Error(), want)
+		}
+		if _, err := h.Models(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}); !errors.As(err, &missing) {
+			t.Errorf("%s: models ran past a missing claude code: %v", path, err)
 		}
 	}
 }

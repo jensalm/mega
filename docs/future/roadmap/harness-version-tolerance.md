@@ -33,3 +33,7 @@ Recorded in the capability report with versions:
 - **An npm-installed `claude` is refused by name**, in code though not observed: a `claude` that is a script is refused with "set claude.executable to a native build, such as ~/.local/share/claude/versions/<version>". Coworkers who installed Claude Code through npm get that.
 - **Codex is taken from `PATH` at any version**, with no check before the launch. What an older or newer one does is the open question above.
 - **Nothing names the expected or found versions before a launch.** `mega version` prints go, target and the log path. `/api/version` adds `claude_sdk: 0.3.318`. Neither names Claude Code 2.1.318 or codex-cli 0.166.0, nor what was found.
+
+## carried from the first-run batch
+
+Noted by the planning agent on 2026-11-14. Since that batch a missing Claude Code is named: "'…/versions/2.1.318' does not exist; install Claude Code, or set claude.executable…". That is true and still misleading for the commonest newcomer, who has Claude Code installed at another version. The message tells them to install what they have. This card's answer has to reach that message: when another version is present beside the pinned one, say which was found and what mega was tested against, and do not say "install".

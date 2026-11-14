@@ -194,6 +194,9 @@ export function Sidebar(props: SidebarProps) {
           <IconButton
             icon="create_new_folder"
             label={loaded ? 'Register a project' : 'Register a project (waiting for the service)'}
+            // a word as well as the icon while there is nothing yet, so the
+            // first page can name the control it points to.
+            word={loaded && projects.length === 0 ? 'Register' : undefined}
             disabled={!loaded}
             onClick={onRegister}
           />

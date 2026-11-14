@@ -278,7 +278,11 @@ function NamesChanged({ env }: { env: ProjectEnvironment }) {
 function Resolution({ env, values }: { env: ProjectEnvironment; values: Resolved | null }) {
   const r = env.resolved
   if (!r) {
-    return <p className="muted">Not resolved yet: it resolves when something starts here, or on request.</p>
+    return (
+      <p className="muted">
+        {env.resolving ? 'Resolving the environment now.' : 'Not resolved yet: it resolves when something starts here, or on request.'}
+      </p>
+    )
   }
   if (r.error) {
     return (

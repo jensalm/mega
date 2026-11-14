@@ -35,7 +35,7 @@ func scratchConfig(t *testing.T, listen, data string) *config.Config {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path, "")
+	cfg, err := config.Load(path, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

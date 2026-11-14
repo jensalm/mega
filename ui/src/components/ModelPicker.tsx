@@ -7,6 +7,9 @@ interface ModelPickerProps {
   model: string
   effort: string
   disabled: boolean
+  // unavailable: the harness refused to list its models, so there is no list
+  // to wait for.
+  unavailable?: boolean
   // short: the control bar's closed controls, which show short values; the
   // launch dialog has room for the full ones.
   short?: boolean
@@ -19,7 +22,7 @@ interface ModelPickerProps {
 // longer offering it, or a full id the harness reported) is kept and shown
 // as it is. an effort the model takes but nobody has chosen shows as a
 // choice still to make.
-export function ModelPicker({ models, model, effort, disabled, short = false, onChange }: ModelPickerProps) {
+export function ModelPicker({ models, model, effort, disabled, unavailable = false, short = false, onChange }: ModelPickerProps) {
   const efforts = effortsFor(models, model)
   const noEfforts = models !== null && efforts.length === 0
   const listed = models?.models.some((option) => option.id === model) ?? false
@@ -27,7 +30,7 @@ export function ModelPicker({ models, model, effort, disabled, short = false, on
     <>
       {model === '' && (
         <option value="" disabled>
-          {models === null ? 'Loading models…' : 'Choose a model'}
+          {models !== null ? 'Choose a model' : unavailable ? 'Models unavailable' : 'Loading models…'}
         </option>
       )}
       {model !== '' && !listed && <option value={model}>{model}</option>}
@@ -42,7 +45,7 @@ export function ModelPicker({ models, model, effort, disabled, short = false, on
     <>
       {effort === '' && (
         <option value="" disabled>
-          {noEfforts ? 'None for this model' : 'Choose an effort'}
+          {noEfforts ? 'None for this model' : models === null && unavailable ? 'Unavailable' : 'Choose an effort'}
         </option>
       )}
       {effort !== '' && !efforts.includes(effort) && <option value={effort}>{effort}</option>}

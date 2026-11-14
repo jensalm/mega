@@ -50,15 +50,18 @@ Where things go:
     - cleared on release.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, and a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`.
-- **`firstrun.mjs`** (25 steps): the first run on a machine that has never had mega, with no harness installed. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. It checks the following:
-  - the empty workspace's first page and the side panel's empty project list;
-  - the register dialog refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
-  - the project page's trust notice and its environment, unresolved and then resolved, listing what is missing;
-  - the new-conversation dialog offering Codex disabled with what is missing, and refusing Claude with no conversation made;
-  - Codex refused by the API as `executable_missing`;
-  - the project, and the dialog's mark, across a restart.
+- **`firstrun.mjs`** (44 steps): the first run on a machine that has never had mega, with no harness installed. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, an absolute path under the scratch `HOME`, does not exist, and Codex's, a bare name, is on no `PATH`. It checks the following:
+  - the start-up log's line for each harness, saying it cannot run and why, naming Claude Code's path;
+  - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
+  - the register dialog opening with the focus in its checkout field, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
+  - the project page before any dialog: both harnesses listed as missing, from the resolution registering started; Claude Code's reason naming its path, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
+  - the new-conversation dialog opening with the focus in the opening prompt, both harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
+  - the API refusing Claude Code's model list and a launch of either harness as `executable_missing`, with the reason, and making no conversation;
+  - never "internal error" on a page, and no answer of 500, on the whole walk;
+  - a restart: the project kept, what is missing known again with nothing opened, and the start-up log's lines again;
+  - `--listen`: another mega, on its own scratch data, on the port the flag names, and one refused for `0.0.0.0`, as the config value is.
 
-  It prints the words each step showed, so its output is a record of what a newcomer reads, and records without checking two defects the 2026-11-13 rehearsal found: Claude's refusal reading "internal error", and the dialogs opening with the focus on their close button. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-claude,project-resolved,restarted}.png`.
+  It prints the words each step showed, so its output is a record of what a newcomer reads. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-missing,restarted}.png`.
 - **`environment.mjs`** (32 steps): a project's environment on its page. It checks the following:
   - the unapproved state, and its refusal on New conversation and Adopt;
   - approval, and the names it records;
@@ -132,7 +135,7 @@ Where things go:
 
 Each suite also checks that the page raised no errors and fetched nothing off 127.0.0.1.
 
-The other surfaces' suites were lost with `/tmp` on 2026-11-12. Each is rebuilt by the first batch that changes its surface; the roadmap card `ui-test-runner` lists which lost checks covered which surface.
+The other surfaces' suites were lost with `/tmp` on 2026-11-12. Each is rebuilt by the first batch that changes its surface. The roadmap card `ui-test-runner` listed which lost checks covered which surface; it was retired in commit 32aaefe, and `git show 32aaefe^:docs/future/roadmap/ui-test-runner.md` reads it.
 
 ## Adding a suite
 

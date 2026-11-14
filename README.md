@@ -48,7 +48,7 @@ codex:
   binary: codex
 ```
 
-`mega --data DIR` runs against another workspace, and `mega --config FILE` reads another config.
+`mega --data DIR` runs against another workspace, `mega --config FILE` reads another config, and `mega --listen 127.0.0.1:PORT` serves on another port. Like `listen` in the config, the flag must be a loopback address.
 
 ### Running as a daemon
 
@@ -63,7 +63,12 @@ mega desktop remove      # removes exactly those files
 
 The launcher runs `mega daemon` through your interactive shell (the one `SHELL` names: bash, zsh or fish), so mega itself starts the way a terminal-started mega does. The agents don't depend on it: each project runs in its own environment (below). `integrate` prints the exact `Exec` line it wrote. `mega desktop integrate --plain` writes the direct form if you want it. The launcher runs the binary from wherever it was when you ran `integrate`; run it again if you move the binary. Nothing starts at login.
 
-If a harness's executable cannot be found in a project's environment, the new-conversation dialog marks that harness as unable to run, and its conversations refuse new work with the name of what is missing.
+mega tells you what it is missing before you try to launch anything:
+- **At start-up,** the log has one line per harness: where its programs were found, or why it cannot run.
+- **On the first page,** with no project registered yet, mega names the control to begin with, and lists each harness as found or missing, with the reason.
+- **On a project's page,** once you register a project, mega resolves its environment in the background, and its page lists any harness that cannot run there. It does so again at every start.
+
+A harness that cannot run is marked as unable to run in the new-conversation dialog, and its conversations refuse new work with the name of what is missing. When `claude.executable` or `codex.binary` names a path that is not there, which is what a Claude Code install other than 2.1.318 at its default path looks like, the reason names the path, says to install it or set the value, and names the config file mega read. A harness that fails some other way says so in its own words; the rest goes to the log.
 
 With no terminal, as when the launcher starts it, mega logs to `~/.local/state/mega/mega.log` (or under `XDG_STATE_HOME`); `mega version` prints the path, and so does the panel the version in the side panel's footer opens. At start-up a log past 10 MB becomes `mega.log.1`, replacing an earlier one, and a fresh log begins.
 

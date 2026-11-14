@@ -21,6 +21,7 @@ Michael presents his toolset to coworkers in under a week from 2026-11-13, with 
 ## stories, in order
 
 1. `clean-machine-rehearsal`: follow the README on a machine that has never seen mega, and write down everything that goes wrong. Its findings reorder what follows.
+   - The agent's pass ran on 2026-11-13 and produced three cards, built together as the first-run batch before anything else: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`. Michael's own pass under WSL2 comes after that batch and the version work, so it does not stop at blockers already known.
 2. `harness-version-tolerance`: what mega does with a Claude Code or Codex other than the pinned one, and what it should say.
 3. `pi-adapter`: the third harness.
 4. `the-checks-run-in-a-browser-michael-does-not-use`: the demo runs in Zen and the checks run in Chromium, so this protects what follows.

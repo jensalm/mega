@@ -26,7 +26,7 @@ func init() {
 }
 
 func runServe(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load(configPath, dataPath)
+	cfg, err := config.Load(configPath, dataPath, listenAddr)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}

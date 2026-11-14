@@ -15,6 +15,7 @@ var (
 	verbose    bool
 	configPath string
 	dataPath   string
+	listenAddr string
 )
 
 var rootCmd = &cobra.Command{
@@ -31,6 +32,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Config file path (default $XDG_CONFIG_HOME/mega/mega.yaml)")
 	rootCmd.PersistentFlags().StringVar(&dataPath, "data", "", "Data directory (default $XDG_DATA_HOME/mega)")
+	rootCmd.PersistentFlags().StringVar(&listenAddr, "listen", "", "Address to serve on, loopback only (default 127.0.0.1:8470)")
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		// the commands that serve log to a file when no terminal sees them.
 		switch cmd {

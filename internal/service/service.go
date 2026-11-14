@@ -42,6 +42,11 @@ type Workspace struct {
 	// Gate is the "shut down when idle" state and what is in its way.
 	Gate Gate
 
+	// Harnesses is whether each harness can run in the operator's shell
+	// environment, as the start-up check found it, re-checked on every read;
+	// nil until that check has run.
+	Harnesses []HarnessStatus
+
 	// Environments is each project's environment as it stands now, by project
 	// id: its file, approval and override, and its latest resolution.
 	Environments map[string]EnvState
@@ -72,6 +77,15 @@ type Service struct {
 	catalogs   catalogs  // model lists, per harness, for the service's life
 	paths      pathCache // checkout listings, held briefly
 	gate       shutdownGate
+	// resolveSlots bounds the background resolutions running at once
+	// (resolveAtOnce); background counts them, and the start-up check of the
+	// harnesses, so a test can wait for them to settle.
+	resolveSlots chan struct{}
+	background   sync.WaitGroup
+	// harnessFind is the environment the start-up check looked for the
+	// harnesses in, and harnessWhere names it; nil until it has run.
+	harnessFind  []string
+	harnessWhere string
 }
 
 // New returns a service over reg. it recovers from the previous run before
@@ -89,6 +103,8 @@ func New(reg *registry.Registry, opts Options) (*Service, error) {
 		base:        environ.Base(os.Environ()),
 		subs:        make(map[*Subscription]struct{}),
 		gate:        shutdownGate{requested: make(chan struct{})},
+
+		resolveSlots: make(chan struct{}, resolveAtOnce),
 	}
 	if s.isUntrusted == nil {
 		s.isUntrusted = func(string) bool { return false }
@@ -107,7 +123,15 @@ func New(reg *registry.Registry, opts Options) (*Service, error) {
 	// what their logs last reported, once.
 	s.mu.Lock()
 	s.fillChoicesLocked()
+	// what each project and each harness is missing is found in the
+	// background, so start-up and serving wait for neither.
+	s.resolveAllLocked()
 	s.mu.Unlock()
+	s.background.Add(1)
+	go func() {
+		defer s.background.Done()
+		s.checkHarnesses()
+	}()
 	s.stopWatch = make(chan struct{})
 	go s.watchEnvFiles(envWatchEvery, s.stopWatch)
 	return s, nil
@@ -133,8 +157,9 @@ func (s *Service) Workspace() Workspace {
 		states[doc.Projects[i].ID] = s.envStateLocked(doc.Projects[i])
 	}
 	s.resolveStaleLocked(doc.Projects, states)
+	harnesses := s.harnessStatusLocked()
 	s.mu.Unlock()
-	return Workspace{Projects: doc.Projects, Conversations: conversations, NeedsYou: needsYou(conversations), Gate: gate, Environments: states}
+	return Workspace{Projects: doc.Projects, Conversations: conversations, NeedsYou: needsYou(conversations), Gate: gate, Environments: states, Harnesses: harnesses}
 }
 
 // RegisterProject adds an existing checkout to the workspace. an empty name
@@ -165,6 +190,7 @@ func (s *Service) RegisterProject(name, checkout string) (model.Project, error) 
 		return model.Project{}, err
 	}
 	s.applyTrustLocked(&project)
+	s.resolveRegisteredLocked(project)
 	return project, nil
 }
 

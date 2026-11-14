@@ -23,9 +23,14 @@ interface LaunchDialogProps {
 // preselect none, and Launch waits until one is chosen.
 export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: LaunchDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const promptRef = useRef<HTMLTextAreaElement>(null)
   const [harness, setHarness] = useState(() => harnesses.find((h) => !unavailable[h.value])?.value ?? 'claude')
-  const cannotRun = unavailable[harness]
-  const { models, error: modelsError } = useModels(projectId, harness, true)
+  const { models, error: modelsError, errorCode: modelsCode } = useModels(projectId, harness, true)
+  // a harness whose models were refused because it cannot run here is marked
+  // as one the project lists as missing.
+  const missing: Record<string, string> =
+    modelsCode === 'executable_missing' && modelsError && !unavailable[harness] ? { ...unavailable, [harness]: modelsError } : unavailable
+  const cannotRun = missing[harness]
   // what the operator has picked; an unpicked field shows the copy.
   const [picked, setPicked] = useState<{ harness: string; mode?: string; model?: string; effort?: string }>({ harness })
   const own = picked.harness === harness ? picked : { harness }
@@ -39,8 +44,11 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // showModal moves the focus to the dialog's first control, its close
+  // button, so the prompt is focused after it.
   useEffect(() => {
     dialogRef.current?.showModal()
+    promptRef.current?.focus()
   }, [])
 
   const onSubmit = async (event: FormEvent) => {
@@ -84,16 +92,22 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
             onChange={(event) => setHarness(event.target.value)}
           >
             {harnesses.map((h) => (
-              <option key={h.value} value={h.value} disabled={!!unavailable[h.value]} title={unavailable[h.value]}>
-                {unavailable[h.value] ? `${h.label} (cannot run)` : h.label}
+              <option key={h.value} value={h.value} disabled={!!missing[h.value]} title={missing[h.value]}>
+                {missing[h.value] ? `${h.label} (cannot run)` : h.label}
               </option>
             ))}
           </select>
         </label>
-        {Object.entries(unavailable).map(([name, reason]) => (
+        {Object.entries(missing).map(([name, reason]) => (
           <p key={name} className="notice harness-missing" role="note">
-            {reason}. mega cannot start {harnesses.find((h) => h.value === name)?.label ?? name} until it can be found in the
-            project&apos;s environment, which the project page shows.
+            {reason}.{' '}
+            {/* a configured path's reason already says what to do. */}
+            {!reason.includes('; install ') && (
+              <>
+                mega cannot start {harnesses.find((h) => h.value === name)?.label ?? name} until it can be found in the
+                project&apos;s environment, which the project page shows.
+              </>
+            )}
           </p>
         ))}
         {harness === 'claude' && (
@@ -113,10 +127,16 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
           model={model}
           effort={effort}
           disabled={models === null}
+          unavailable={modelsError !== null}
           onChange={(nextModel, nextEffort) => setPicked({ ...own, model: nextModel, effort: nextEffort })}
         />
-        {models === null && !modelsError && <p className="muted">Asking the harness for its models…</p>}
-        {modelsError && <p className="muted">The harness did not list its models ({modelsError}); a launch takes what your settings name.</p>}
+        {models === null && !modelsError && !cannotRun && <p className="muted">Asking the harness for its models…</p>}
+        {modelsError && !cannotRun && (
+          <p className="muted">
+            The harness did not list its models: {modelsError}. A launch takes the model and effort your settings name, and is refused if
+            they name none.
+          </p>
+        )}
         {needsEffort && (
           <p className="muted" role="note">
             Your settings name no effort level for this model, so choose one.
@@ -125,7 +145,7 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
         <label>
           Opening prompt
           <textarea
-            autoFocus
+            ref={promptRef}
             required
             rows={6}
             value={prompt}

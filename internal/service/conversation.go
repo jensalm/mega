@@ -404,6 +404,8 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 	s.mu.Unlock()
 
 	rt, err := h.Launch(spec, &sink{s: s, l: l, inc: inc})
+	// the harness's own failure: what is recorded and shown is its summary.
+	err = harnessFault(h.Name(), err)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -761,7 +763,7 @@ func (s *Service) importHistory(conv model.Conversation, l *live, place harness.
 	defer cancel()
 	history, err := h.History(ctx, place, conv.NativeID)
 	if err != nil {
-		return imported{}, s.explain(conv.Harness, place.Find, fmt.Errorf("importing history of '%s': %w", conv.ID, err))
+		return imported{}, s.explain(conv.Harness, place.Find, fmt.Errorf("importing history of '%s': %w", conv.ID, harnessFault(conv.Harness, err)))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

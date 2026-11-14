@@ -31,6 +31,8 @@ func newService(t *testing.T, registryPath string, checker UntrustedChecker, har
 		t.Fatal(err)
 	}
 	t.Cleanup(svc.Close)
+	// the start-up work in the background settles before a test begins.
+	svc.background.Wait()
 	return svc
 }
 

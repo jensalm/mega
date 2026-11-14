@@ -1,6 +1,9 @@
 package service
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // error codes, stable across the API.
 const (
@@ -34,6 +37,9 @@ const (
 	// activation now changes another set of variables than it did when it
 	// was approved, until the operator approves it again.
 	CodeEnvironmentNamesChanged = "environment_names_changed"
+	// CodeHarnessFailed refuses work because the harness itself failed to
+	// start or answer: its own words, first line only, and never a stack.
+	CodeHarnessFailed = "harness_failed"
 )
 
 // Error is a failure the caller can act on, as opposed to an internal fault.
@@ -47,11 +53,16 @@ type Error struct {
 	Recorded string
 }
 
-// recordable is what an event may say of err.
+// recordable is what an event may say of err. a harness's own failure is
+// its summary, since the history is on the page and a stack never is.
 func recordable(err error) string {
 	var svcErr *Error
 	if errors.As(err, &svcErr) && svcErr.Recorded != "" {
 		return svcErr.Recorded
+	}
+	var failed *harnessFailure
+	if errors.As(err, &failed) {
+		return fmt.Sprintf("'%s' failed: %s", failed.harness, summarize(failed.err.Error()))
 	}
 	return err.Error()
 }

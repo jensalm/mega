@@ -25,12 +25,15 @@ const shimScript = "shim.mjs"
 
 // Config locates node, the shim directory, and the claude code executable.
 // ManagedSettings overrides where managed settings are read; empty is
-// DefaultManagedSettings.
+// DefaultManagedSettings. Where says where these are set, such as "in
+// '/home/me/.config/mega/mega.yaml', the config file mega read", for a
+// reason that tells the operator what to do; empty leaves the file unnamed.
 type Config struct {
 	Node            string
 	Shim            string
 	Executable      string
 	ManagedSettings string
+	Where           string
 }
 
 // Harness runs claude code through the stdio shim.
@@ -52,7 +55,7 @@ func (h *Harness) Name() string {
 // (or at its configured path), the claude executable the same way, the shim
 // script and its installed sdk.
 func (h *Harness) Check(find []string) error {
-	if err := harness.FindExecutable(model.HarnessClaude, h.cfg.Node, find); err != nil {
+	if err := harness.FindExecutable(model.HarnessClaude, h.cfg.Node, find, h.advice("install Node.js", "claude.node")); err != nil {
 		return err
 	}
 	if _, err := h.executable(find); err != nil {
@@ -94,15 +97,41 @@ func (h *Harness) SDKVersion() (string, error) {
 	return pkg.Version, nil
 }
 
+// Locate says where claude code, node and the shim were found in find, for
+// a harness that can run there.
+func (h *Harness) Locate(find []string) string {
+	node := h.cfg.Node
+	if program, err := harness.Program(h.cfg.Node, find); err == nil {
+		node = program[len(program)-1]
+	}
+	executable, _ := h.executable(find)
+	return fmt.Sprintf("claude code '%s', node '%s', shim '%s'", executable, node, h.cfg.Shim)
+}
+
+// advice is what to do about a configured path that cannot run: install the
+// thing, or set key, where the config says, to where it is.
+func (h *Harness) advice(install, key string) string {
+	where := ""
+	if h.cfg.Where != "" {
+		where = " " + h.cfg.Where + ","
+	}
+	return fmt.Sprintf("%s, or set %s%s to where it is", install, key, where)
+}
+
 // executable is the claude code executable the shim starts: a configured path
-// as it is, or a bare name located in find, so the shim never looks it up on
-// the PATH the activation set. it must be a native build: the sdk starts a
-// script through an interpreter it finds by name on the process's PATH, which
-// the activation sets, so a script (a #! line, or a .js, .mjs or .cjs file) is
-// refused rather than handed over.
+// as it is, checked here so a missing claude code is named before anything
+// runs (the sdk itself would fail with a stack trace), or a bare name located
+// in find, so the shim never looks it up on the PATH the activation set. it
+// must be a native build: the sdk starts a script through an interpreter it
+// finds by name on the process's PATH, which the activation sets, so a script
+// (a #! line, or a .js, .mjs or .cjs file) is refused rather than handed over.
 func (h *Harness) executable(find []string) (string, error) {
 	path := h.cfg.Executable
-	if !strings.Contains(path, "/") {
+	if strings.Contains(path, "/") {
+		if err := harness.CheckPath(model.HarnessClaude, path, h.advice("install Claude Code", "claude.executable")); err != nil {
+			return "", err
+		}
+	} else {
 		found, err := harness.LookPath(path, find)
 		if err != nil {
 			return "", &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf("'%s' was not found on the project's PATH", path)}
@@ -117,7 +146,7 @@ func (h *Harness) executable(find []string) (string, error) {
 
 // script reports whether path is a script the sdk would run through an
 // interpreter: a JavaScript file, or one that starts with #!. a path that
-// cannot be read is left to fail where it is run.
+// cannot be read is not called a script; executable has checked it exists.
 func script(path string) bool {
 	switch filepath.Ext(path) {
 	case ".js", ".mjs", ".cjs":

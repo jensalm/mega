@@ -40,6 +40,17 @@ type workspaceView struct {
 	Conversations []*conversationView
 	NeedsYou      []string
 	Shutdown      *shutdownView
+	// Harnesses is whether each harness can run in the operator's shell
+	// environment, as the start-up check found it; absent until it has run.
+	Harnesses []*harnessStatusView `dd:",+omitempty"`
+}
+
+// harnessStatusView is one harness, found where or missing and why.
+type harnessStatusView struct {
+	Name   string
+	Found  bool
+	Where  string `dd:",+omitempty"`
+	Reason string `dd:",+omitempty"`
 }
 
 // shutdownView is the "shut down when idle" gate: whether it is armed, since
@@ -86,6 +97,9 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 			Idle:     workspace.Gate.Idle(),
 			Blockers: make([]*blockerView, 0, len(workspace.Gate.Blockers)),
 		},
+	}
+	for _, h := range workspace.Harnesses {
+		view.Harnesses = append(view.Harnesses, &harnessStatusView{Name: h.Name, Found: h.Found, Where: h.Where, Reason: h.Reason})
 	}
 	for _, b := range workspace.Gate.Blockers {
 		view.Shutdown.Blockers = append(view.Shutdown.Blockers, &blockerView{ConversationID: b.ConversationID, ProjectID: b.ProjectID, Name: b.Name, Turn: b.Turn, Requests: b.Requests, Background: b.Background, Settling: b.Settling})

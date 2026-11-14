@@ -36,6 +36,12 @@ type Config struct {
 	Codex  Codex
 	// Environment is how each project's shell environment is resolved.
 	Environment Environment
+
+	// File is the config file mega read, or the default it looked for, and
+	// FileRead whether there was one to read. neither is configuration: they
+	// say where to set a value, in a message.
+	File     string `dd:"-"`
+	FileRead bool   `dd:"-"`
 }
 
 // Environment says how a project's environment is resolved: the shell to run
@@ -60,9 +66,10 @@ type Claude struct {
 }
 
 // Load resolves config from compiled defaults, then the config file, then the
-// data flag. an empty configPath means the XDG default, which may be absent;
-// an explicit configPath must exist.
-func Load(configPath, dataOverride string) (*Config, error) {
+// data and listen flags. an empty configPath means the XDG default, which may
+// be absent; an explicit configPath must exist. a listen flag is held to
+// loopback exactly as the config value is.
+func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 	cfg := &Config{
 		Listen: defaultListen,
 		Claude: Claude{Node: "node", Shim: defaultClaudeShim, Executable: defaultClaudeExecutable},
@@ -72,17 +79,29 @@ func Load(configPath, dataOverride string) (*Config, error) {
 		if err := dd.MergeYAMLFile(cfg, configPath); err != nil {
 			return nil, err
 		}
+		cfg.File, cfg.FileRead = configPath, true
 	} else {
 		defaultPath, err := defaultConfigPath()
 		if err != nil {
 			return nil, err
 		}
-		if err := dd.MergeYAMLFile(cfg, defaultPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cfg.File = defaultPath
+		err = dd.MergeYAMLFile(cfg, defaultPath)
+		switch {
+		case err == nil:
+			cfg.FileRead = true
+		case !errors.Is(err, os.ErrNotExist):
 			return nil, err
 		}
 	}
+	if abs, err := filepath.Abs(cfg.File); err == nil {
+		cfg.File = abs
+	}
 	if dataOverride != "" {
 		cfg.Data = dataOverride
+	}
+	if listenOverride != "" {
+		cfg.Listen = listenOverride
 	}
 	if cfg.Data == "" {
 		defaultData, err := defaultDataDir()
@@ -105,6 +124,15 @@ func Load(configPath, dataOverride string) (*Config, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return cfg, nil
+}
+
+// Where says where a config value is set, for a message that tells the
+// operator to set one: the file mega read, or the one it looked for.
+func (c *Config) Where() string {
+	if c.FileRead {
+		return fmt.Sprintf("in '%s', the config file mega read", c.File)
+	}
+	return fmt.Sprintf("in '%s', a config file mega looked for and did not find, so create it", c.File)
 }
 
 // Validate enforces that the listener stays on loopback. this slice has no

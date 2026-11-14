@@ -319,13 +319,21 @@ func TestStreamFansOutToEveryBrowser(t *testing.T) {
 func TestStreamHeartbeats(t *testing.T) {
 	f := startWith(t, 20*time.Millisecond)
 	conn := dialStream(t, f)
-	var frame map[string]any
-	if err := conn.ReadJSON(&frame); err != nil {
-		t.Fatal(err)
+	// a workspace change may come first, such as the start-up check of the
+	// harnesses finishing; the heartbeat follows.
+	for range 10 {
+		var frame map[string]any
+		if err := conn.ReadJSON(&frame); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := frame["heartbeat"]; ok {
+			return
+		}
+		if frame["workspace_changed"] != true {
+			t.Fatalf("frame = %v", frame)
+		}
 	}
-	if _, ok := frame["heartbeat"]; !ok {
-		t.Errorf("frame = %v", frame)
-	}
+	t.Error("no heartbeat")
 }
 
 func TestStreamEndsOnServiceClose(t *testing.T) {

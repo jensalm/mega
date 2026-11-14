@@ -39,7 +39,7 @@ func (s *Service) catalogFor(ctx context.Context, harnessName string, h harness.
 	}
 	catalog, err := h.Models(ctx, place)
 	if err != nil {
-		return harness.Catalog{}, s.explain(harnessName, place.Find, fmt.Errorf("listing '%s' models: %w", harnessName, err))
+		return harness.Catalog{}, s.explain(harnessName, place.Find, fmt.Errorf("listing '%s' models: %w", harnessName, harnessFault(harnessName, err)))
 	}
 	s.catalogs.put(harnessName, catalog)
 	return catalog, nil

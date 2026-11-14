@@ -64,7 +64,7 @@ func (c controlUI) Stop()                        { c.control.Stop() }
 // same acceptance), or SIGINT or SIGTERM. dfw serves the page until the tray
 // is stopped, so the page that asked keeps its answer.
 func runDaemon(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load(configPath, dataPath)
+	cfg, err := config.Load(configPath, dataPath, listenAddr)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}

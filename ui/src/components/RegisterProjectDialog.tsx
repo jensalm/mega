@@ -10,13 +10,17 @@ interface RegisterProjectDialogProps {
 
 export function RegisterProjectDialog({ onClose, onRegistered }: RegisterProjectDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const checkoutRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [checkout, setCheckout] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // showModal moves the focus to the dialog's first control, its close
+  // button, so the field is focused after it.
   useEffect(() => {
     dialogRef.current?.showModal()
+    checkoutRef.current?.focus()
   }, [])
 
   const onSubmit = async (event: FormEvent) => {
@@ -41,7 +45,7 @@ export function RegisterProjectDialog({ onClose, onRegistered }: RegisterProject
         <label>
           Checkout
           <input
-            autoFocus
+            ref={checkoutRef}
             required
             placeholder="/absolute/path/to/checkout"
             value={checkout}

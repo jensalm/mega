@@ -18,7 +18,7 @@ func isolate(t *testing.T) string {
 
 func TestDefaultsFollowXDG(t *testing.T) {
 	root := isolate(t)
-	cfg, err := Load("", "")
+	cfg, err := Load("", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,14 +47,14 @@ func TestConfigFileThenDataFlag(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "mega.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load("", "")
+	cfg, err := Load("", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Listen != "127.0.0.1:9999" || cfg.Data != "/from/file" {
 		t.Errorf("file not applied: %+v", cfg)
 	}
-	cfg, err = Load("", "/from/flag")
+	cfg, err = Load("", "/from/flag", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,9 +63,56 @@ func TestConfigFileThenDataFlag(t *testing.T) {
 	}
 }
 
+// the listen flag wins over the file, and is held to loopback as the file's
+// value is.
+func TestListenFlagWinsAndStaysOnLoopback(t *testing.T) {
+	root := isolate(t)
+	dir := filepath.Join(root, "config", "mega")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mega.yaml"), []byte("listen: 127.0.0.1:9999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load("", "", "127.0.0.1:18471")
+	if err != nil || cfg.Listen != "127.0.0.1:18471" {
+		t.Fatalf("listen = %+v, %v", cfg, err)
+	}
+	for _, addr := range []string{"0.0.0.0:18471", ":18471", "192.168.1.5:80"} {
+		if _, err := Load("", "", addr); err == nil || !strings.Contains(err.Error(), "loopback") && !strings.Contains(err.Error(), "listen") {
+			t.Errorf("%q: %v", addr, err)
+		}
+	}
+}
+
+// Where names the file mega read, or the one it looked for and did not
+// find.
+func TestWhereNamesTheConfigFile(t *testing.T) {
+	root := isolate(t)
+	cfg, err := Load("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "config", "mega", "mega.yaml")
+	if cfg.File != want || cfg.FileRead || !strings.Contains(cfg.Where(), want) || !strings.Contains(cfg.Where(), "did not find") {
+		t.Errorf("no file: %q %v %q", cfg.File, cfg.FileRead, cfg.Where())
+	}
+	explicit := filepath.Join(t.TempDir(), "mine.yaml")
+	if err := os.WriteFile(explicit, []byte("listen: 127.0.0.1:9999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(explicit, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.File != explicit || !cfg.FileRead || !strings.Contains(cfg.Where(), "the config file mega read") {
+		t.Errorf("explicit: %q %v %q", cfg.File, cfg.FileRead, cfg.Where())
+	}
+}
+
 func TestExplicitConfigMustExist(t *testing.T) {
 	isolate(t)
-	if _, err := Load(filepath.Join(t.TempDir(), "absent.yaml"), ""); err == nil {
+	if _, err := Load(filepath.Join(t.TempDir(), "absent.yaml"), "", ""); err == nil {
 		t.Fatal("expected an error for a missing explicit config")
 	}
 }
@@ -73,7 +120,7 @@ func TestExplicitConfigMustExist(t *testing.T) {
 func TestTildeExpansion(t *testing.T) {
 	isolate(t)
 	t.Setenv("HOME", "/home/someone")
-	cfg, err := Load("", "~/elsewhere")
+	cfg, err := Load("", "~/elsewhere", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +159,7 @@ func TestClaudeDefaultsMergeWithFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("claude:\n  shim: ~/shim/claude\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(path, "")
+	cfg, err := Load(path, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +183,7 @@ func TestDefaultDataRefusedUntilTheWorkspaceIsMoved(t *testing.T) {
 	if err := os.MkdirAll(legacy, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load("", "")
+	_, err := Load("", "", "")
 	if !errors.Is(err, ErrNotMoved) || !strings.Contains(err.Error(), "docs/future/mega-cutover.md") || !strings.Contains(err.Error(), legacy) {
 		t.Fatalf("err = %v", err)
 	}
@@ -145,27 +192,27 @@ func TestDefaultDataRefusedUntilTheWorkspaceIsMoved(t *testing.T) {
 	}
 
 	scratch := filepath.Join(t.TempDir(), "scratch-data")
-	if cfg, err := Load("", scratch); err != nil || cfg.Data != scratch {
+	if cfg, err := Load("", scratch, ""); err != nil || cfg.Data != scratch {
 		t.Errorf("--data: %v %v", cfg, err)
 	}
 	file := filepath.Join(t.TempDir(), "mega.yaml")
 	if err := os.WriteFile(file, []byte("data: "+scratch+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if cfg, err := Load(file, ""); err != nil || cfg.Data != scratch {
+	if cfg, err := Load(file, "", ""); err != nil || cfg.Data != scratch {
 		t.Errorf("data from the file: %v %v", cfg, err)
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, "data", "mega"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load("", ""); err != nil {
+	if _, err := Load("", "", ""); err != nil {
 		t.Errorf("once moved: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(root, "data")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load("", ""); err != nil {
+	if _, err := Load("", "", ""); err != nil {
 		t.Errorf("nothing to move: %v", err)
 	}
 }

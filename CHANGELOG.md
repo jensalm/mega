@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+FIX: **A missing Claude Code is named, not "internal error".** (2026-11-14) When `claude.executable` names a path that is not there, mega says so wherever it says Codex is missing: the project's list, the new-conversation dialog's "(cannot run)", and a refusal coded `executable_missing`. That is also what any Claude Code other than 2.1.318 at the default path looks like. The reason names the path, says to install Claude Code or set `claude.executable`, and names the config file mega read. A `codex.binary` that names a missing path gets the same. Any other failure of a harness itself is now `harness_failed`, with the harness's own first line; its stack goes only to the log, and never to the page as "internal error".
+
+FIX: **The register and new-conversation dialogs open on their field.** (2026-11-14)
+- Typing as soon as Register opens fills in the checkout, and as soon as New conversation opens, the prompt.
+- When a harness cannot list its models, the Model list says they are unavailable instead of loading for ever, and a harness that cannot run is marked "(cannot run)" with Launch disabled.
+- A dialog never outgrows the window: it scrolls, and Launch stays in view.
+
+FEATURE: **The first run explains itself.** (2026-11-14)
+- **At start-up,** the log says, for each harness, where it was found or why it cannot run.
+- **The first page** names the control to begin with, "Register a project", and lists each harness as found or missing, with the reason. Register carries a word while there is no project, and so does New conversation while there is no conversation.
+- **A project's environment** is resolved in the background when the project is registered and at every start, so what it is missing shows before anything is opened, and after a restart. An unapproved environment file is still never run. At most four resolve at once, and neither start-up nor the page waits for them.
+- **The trust notice** no longer tells you to run a Claude Code that is not installed.
+- **`mega --listen ADDR`** sets the address, held to loopback as the config value is.
+
 CHANGE: **The binary, the module path and the default config and workspace paths have changed.** (2026-11-11) roundhouse is now mega, spoken of as "metawoo mega". The binary is `mega`, the module is `github.com/michaelquigley/mega`, the configuration is `~/.config/mega/mega.yaml`, and the workspace is `~/.local/share/mega`. The port is unchanged. The page's title is "metawoo mega", and its own wording says mega. The UI's per-browser preferences (panel width, collapsed panel, folded projects, reply box height) start fresh once. While a workspace still sits in `~/.local/share/roundhouse` and the new one does not exist, `mega` refuses to start rather than open an empty workspace beside it, and points at `docs/future/mega-cutover.md`, which moves it. Entries above this line and the journals keep the old name as written.
 
 CHANGE: **What you act on or need to notice moved from the conversation's header to the control bar.** (2026-11-12) The header scrolls away with the history; the bar at the foot stays in view.

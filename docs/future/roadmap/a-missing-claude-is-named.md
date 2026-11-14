@@ -1,6 +1,6 @@
 ---
 title: a missing claude is named
-state: inbox
+state: researching
 created: 2026-11-13
 tags: [defect]
 ---

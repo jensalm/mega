@@ -20,7 +20,7 @@ func TestFindExecutable(t *testing.T) {
 	}
 	t.Setenv("PATH", dir)
 	for _, ok := range []string{"tool", tool} {
-		if err := FindExecutable("h", ok, os.Environ()); err != nil {
+		if err := FindExecutable("h", ok, os.Environ(), ""); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}
 	}
@@ -31,10 +31,26 @@ func TestFindExecutable(t *testing.T) {
 		dir:                        "is not an executable file",
 		"":                         "no executable is configured",
 	} {
-		err := FindExecutable("h", name, os.Environ())
+		err := FindExecutable("h", name, os.Environ(), "")
 		var missing *MissingError
 		if !errors.As(err, &missing) || !errors.Is(err, ErrExecutableMissing) || !strings.Contains(err.Error(), reason) || missing.Executable != name {
 			t.Errorf("%q: %v", name, err)
 		}
+	}
+}
+
+// a configured path that cannot run ends its reason with what to do; a bare
+// name does not, since the project's PATH is where to look.
+func TestFindExecutableAdvisesOnAConfiguredPath(t *testing.T) {
+	dir := t.TempDir()
+	advice := "install it, or set x.binary in '/c/mega.yaml'"
+	gone := filepath.Join(dir, "gone")
+	err := FindExecutable("h", gone, os.Environ(), advice)
+	if err == nil || !strings.Contains(err.Error(), "'"+gone+"' does not exist; "+advice) {
+		t.Errorf("path: %v", err)
+	}
+	t.Setenv("PATH", dir)
+	if err := FindExecutable("h", "absent", os.Environ(), advice); err == nil || strings.Contains(err.Error(), advice) {
+		t.Errorf("bare name: %v", err)
 	}
 }

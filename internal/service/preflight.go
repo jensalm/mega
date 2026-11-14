@@ -2,6 +2,10 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/michaelquigley/df/dl"
 
 	"github.com/michaelquigley/mega/internal/harness"
 )
@@ -48,5 +52,64 @@ func (s *Service) explain(harnessName string, find []string, err error) error {
 			return missing
 		}
 	}
+	var failed *harnessFailure
+	if errors.As(err, &failed) {
+		// the whole of it, stack and all, goes to the log; the operator gets
+		// the harness's own first words.
+		dl.Errorf("'%s' failed: %v", harnessName, err)
+		return &Error{Code: CodeHarnessFailed, Message: fmt.Sprintf("'%s' failed: %s; mega's log has the rest", harnessName, summarize(failed.err.Error()))}
+	}
 	return err
+}
+
+// harnessFailure marks an error a harness itself returned, from listing its
+// models, discovering or reading sessions, or starting a runtime, so explain
+// can tell it from a fault of mega's own.
+type harnessFailure struct {
+	harness string
+	err     error
+}
+
+func (f *harnessFailure) Error() string { return f.err.Error() }
+func (f *harnessFailure) Unwrap() error { return f.err }
+
+// harnessFault marks err as the harness's own failure; nil stays nil.
+func harnessFault(harnessName string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &harnessFailure{harness: harnessName, err: err}
+}
+
+// summarizeLimit bounds what a harness failure shows the operator.
+const summarizeLimit = 300
+
+// summarize is a harness failure as the page may show it: its first line,
+// and the error line a stack trace leads with when the first line is not
+// one, cut to summarizeLimit; never the frames of a stack.
+func summarize(message string) string {
+	var lines []string
+	for _, line := range strings.Split(message, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "at ") || strings.HasPrefix(line, "^") || strings.HasPrefix(line, "file://") || strings.HasPrefix(line, "node:") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return "it gave no reason"
+	}
+	out := lines[0]
+	if !strings.Contains(out, "Error") {
+		for _, line := range lines[1:] {
+			if strings.Contains(line, "Error") {
+				out += " " + line
+				break
+			}
+		}
+	}
+	if r := []rune(out); len(r) > summarizeLimit {
+		out = string(r[:summarizeLimit]) + "…"
+	}
+	return out
 }

@@ -98,14 +98,14 @@ func start(cfg *config.Config) (*instance, error) {
 		listener.Close()
 		return nil, err
 	}
-	claudeHarness := claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable})
+	claudeHarness := claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where()})
 	svc, err := service.New(reg, service.Options{
 		IsUntrusted:  untrustedChecker(),
 		EventLogPath: cfg.EventLogPath,
 		Resolver:     resolver,
 		Harnesses: []harness.Harness{
 			claudeHarness,
-			codex.New(codex.Config{Binary: cfg.Codex.Binary}),
+			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}),
 		},
 	})
 	if err != nil {

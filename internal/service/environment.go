@@ -73,6 +73,8 @@ type EnvState struct {
 	Resolved *ResolvedEnv
 	// Missing is what each harness cannot find in the latest resolution.
 	Missing []harness.MissingError
+	// Resolving says a resolution is running now.
+	Resolving bool
 
 	activate string
 	// fileRefusal is the refusal the file alone decides (unapproved, changed,
@@ -153,6 +155,9 @@ func (s *Service) envStateLocked(project model.Project) EnvState {
 		st.Activation = environ.Fingerprint([]byte(st.Source + "\x00" + st.activate))
 	}
 	st.fileRefusal = st.Refusal
+	if rec := s.envs[project.ID]; rec != nil && rec.running {
+		st.Resolving = true
+	}
 	if rec := s.envs[project.ID]; rec != nil && rec.resolved != nil {
 		// a copy: the record stays the service's own.
 		resolved := *rec.resolved
@@ -394,7 +399,11 @@ func (s *Service) resolveStaleLocked(projects []model.Project, states map[string
 		} else {
 			rec.running = true
 		}
+		s.background.Add(1)
 		go func(id string) {
+			defer s.background.Done()
+			s.resolveSlots <- struct{}{}
+			defer func() { <-s.resolveSlots }()
 			if _, _, err := s.resolveProject(id); err != nil {
 				// what may be recorded, never the activation's output.
 				dl.Debugf("resolving the environment of '%s': %s", id, recordable(err))

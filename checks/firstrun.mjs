@@ -7,66 +7,130 @@
 // names no harness path, and no harness on mega's PATH or the project's. it
 // is what a newcomer sees between `make` and installing Claude Code and
 // Codex, and it is the walk the clean-machine rehearsal of 2026-11-13 made.
-// nothing it does can reach a real harness, since none can be found.
+// nothing it does can reach a real harness, since none can be found. Claude
+// Code's default, an absolute path under the scratch HOME, does not exist;
+// Codex's default, a bare name, is on no PATH.
 //
-// what it checks: the empty workspace's first page, with its placeholder and
-// the side panel's empty project list, light and dark; the register dialog,
-// refusing a relative path and a path that does not exist with what is
-// wrong, then registering a git checkout and opening its page; the project
-// page's notices; the new-conversation dialog marking Codex as unable to run
-// with what is missing, and Claude refused, with no conversation made, for
-// want of its executable; the project and its refusals across a restart of
-// the service; no page errors and nothing fetched off 127.0.0.1.
+// what it checks:
+// - the start-up log: one line per harness, saying it cannot run and why;
+// - the empty workspace's first page, light and dark: what mega needs, each
+//   harness missing with its reason, the register control named in words,
+//   and that control carrying a word;
+// - the register dialog: the focus in its checkout field, refusing a
+//   relative path and a path that does not exist with what is wrong, then
+//   registering a git checkout and opening its page;
+// - the project page, before any dialog: both harnesses listed as missing,
+//   Claude's reason naming its path, what to do and the config file mega
+//   read; the environment resolved in the background; a trust notice that
+//   does not tell anyone to run a Claude that is not installed; and the New
+//   conversation control carrying a word;
+// - the new-conversation dialog: the focus in the opening prompt, both
+//   harnesses marked as unable to run, the model list saying it is
+//   unavailable, Launch disabled and in view at 1280x900 with the notices;
+// - the API: listing Claude's models and launching either harness refused as
+//   executable_missing, with the reason;
+// - never "internal error", and no answer of 500, anywhere on the walk;
+// - a restart: the project kept, and what is missing known again before
+//   anything is opened, with the start-up log's lines again;
+// - --listen: another mega on the port the flag names, and one refused for an
+//   address that is not loopback;
+// - no page errors and nothing fetched off 127.0.0.1.
 //
 // it saves each page as shots/{empty,empty-dark,register,register-refused,
-// project,launch-claude,project-resolved,restarted}.png. each step's text is
-// printed, so the run's output is a record of the words a newcomer reads.
-//
-// two things the rehearsal found are recorded here, not checked, since a
-// check would pin the defect: Claude's refusal reads "internal error" when
-// its executable is missing (roadmap: a-missing-claude-is-named), and the
-// dialogs open with the focus on their close button
-// (roadmap: dialog-focus-and-a-stale-model-list).
+// project,launch-missing,restarted}.png. each step's text is printed, so the
+// run's output is a record of the words a newcomer reads.
+import { spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
 const t = await suite('firstrun', { bare: true })
 const { url, check, until, api, workspace } = t
 const demo = t.checkout('demo', { git: true })
+const claudePath = join(t.dir, 'home/.local/share/claude/versions/2.1.318')
 
 const text = async (locator) => ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim()
 const shown = (what, words) => t.say(`  ${what}: "${words}"`)
+// soon is a bounded wait that answers instead of throwing, so a step that
+// does not hold is a failed step and the walk goes on.
+const soon = async (pred, ms = 15000) => {
+  try {
+    await until('a step', pred, ms)
+    return true
+  } catch {
+    return false
+  }
+}
+// the log mega writes when it is not on a terminal, and what it printed.
+const startupLog = () =>
+  [join(t.dir, 'xdg/state/mega/mega.log'), join(t.dir, 'service.log')]
+    .filter((f) => existsSync(f))
+    .map((f) => readFileSync(f, 'utf8'))
+    .join('\n')
+const harnessLines = (log) => log.split('\n').filter((l) => /harness '(claude|codex)'/.test(l))
 
-// the empty workspace: what the first page says, and where it points.
+// every answer of 500, and every "internal error" shown, on the whole walk.
+const fiveHundreds = []
+const watch = (p) =>
+  p.on('response', (r) => {
+    if (r.status() >= 500) fiveHundreds.push(`${r.status()} ${r.url()}`)
+  })
+const internalShown = []
+const noInternal = async (p, where) => {
+  const body = await p.evaluate(() => document.body.innerText)
+  if (/internal error/i.test(body)) internalShown.push(where)
+}
+
+// the start-up log: one line per harness, found or missing and why.
+const atStart = await soon(async () => harnessLines(startupLog()).length >= 2, 15000)
+const lines = harnessLines(startupLog())
+for (const line of lines) shown('the start-up log', line.trim())
+check(atStart && lines.some((l) => l.includes("harness 'claude'") && l.includes('cannot run') && l.includes(claudePath)), 'the start-up log says Claude Code cannot run, naming the path it looked at')
+check(lines.some((l) => l.includes("harness 'codex'") && l.includes('cannot run')), 'the start-up log says Codex cannot run')
+
+// the empty workspace: what mega needs, what is missing, and where to begin.
 const page = await t.page()
+watch(page)
 const shot = (name) => t.shot(page, name)
 await page.goto(url)
-const placeholder = page.locator('main .placeholder')
-await placeholder.waitFor()
-const first = await text(placeholder)
+const firstRun = page.locator('main .first-run')
+const hasFirstRun = await soon(async () => (await firstRun.count()) > 0, 10000)
+const first = hasFirstRun ? await text(firstRun) : await text(page.locator('main'))
 shown('the first page', first)
-check(first === 'Register a project from an existing checkout to begin.', 'the empty workspace says to register a project from a checkout')
+check(hasFirstRun && first.includes('Register a project') && first.includes('side panel'), 'the empty workspace names the register control in words, and where it is')
+const claudeItem = firstRun.locator('[data-harness="claude"]')
+const codexItem = firstRun.locator('[data-harness="codex"]')
+const firstClaude = await soon(async () => (await claudeItem.count()) > 0 && (await text(claudeItem)).includes(claudePath), 10000)
+shown('the first page on Claude Code', firstClaude ? await text(claudeItem) : '(nothing)')
+check(firstClaude && (await text(claudeItem)).includes('Claude Code') && (await text(claudeItem)).includes(t.config), 'the empty workspace says Claude Code is missing, at which path, and which config file names it')
+const firstCodex = await soon(async () => (await codexItem.count()) > 0 && (await text(codexItem)).includes("'codex' was not found"), 10000)
+check(firstCodex, 'the empty workspace says Codex is missing, and why')
 const empty = page.locator('section.projects p.muted')
 check((await text(empty)) === 'No projects yet.', 'the side panel says there are no projects yet')
 const register = page.locator('section.projects button[aria-label="Register a project"]')
 check((await register.count()) === 1 && (await register.isEnabled()), 'the register control is in the side panel, enabled once the service answered')
+const registerWord = (await register.locator('.word').count()) > 0 ? await text(register.locator('.word')) : ''
+check(registerWord !== '', `the register control carries a word while the workspace is empty: "${registerWord}"`)
 check((await page.locator('dialog[open]').count()) === 0, 'nothing opens by itself on the first page')
+await noInternal(page, 'the first page')
 await shot('empty')
 const dark = await t.page({ colorScheme: 'dark' })
+watch(dark)
 await dark.goto(url)
-await dark.locator('main .placeholder').waitFor()
+await soon(async () => (await dark.locator('main .first-run [data-harness="codex"]').count()) > 0, 10000)
 await t.shot(dark, 'empty-dark')
 
-// the register dialog: what it asks, and what it says about a wrong path.
+// the register dialog: what it asks, where the focus is, and what it says
+// about a wrong path.
 await register.click()
 const dialog = page.locator('dialog[open]')
 await dialog.waitFor()
 check((await text(dialog.locator('h2'))) === 'Register a project', 'the dialog is titled Register a project')
 const checkoutBox = dialog.locator('input').nth(0)
 check((await checkoutBox.getAttribute('placeholder')) === '/absolute/path/to/checkout', 'the checkout field asks for an absolute path')
-// the field asks for focus with autoFocus, but showModal moves it to the
-// dialog's first control, the close button. recorded, not checked; see the
-// note at the top.
-shown('focus on opening', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.tagName))
+const registerFocus = await soon(async () => (await page.evaluate(() => document.activeElement?.getAttribute('placeholder'))) === '/absolute/path/to/checkout', 3000)
+shown('focus on opening', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.getAttribute('placeholder') ?? document.activeElement?.tagName))
+check(registerFocus, 'the register dialog opens with the focus in its checkout field')
 await shot('register')
 const refusedFor = async (path) => {
   await checkoutBox.fill(path)
@@ -93,75 +157,132 @@ check((await page.locator('dialog[open]').count()) === 0, 'the dialog closed')
 const P = (await workspace()).projects[0]
 check(P && P.checkout === demo, 'the project is registered at its checkout')
 
-// the project page's notices, before anything has resolved its environment.
+// the project page, before any dialog: what is missing is known already,
+// from a resolution registering started in the background.
+const missingList = page.locator('section.environment ul.env-missing')
+const missingNames = async () => ((await workspace()).projects[0]?.environment?.missing ?? []).map((m) => m.harness).sort().join(',')
+const knownEarly = await soon(async () => (await missingNames()) === 'claude,codex' && (await missingList.count()) > 0, 15000)
+shown('what the project lists as missing, before any dialog', await missingNames())
+check(knownEarly, 'the project page lists both harnesses as missing before any dialog is opened')
+const claudeMissing = ((await workspace()).projects[0]?.environment?.missing ?? []).find((m) => m.harness === 'claude')?.reason ?? ''
+shown('the project on Claude Code', claudeMissing)
+check(
+  claudeMissing.includes(claudePath) && claudeMissing.includes('claude.executable') && claudeMissing.includes(t.config) && /install claude code/i.test(claudeMissing),
+  'Claude Code is missing because its path does not exist, and the reason says to install it or set claude.executable in the config file mega read',
+)
+shown('the environment section', await text(page.locator('section.environment')))
+check(!(await text(page.locator('section.environment'))).includes('Not resolved yet'), 'the environment section shows a resolution, not "Not resolved yet"')
 const notices = page.locator('article.detail p.notice')
 for (let i = 0; i < (await notices.count()); i++) {
   shown('a notice on the project page', await text(notices.nth(i)))
 }
-const trust = await text(page.locator('article.detail p.notice', { hasText: 'trust' }))
-check(trust.includes('Run claude here once and accept the trust dialog'), 'the page says Claude has not been trusted here, and how to trust it')
-const env = page.locator('section.environment')
-await env.waitFor()
-shown('the environment section', await text(env))
+const trustNotice = page.locator('article.detail p.notice', { hasText: /trust/i })
+const trust = (await trustNotice.count()) > 0 ? await text(trustNotice.first()) : ''
+check(!trust.includes('Run claude here once'), `the trust notice does not tell anyone to run a Claude that is not installed: "${trust}"`)
+const newConversation = page.locator('article.detail button[aria-label="New conversation"]')
+const newWord = (await newConversation.locator('.word').count()) > 0 ? await text(newConversation.locator('.word')) : ''
+check(newWord !== '', `the New conversation control carries a word while the workspace has no conversation: "${newWord}"`)
+await noInternal(page, 'the project page')
 await shot('project')
 
-// the new-conversation dialog: Claude first, which asks Claude for its
-// models, which resolves the project's environment, which finds codex
-// missing.
-await page.locator('button[aria-label="New conversation"]').click()
+// the new-conversation dialog: the focus in the prompt, both harnesses
+// marked, no model list to wait for, and Launch disabled and in view.
+await newConversation.click()
 const launch = page.locator('dialog[open]')
 await launch.waitFor()
-const harnessSelect = launch.locator('select').first()
+const launchFocus = await soon(async () => (await page.evaluate(() => document.activeElement?.tagName === 'TEXTAREA' && document.activeElement.closest('dialog') !== null)), 3000)
 shown('focus on opening', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.tagName))
-await until('codex marked as unable to run', async () => (await launch.locator('p.harness-missing').count()) > 0)
-const codexMissing = await text(launch.locator('p.harness-missing'))
-shown('the dialog on Codex', codexMissing)
-check(
-  codexMissing.startsWith("'codex' cannot run: 'codex' was not found on the project's PATH") && codexMissing.includes("until it can be found in the project's environment"),
-  'the dialog says codex is not on the project’s PATH and where to look',
-)
+check(launchFocus, 'the new-conversation dialog opens with the focus in the opening prompt')
+const harnessSelect = launch.locator('select').first()
+const bothMarked = await soon(async () => (await launch.locator('p.harness-missing').count()) === 2, 10000)
+const markedTexts = await launch.locator('p.harness-missing').allTextContents()
+for (const m of markedTexts) shown('the dialog on a missing harness', m.replace(/\s+/g, ' ').trim())
+check(bothMarked && markedTexts.some((m) => m.includes(claudePath)), 'the dialog marks Claude Code as unable to run, naming its path, as it does Codex')
 check((await harnessSelect.locator('option[value="codex"]').isDisabled()) && (await text(harnessSelect.locator('option[value="codex"]'))) === 'Codex (cannot run)', 'Codex is offered disabled, marked cannot run')
-check((await harnessSelect.inputValue()) === 'claude', 'Claude is the harness selected')
-const modelsNote = launch.locator('p.muted', { hasText: 'did not list its models' })
-await until('the models refusal', async () => (await modelsNote.count()) > 0)
-shown('the dialog on Claude’s models', await text(modelsNote))
-shown('the model list after that', await text(launch.locator('select').nth(2).locator('option').first()))
-shown('the launch control', (await launch.locator('button[type="submit"]').getAttribute('aria-label')) ?? '')
+check((await harnessSelect.locator('option[value="claude"]').isDisabled()) && (await text(harnessSelect.locator('option[value="claude"]'))).endsWith('(cannot run)'), 'Claude Code is offered disabled, marked cannot run')
+const modelSelect = launch.getByRole('combobox', { name: 'Model' })
+const modelSettled = await soon(async () => !(await text(modelSelect)).includes('Loading models'), 10000)
+shown('the model list', await text(modelSelect))
+check(modelSettled && /unavailable/i.test(await text(modelSelect)), 'the model list says it is unavailable, not that it is loading')
+const dialogText = await text(launch)
+check(!dialogText.includes('a launch takes what your settings name') && !/internal error/i.test(dialogText), 'the dialog says nothing stale: no "internal error", no "a launch takes what your settings name"')
 await launch.locator('textarea').fill('say hello')
-await launch.locator('button[type="submit"]').click()
-const launchError = launch.locator('p.error')
-await until('the launch refused', async () => (await launchError.count()) > 0 && (await text(launchError)) !== '')
-const claudeRefused = await text(launchError)
-shown('the dialog on launching Claude', claudeRefused)
-check(claudeRefused !== '', 'launching Claude is refused in the dialog, with a reason')
-check((await workspace()).conversations.length === 0, 'the refused launch made no conversation')
-await shot('launch-claude')
-const byApi = await api('POST', `/api/projects/${P.id}/conversations`, { harness: 'codex', prompt: 'say hello' })
-shown('the API on launching Codex', `${byApi.status} ${byApi.body?.code}: ${byApi.body?.message}`)
-check(byApi.status === 409 && byApi.body.code === 'executable_missing', 'launching Codex anyway is refused as executable_missing')
+const launchButton = launch.locator('button[type="submit"]')
+shown('the launch control', (await launchButton.getAttribute('aria-label')) ?? '')
+check(await launchButton.isDisabled(), 'Launch is disabled for a harness that cannot run')
+const box = await launchButton.boundingBox()
+check(box !== null && box.y >= 0 && box.y + box.height <= 900, `Launch is in view at 1280x900 with the notices showing: ${box ? `${Math.round(box.y)}–${Math.round(box.y + box.height)}` : 'not laid out'}`)
+await noInternal(page, 'the new-conversation dialog')
+await shot('launch-missing')
 await page.keyboard.press('Escape')
 await until('the dialog closed', async () => (await page.locator('dialog[open]').count()) === 0)
-const missingList = page.locator('section.environment ul.env-missing')
-await until('the project page listing what is missing', async () => (await missingList.count()) > 0)
-shown('the environment section, resolved', await text(page.locator('section.environment')))
-check((await text(missingList)).includes("'codex' was not found on the project's PATH"), 'the project page lists codex as missing once resolved')
-await shot('project-resolved')
 
-// a restart: the project stays, what was resolved does not.
-const before = (await workspace()).projects[0]
-check(before.environment.missing.length > 0, 'before the restart the project lists what is missing')
+// the API: each refusal coded, with its reason; never a 500.
+const models = await api('GET', `/api/projects/${P.id}/models?harness=claude`)
+shown('the API on Claude Code’s models', `${models.status} ${models.body?.code}: ${models.body?.message}`)
+check(models.status === 409 && models.body.code === 'executable_missing' && models.body.message.includes(claudePath), 'listing Claude Code’s models is refused as executable_missing, naming the path')
+const byApi = await api('POST', `/api/projects/${P.id}/conversations`, { harness: 'claude', prompt: 'say hello', effort: 'low' })
+shown('the API on launching Claude Code', `${byApi.status} ${byApi.body?.code}: ${byApi.body?.message}`)
+check(byApi.status === 409 && byApi.body.code === 'executable_missing' && byApi.body.message.includes(claudePath), 'launching Claude Code is refused as executable_missing, naming the path')
+const codexApi = await api('POST', `/api/projects/${P.id}/conversations`, { harness: 'codex', prompt: 'say hello' })
+shown('the API on launching Codex', `${codexApi.status} ${codexApi.body?.code}: ${codexApi.body?.message}`)
+check(codexApi.status === 409 && codexApi.body.code === 'executable_missing', 'launching Codex is refused as executable_missing')
+check((await workspace()).conversations.length === 0, 'the refused launches made no conversation')
+
+// a restart: the project stays, and what is missing is known again without
+// anything being opened.
 await t.stop()
+const before = startupLog().length
 await t.start()
 await page.reload()
 await until('the project page again', async () => (await page.locator('article.detail h1').count()) > 0)
 const after = (await workspace()).projects[0]
 check(after.id === P.id && after.checkout === demo, 'the project is still registered after a restart')
-shown('what the project lists as missing after the restart, before anything resolves', JSON.stringify(after.environment.missing))
+const knownAgain = await soon(async () => (await missingNames()) === 'claude,codex', 15000)
+shown('what the project lists as missing after the restart, before anything is opened', await missingNames())
+check(knownAgain, 'after a restart the project lists what is missing again, with nothing opened')
+const again = harnessLines(startupLog().slice(before))
+check(again.length >= 2, `the start-up log says again what each harness is: ${again.length} lines`)
 shown('the environment section after the restart', await text(page.locator('section.environment')))
+await noInternal(page, 'the project page after the restart')
 await shot('restarted')
-await page.locator('button[aria-label="New conversation"]').click()
-await until('codex marked again', async () => (await page.locator('dialog[open] p.harness-missing').count()) > 0)
-check(true, 'the dialog marks codex again after a restart, once the environment is resolved')
-await page.keyboard.press('Escape')
+
+// --listen: another mega, on its own scratch data, on the port the flag
+// names; and one refused for an address that is not loopback.
+const other = join(t.dir, 'other')
+mkdirSync(join(other, 'data'), { recursive: true })
+const otherEnv = { ...process.env, PATH: t.servicePath, HOME: join(t.dir, 'home'), XDG_STATE_HOME: join(other, 'state'), XDG_CONFIG_HOME: join(other, 'config'), XDG_DATA_HOME: join(other, 'xdgdata') }
+const run = (listen) => {
+  const p = spawn(t.bin, ['--config', t.config, '--data', join(other, 'data'), '--listen', listen], { stdio: ['ignore', 'pipe', 'pipe'], env: otherEnv })
+  let out = ''
+  p.stdout.on('data', (d) => (out += d))
+  p.stderr.on('data', (d) => (out += d))
+  const exited = new Promise((r) => p.once('exit', (code) => r(code)))
+  return { p, exited, out: () => out }
+}
+const otherPort = t.port + 1
+const flagged = run(`127.0.0.1:${otherPort}`)
+const answered = await soon(async () => {
+  try {
+    return (await fetch(`http://127.0.0.1:${otherPort}/api/workspace`)).ok
+  } catch {
+    return false
+  }
+}, 15000)
+check(answered, `--listen 127.0.0.1:${otherPort} serves on that port, over the config file's`)
+flagged.p.kill('SIGINT')
+await flagged.exited
+const refused = run(`0.0.0.0:${otherPort}`)
+const refusedCode = await Promise.race([refused.exited, new Promise((r) => setTimeout(() => r('still running'), 10000))])
+if (refusedCode === 'still running') refused.p.kill('SIGKILL')
+// with no terminal, mega says why it stopped in its log file.
+const otherLog = join(other, 'state/mega/mega.log')
+const refusal = (existsSync(otherLog) ? readFileSync(otherLog, 'utf8') : '') + refused.out()
+shown('--listen 0.0.0.0', (refusal.match(/[^"]*not a loopback address[^"]*/) ?? [''])[0])
+check(refusedCode !== 0 && refusedCode !== 'still running' && refusal.includes("listen '0.0.0.0:"), '--listen with an address that is not loopback is refused, as the config value is')
+
+// nothing on the walk said "internal error", and nothing answered 500.
+check(internalShown.length === 0, `no page said "internal error"${internalShown.length ? `: ${internalShown.join(', ')}` : ''}`)
+check(fiveHundreds.length === 0, `nothing answered 500${fiveHundreds.length ? `: ${fiveHundreds.join(', ')}` : ''}`)
 
 await t.done()

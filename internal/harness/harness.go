@@ -81,6 +81,12 @@ type Harness interface {
 	Check(find []string) error
 }
 
+// Locator is a harness that can say where the programs it runs were found in
+// an environment it can run in, for the start-up log and the first page.
+type Locator interface {
+	Locate(find []string) string
+}
+
 // Place is where a harness process runs on a project's behalf: the checkout;
 // Env, the project's resolved environment, which every process the adapter
 // starts gets in full, and nothing of mega's own; and Find, the environment
@@ -114,20 +120,14 @@ func (e *MissingError) Is(target error) bool {
 
 // FindExecutable checks that name can be run from find: a path is checked as
 // given, a bare name is looked up on find's PATH, and a script's
-// #!/usr/bin/env interpreter is looked up the same way.
-func FindExecutable(harnessName, name string, find []string) error {
+// #!/usr/bin/env interpreter is looked up the same way. advice, when given,
+// is what to do about a configured path that cannot run, and ends its reason.
+func FindExecutable(harnessName, name string, find []string, advice string) error {
 	if name == "" {
 		return &MissingError{Harness: harnessName, Executable: name, Reason: "no executable is configured"}
 	}
 	if strings.Contains(name, "/") {
-		info, err := os.Stat(name)
-		switch {
-		case err != nil:
-			return &MissingError{Harness: harnessName, Executable: name, Reason: fmt.Sprintf("'%s' does not exist", name)}
-		case info.IsDir() || info.Mode()&0o111 == 0:
-			return &MissingError{Harness: harnessName, Executable: name, Reason: fmt.Sprintf("'%s' is not an executable file", name)}
-		}
-		return nil
+		return CheckPath(harnessName, name, advice)
 	}
 	if _, err := Program(name, find); err != nil {
 		var missing *MissingError
@@ -136,6 +136,25 @@ func FindExecutable(harnessName, name string, find []string) error {
 			return missing
 		}
 		return &MissingError{Harness: harnessName, Executable: name, Reason: fmt.Sprintf("'%s' was not found on the project's PATH", name)}
+	}
+	return nil
+}
+
+// CheckPath checks that a configured path is an executable file, as a
+// harness's own check does before anything runs it: a path that does not
+// exist, or is not an executable file, is a MissingError naming it, ending
+// with advice, what the operator can do, when given.
+func CheckPath(harnessName, path, advice string) error {
+	suffix := ""
+	if advice != "" {
+		suffix = "; " + advice
+	}
+	info, err := os.Stat(path)
+	switch {
+	case err != nil:
+		return &MissingError{Harness: harnessName, Executable: path, Reason: fmt.Sprintf("'%s' does not exist%s", path, suffix)}
+	case info.IsDir() || info.Mode()&0o111 == 0:
+		return &MissingError{Harness: harnessName, Executable: path, Reason: fmt.Sprintf("'%s' is not an executable file%s", path, suffix)}
 	}
 	return nil
 }

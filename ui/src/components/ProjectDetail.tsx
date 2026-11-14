@@ -14,9 +14,14 @@ interface ProjectDetailProps {
   onAdopt: () => void
   // why new work waits, or null: launches and adoptions wait, and say so.
   heldBy: string | null
+  // the workspace has no conversation yet, so New conversation says so in a
+  // word as well as its icon.
+  firstConversation: boolean
+  // why Claude Code cannot run here, or null: the trust notice waits for it.
+  claudeCannotRun: string | null
 }
 
-export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt, heldBy }: ProjectDetailProps) {
+export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt, heldBy, firstConversation, claudeCannotRun }: ProjectDetailProps) {
   const [name, setName] = useState(project.name)
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -50,11 +55,17 @@ export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt
           conversations and their history are still here. Put the checkout back at that path, or remove the project and register it again where it is now.
         </p>
       )}
-      {project.untrusted && !project.checkout_missing && (
+      {project.untrusted && !project.checkout_missing && !claudeCannotRun && (
         <p className="notice" role="note">
           Claude has not been trusted in this checkout, so it ignores the project&apos;s permission
           rules. Run <code>claude</code> here once and accept the trust dialog; mega will not
           accept it for you.
+        </p>
+      )}
+      {project.untrusted && !project.checkout_missing && claudeCannotRun && (
+        <p className="notice" role="note">
+          Claude Code cannot run here yet, so there is nothing to trust: the environment section below says what is missing. Once it can
+          run, it asks once, in a terminal, whether to trust this checkout; mega will not accept that for you.
         </p>
       )}
       {error && <p className="error">{error}</p>}
@@ -64,7 +75,13 @@ export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt
           <h2>Conversations</h2>
           <span className="section-actions">
             <IconButton icon="download" label={heldBy ??  'Adopt a session'} disabled={heldBy !== null} onClick={onAdopt} />
-            <IconButton icon="add_comment" label={heldBy ??  'New conversation'} disabled={heldBy !== null} onClick={onLaunch} />
+            <IconButton
+              icon="add_comment"
+              label={heldBy ?? 'New conversation'}
+              word={firstConversation ? 'New conversation' : undefined}
+              disabled={heldBy !== null}
+              onClick={onLaunch}
+            />
           </span>
         </div>
         {conversations.length === 0 ? (

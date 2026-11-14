@@ -1,6 +1,6 @@
 ---
 title: dialog focus and a stale model list
-state: inbox
+state: researching
 created: 2026-11-13
 tags: [defect]
 ---

@@ -6,6 +6,9 @@ horizon:
   - start-up-reads-every-log.md
   - mega-as-the-development-hub.md
 researching:
+  - first-run-explains-itself.md
+  - dialog-focus-and-a-stale-model-list.md
+  - a-missing-claude-is-named.md
   - a-coworker-can-install-mega.md
   - clean-machine-rehearsal.md
   - harness-version-tolerance.md

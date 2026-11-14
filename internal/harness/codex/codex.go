@@ -25,8 +25,12 @@ const (
 )
 
 // Config locates the codex executable.
+// Where says where Binary is set, such as "in '/home/me/.config/mega/
+// mega.yaml', the config file mega read", for a reason that tells the operator
+// what to do; empty leaves the file unnamed.
 type Config struct {
 	Binary string
+	Where  string
 }
 
 // Harness runs codex through a private app-server per runtime.
@@ -184,13 +188,32 @@ func (h *Harness) once(ctx context.Context, place harness.Place, method string, 
 	return c.call(ctx, method, params, out)
 }
 
+// Check reports whether the configured codex binary can be found: a path is
+// checked as configured, with what to do if it cannot run, and a bare name
+// on find's PATH.
+func (h *Harness) Check(find []string) error {
+	where := ""
+	if h.cfg.Where != "" {
+		where = " " + h.cfg.Where + ","
+	}
+	return harness.FindExecutable(model.HarnessCodex, h.cfg.Binary, find, fmt.Sprintf("install Codex, or set codex.binary%s to where it is", where))
+}
+
+// Locate says where codex was found in find, for a harness that can run
+// there.
+func (h *Harness) Locate(find []string) string {
+	path := h.cfg.Binary
+	if !strings.Contains(path, "/") {
+		if found, err := harness.LookPath(path, find); err == nil {
+			path = found
+		}
+	}
+	return fmt.Sprintf("codex '%s'", path)
+}
+
 // Models lists the models codex offers, from a short-lived app-server with no
 // thread, as discovery does. hidden models are left out. the version comes
 // from the app-server's user agent.
-// Check reports whether the configured codex binary can be found.
-func (h *Harness) Check(find []string) error {
-	return harness.FindExecutable(model.HarnessCodex, h.cfg.Binary, find)
-}
 
 func (h *Harness) Models(ctx context.Context, place harness.Place) (harness.Catalog, error) {
 	c, err := dial(h.cfg.Binary, place, quiet{})

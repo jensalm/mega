@@ -114,6 +114,9 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeJSON(w, r, http.StatusConflict, &errorBody{Code: code, Message: err.Error()})
 	case service.CodeUnavailable:
 		writeJSON(w, r, http.StatusServiceUnavailable, &errorBody{Code: code, Message: err.Error()})
+	case service.CodeHarnessFailed:
+		// the harness, behind mega, failed: its reason, never internal error.
+		writeJSON(w, r, http.StatusBadGateway, &errorBody{Code: code, Message: err.Error()})
 	default:
 		dl.Errorf("'%s %s': %v", r.Method, r.URL.Path, err)
 		writeJSON(w, r, http.StatusInternalServerError, &errorBody{Code: "internal", Message: "internal error"})

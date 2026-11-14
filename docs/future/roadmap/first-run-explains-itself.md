@@ -1,6 +1,6 @@
 ---
 title: first run explains itself
-state: inbox
+state: researching
 created: 2026-11-13
 tags: [enhancement]
 ---
@@ -28,3 +28,4 @@ None of these is wrong; together they mean the first useful explanation arrives 
 - On the empty workspace, a short "what mega needs" block: each harness, found or missing, and where the README says to get it. It names the register control in words.
 - The trust notice waits until Claude Code can run here, or says to install it first.
 - The register and new-conversation controls carry a word as well as an icon while the workspace is empty, as `IconButton`'s `word` allows.
+- A `--listen` flag beside `--data` and `--config`, held to loopback as the config value is. The rehearsal found the port changes only through the config file, and copying the README's example block to change it brings a placeholder shim path that breaks Claude. The demo's own workspace wants it too.

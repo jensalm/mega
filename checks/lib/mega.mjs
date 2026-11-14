@@ -331,6 +331,11 @@ export async function suite(name, { bare = false } = {}) {
     port,
     dir,
     repo,
+    // the binary, its config, and mega's own PATH, for a step that runs
+    // another mega beside the suite's.
+    bin,
+    config,
+    servicePath,
     say,
     check,
     must,
