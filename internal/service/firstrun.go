@@ -30,6 +30,22 @@ type HarnessStatus struct {
 	// Reason is why it cannot run, without the harness's name, which the
 	// page and the log put before it.
 	Reason string
+	// Version is what the harness's own --version printed, Tested its tested
+	// range (harness.Tested), and Standing and Note where the version stands
+	// against that range and the sentence saying so. Version and Standing
+	// are empty until the version has been read; an unreadable one is
+	// StandingUnknown.
+	Version  string
+	Tested   string
+	Standing string
+	Note     string
+}
+
+// versionRead is a harness's version as last read, and where its programs
+// were then: a read is kept until the harness is found somewhere else.
+type versionRead struct {
+	where   string
+	version string
 }
 
 // resolveAllLocked starts, in the background, a resolution of every project
@@ -81,21 +97,71 @@ func (s *Service) checkHarnesses() {
 	}
 	s.mu.Lock()
 	s.harnessFind, s.harnessWhere = find, where
+	s.versionsReading = true
+	s.mu.Unlock()
+	s.readVersions()
+	s.mu.Lock()
 	report := s.harnessStatusLocked()
 	s.changed()
 	s.mu.Unlock()
 	for _, status := range report {
-		if status.Found {
-			dl.Infof("harness '%s' can run, in %s: %s", status.Name, where, status.Where)
-		} else {
+		switch {
+		case !status.Found:
 			dl.Warnf("harness '%s' cannot run: %s (looked for in %s)", status.Name, status.Reason, where)
+		case status.Standing == harness.StandingTested:
+			dl.Infof("harness '%s' can run, in %s: %s; version '%s', of the '%s' mega was tested with", status.Name, where, status.Where, status.Version, status.Tested)
+		default:
+			dl.Warnf("harness '%s' can run, in %s: %s; %s", status.Name, where, status.Where, status.Note)
 		}
 	}
 }
 
+// readVersions reads each harness's version where the start-up check found
+// it, with harness.VersionTimeout each, and keeps them for the reports. a
+// read that fails keeps an empty version, reported as unknown. callers do
+// not hold s.mu; it clears versionsReading when done.
+func (s *Service) readVersions() {
+	s.mu.Lock()
+	find := s.harnessFind
+	found := map[string]string{}
+	for _, status := range s.harnessStatusLocked() {
+		if status.Found {
+			found[status.Name] = status.Where
+		}
+	}
+	s.mu.Unlock()
+	reads := map[string]versionRead{}
+	for name, where := range found {
+		read := versionRead{where: where}
+		if v, ok := s.harnesses[name].(harness.Versioner); ok {
+			version, err := v.Version(context.Background(), find)
+			if err != nil {
+				dl.Debugf("reading the version of '%s': %v", name, err)
+			}
+			read.version = version
+		}
+		reads[name] = read
+	}
+	s.mu.Lock()
+	s.harnessVersions = reads
+	s.versionsReading = false
+	s.mu.Unlock()
+}
+
+// Harnesses is whether each harness can run in the operator's shell
+// environment, with its version against its tested range, as the workspace
+// read carries it; nil until the start-up check has run.
+func (s *Service) Harnesses() []HarnessStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.harnessStatusLocked()
+}
+
 // harnessStatusLocked checks each harness, in name order, in the environment
-// the start-up check found; nil until it has. a check reads names and modes
-// only, so it is cheap enough for every workspace read. callers hold s.mu.
+// the start-up check found; nil until it has. a check reads names, modes and
+// codex's package manifest only, so it is cheap enough for every workspace
+// read. versions come from the last read (readVersions), never from running
+// anything here. callers hold s.mu.
 func (s *Service) harnessStatusLocked() []HarnessStatus {
 	if s.harnessFind == nil {
 		return nil
@@ -106,6 +172,22 @@ func (s *Service) harnessStatusLocked() []HarnessStatus {
 	}
 	slices.Sort(names)
 	out := make([]HarnessStatus, 0, len(names))
+	stale := false
+	defer func() {
+		// a harness found somewhere new since its version was read (an
+		// install, an update of the link) is read again, in the background.
+		if stale && !s.versionsReading && !s.closed {
+			s.versionsReading = true
+			s.background.Add(1)
+			go func() {
+				defer s.background.Done()
+				s.readVersions()
+				s.mu.Lock()
+				s.changed()
+				s.mu.Unlock()
+			}()
+		}
+	}()
 	for _, name := range names {
 		h := s.harnesses[name]
 		status := HarnessStatus{Name: name}
@@ -115,6 +197,13 @@ func (s *Service) harnessStatusLocked() []HarnessStatus {
 			status.Found = true
 			if locator, ok := h.(harness.Locator); ok {
 				status.Where = locator.Locate(s.harnessFind)
+			}
+			status.Tested = harness.Tested[name].String()
+			if read, ok := s.harnessVersions[name]; ok && read.where == status.Where {
+				status.Version = read.version
+				status.Standing, status.Note = harness.Stand(name, read.version)
+			} else {
+				stale = true
 			}
 		case errors.As(err, &missing):
 			// the check reads a project's PATH; here it is the shell's own,

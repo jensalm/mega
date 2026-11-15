@@ -19,8 +19,12 @@ const (
 	conversationDir = "conversations"
 	defaultListen   = "127.0.0.1:8470"
 
-	// the claude code build the shim's sdk (0.3.318) was matched against.
-	defaultClaudeExecutable = "~/.local/share/claude/versions/2.1.318"
+	// the installed claude code, by its bare name: the one the operator's own
+	// updater links, so an update never leaves mega on a pruned build. with
+	// none on the PATH the adapter falls back to the newest native build in
+	// the installer's versions folder. the builds mega was tested with are
+	// harness.Tested.
+	defaultClaudeExecutable = "claude"
 )
 
 // defaultClaudeShim is the shim directory, stamped at build time by the

@@ -1,0 +1,4 @@
+#!/bin/sh
+# the fake codex package's code-mode host: mega checks it is here, beside
+# the entrypoint, as a whole codex install keeps it. nothing runs it.
+exit 0

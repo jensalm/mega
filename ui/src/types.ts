@@ -249,6 +249,10 @@ export interface About {
   logs_to_file: boolean
   claude_sdk: string
   interface: string
+  // each harness's tested range, by name ("2.1.318 to 2.1.325"), and what
+  // the service's start-up check found, with each version against it.
+  tested: Record<string, string>
+  harnesses?: HarnessStatus[]
 }
 
 export interface Workspace {
@@ -270,6 +274,13 @@ export interface HarnessStatus {
   found: boolean
   where?: string
   reason?: string
+  // the version its --version printed, its tested range, where the version
+  // stands (tested, newer, older or unknown) and the sentence saying so;
+  // absent until the version has been read.
+  version?: string
+  tested?: string
+  standing?: string
+  note?: string
 }
 
 // Blocker is one conversation holding the shutdown gate, by kind.
@@ -327,7 +338,21 @@ export interface ConversationEvent {
   req?: { id: string; kind: string; payload?: RequestPayload | null; outcome?: string }
   // mode_confirmed: a mode report, in older logs, that only confirmed the
   // mode a start with no prompt requested; recorded, never drawn.
-  facts?: { session?: string; model?: string; effort?: string; version?: string; permission_mode?: string; mode_confirmed?: boolean; cwd?: string }
+  // standing, tested and version_note: on a runtime's start, where its
+  // version stood against the tested range then, the range, and the
+  // sentence saying so when it is outside it.
+  facts?: {
+    session?: string
+    model?: string
+    effort?: string
+    version?: string
+    permission_mode?: string
+    mode_confirmed?: boolean
+    cwd?: string
+    standing?: string
+    tested?: string
+    version_note?: string
+  }
   // turn: on a turn_end, what the turn asked for and ran with; absent on
   // turns recorded before mega kept it, and where the harness said nothing.
   turn?: TurnRecord

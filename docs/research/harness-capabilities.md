@@ -732,6 +732,93 @@ Both harnesses can report a conversation's servers as plain data: name, status, 
 - **Codex.** The adapter lists with its thread's id once the thread is loaded, and again after each burst of `mcpServer/startupStatus/updated`.
 - **What neither shows.** Neither notices a server that dies quietly: Claude does not notice at all, and Codex only when asked. A list asked again at each turn start costs little and catches the Codex case.
 
+## Follow-up (2026-11-14): harness versions other than the pinned ones
+
+What mega, as built on 2026-11-14, does with a Claude Code and a Codex other than 2.1.318 and 0.166.0, for the `harness-version-tolerance` card.
+
+**How it was run.** Each build ran through a scratch mega: its own port, scratch data and XDG directories, and a scratch config file naming the build. The fixture was `claude-rt1` or `codex-rt1`. A scratch driver made the e2e round trips' calls over the HTTP API, logged in as the operator with his real configuration. The scripts and every run's output are under `/tmp/mega-harness-spike/`; the journal of 2026-11-14 is the running log.
+- **The configuration was backed up first,** to `~/Sandbox/harness-config-backup-2026-11-14/`, with the 2.1.318 build. No credential, transcript or session store was copied.
+- **Why not the e2e tests themselves.** They cannot switch Claude's updater off: a project's environment starts from `environ.Base`, which passes a fixed list of names, so a variable in the test's own environment never reaches Claude. Each Claude project instead had a local override activation setting `DISABLE_AUTOUPDATER=1` (and, from 2.1.322 on, `DISABLE_UPDATES=1`).
+- **The fetched Codex builds ran in a scratch `CODEX_HOME`,** shared by all of them. It held copies of the operator's configuration files and a symbolic link to his `auth.json`, never copied or read. Nothing ran Codex until the project's resolved environment was seen to set `CODEX_HOME`.
+- **Proof that nothing installed changed.** Before and after every run, the spike recorded Claude's `versions/` listing and where `claude` points, and the real `~/.codex` by name, size and time. None changed.
+
+### Claude Code 2.1.325, 2.1.322, 2.1.321, 2.1.319 and 2.1.318, Agent SDK 0.3.318
+
+The builds already installed by the operator's own updater, newest first, with 2.1.318 as the control, all through the shim's pinned SDK.
+
+- **Every build passed every step** `[observed]`. The steps were:
+  - the model list: 14 models, at the build's version;
+  - a launch and a marker turn;
+  - an approval for Bash `sleep 3`, from the fixture's `ask` rule;
+  - an interrupt with an approval pending, ending the turn `interrupted` and the request `aborted`;
+  - a live switch to plan and back, each confirmed;
+  - MCP status, with the same counts at every build;
+  - a release, a start without a prompt and two exact-id resumes, all on the same session.
+
+  No turn's record reported a difference between what was asked and what ran.
+- **Nothing notices the mismatch** `[observed]`. Neither the SDK nor the shim said anything about a Claude Code newer than the SDK's own 2.1.318. The only warning in mega's log, at every build including 2.1.318, was the model list taking about 1.3 s.
+- **How a build reports its version** `[observed]`:
+  - `--version` prints "2.1.325 (Claude Code)" in about 10 ms;
+  - the model list carries the version without a session;
+  - a launch's started facts carry it, from `system/init` or from the idle launch's `ready`.
+
+  The SDK's documentation ties feature availability to "the SDK release with the same patch number or later". It states no range for an SDK driving a newer Claude Code `[docs]`.
+- **`claude.executable: claude`, the bare name, works** `[observed]`. mega's check found `claude` on the shell's `PATH` as the link itself, `~/.local/bin/claude`. The SDK ran the link, so the session was the link's target at launch, 2.1.325, and all steps passed. With the bare name, each launch takes the build the updater last linked, and a running runtime keeps the build it started with.
+- **The updater's retention, by its documentation** `[docs]`: "Besides the version the launcher points to and any version a session on the same machine is running, it keeps the two newest versions and deletes the rest". When it deletes is not documented. `DISABLE_AUTOUPDATER` "only stops the background check"; `DISABLE_UPDATES` blocks every update path. Neither is said to stop the cleanup.
+- **Retention as observed** `[observed]`. The five builds were all still installed after a cleanup at 17:24Z on 2026-11-14, though no running process used 2.1.319 or 2.1.321. So the documented rule was not borne out at that cleanup, unless sessions were running them then. 2.1.318 was in use by the operator's own mega's twelve processes. By the documented rule, a versioned `claude.executable` naming an old build survives only while a session runs it.
+- **Builds read each other's sessions** `[observed]`.
+  - **Already in real use:** two fixture sessions from 2026-11-09 interleave entries from 2.1.318 with 2.1.319 or 2.1.321, from terminal handoffs, and 2.1.318 answered after the newer build had written.
+  - **On purpose:** one session created by 2.1.325 was resumed in turn by 2.1.318, 2.1.325, 2.1.322, 2.1.321, 2.1.319 and 2.1.325. Each resume kept the same session, recalled every earlier build's words, and imported nothing. Each line of the session file carries its writer's `version`.
+- **`migrationVersion` in `~/.claude.json` is lowered by the older builds** `[observed]`.
+  - **2.1.318 and 2.1.319 set it to 14** at their start.
+  - **2.1.321, 2.1.322 and 2.1.325 set it to 15,** or leave it at 15.
+  - **So the migration numbered 15 arrived with 2.1.320 or 2.1.321.** Each start of an older build lowers the number, and the next start of a newer one runs migration 15 again.
+  - **In daily use:** the operator's mega has run 2.1.318 beside his terminal's newer builds all week, so the number has been moving daily. Nothing observed broke, and what migration 15 does was not looked into.
+- **What else changed in the shared configuration** `[observed]`.
+  - In `~/.claude.json`, only the feature-flag and model-option caches. Nothing in the fixture's own entry, in `settings.json` or in the plugin files.
+  - Claude made backups of `~/.claude.json` in `~/.claude/backups/`, one per start during the cross-build resumes, five in all. They are whole copies, with the account identifiers and prompt text the file holds. About 25 minutes after the last run, at 22:40 local, the folder was empty again. Nothing in the spike touched it, and no spike process was running Claude then, so Claude removes them itself.
+- **Unrelated to versions, seen at every build** `[observed]`. After an interrupt and a release, the next exact-id resume imports one native assistant message, "No response requested.". It is Claude's own transcript entry for the interrupted turn.
+
+### codex-cli 0.169.0, 0.167.2 and 0.163.0, and 0.166.0
+
+Fetched from OpenAI's GitHub releases into scratch. The control is the operator's own npm 0.166.0, run first and last.
+
+- **A lone binary is not a working Codex at 0.169.0** `[observed]`.
+  - **The lone binary** (`codex-x86_64-unknown-linux-musl.tar.gz`) listed models and answered a turn. But its shell tool failed inside the turn: the model replied "Couldn't run the command: the execution tool's host executable was not found", and the turn ended `success`. Nothing at the protocol level said so.
+  - **The package** (`codex-package-x86_64-unknown-linux-musl.tar.gz`) is laid out exactly as npm's `vendor/<target>/`:
+    - `bin/codex` and `bin/codex-code-mode-host`, and from 0.167.2 `bin/codex-exec-server`;
+    - `codex-path/rg`;
+    - `codex-resources/`, with `bwrap` and a voice host;
+    - a manifest, `codex-package.json`, at `layoutVersion` 1, naming `entrypoint`, `execServer` (from 0.167.2), `resourcesDir` and `pathDir`.
+
+    It does not name `codex-code-mode-host`.
+- **From its package, every build passed every step** `[observed]`. That is 0.169.0, 0.167.2 and 0.163.0, and 0.166.0 before and after them. The steps were:
+  - the model list: 8 models, at the build's version;
+  - a launch and a marker turn;
+  - the shell approval for exactly the expected command, written after Allow;
+  - an interrupt with an approval pending, aborted with nothing written;
+  - the MCP approval for the fixture's `echo`, not run before Allow and run after;
+  - MCP status;
+  - a release, a start without a prompt (`thread/resume`) and two exact-id resumes that remembered the whole thread;
+  - discovery (`thread/list`) and adoption with history (`thread/read`) from a second mega.
+
+  No turn's record reported a difference.
+- **How a build reports its version** `[observed]`: `--version` prints "codex-cli 0.169.0" in about 10 ms. The app-server's `initialize` user agent carries it, as the adapter already reads.
+- **What the builds did to the store they share** `[observed]`.
+  - **No database was migrated or renamed** by any build, older or newer: `state_5` at 62, `thread_history_1` at 8, the rest at 2.
+  - **The copied configuration files were not rewritten:** `config.toml`, the second config, `version.json` and the migration markers stayed byte for byte. Only `models_cache.json`, a cache, was rewritten at every run.
+  - **0.163.0 read** the threads and databases newer builds had written, and 0.166.0 read everything at the end.
+- **A `CODEX_HOME` under `/tmp`** makes Codex print "Refusing to create helper binaries under temporary dir" and proceed without its `PATH` aliases `[observed]`. No round trip here used them.
+
+### What this permits
+
+- **A tested range.** Claude Code 2.1.318 to 2.1.325 with Agent SDK 0.3.318, and codex-cli 0.163.0 to 0.169.0 as a whole package, each with every call mega makes `[observed]`. Nothing outside those was run.
+- **What breaks outside it, as seen:**
+  - **Claude:** none of the installed builds broke. The failure in daily use is a versioned `claude.executable` whose build has been pruned.
+  - **Codex:** a lone binary without its helper programs breaks the shell tool silently.
+- **How early mega can know.** Both harnesses report their version in about 10 ms with `--version`, cheap enough for the start-up check and for every launch. Both also report it at launch, as they do today.
+- **Sharing the store across versions.** Neither harness's store is left unreadable by a nearby older build. Claude's `migrationVersion` moving down and back is the one rewrite seen.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

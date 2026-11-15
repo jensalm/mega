@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -104,18 +105,69 @@ func (h *Harness) Locate(find []string) string {
 	if program, err := harness.Program(h.cfg.Node, find); err == nil {
 		node = program[len(program)-1]
 	}
-	executable, _ := h.executable(find)
+	executable, fallback, _ := h.locate(find)
+	if fallback {
+		return fmt.Sprintf("claude code '%s', the newest build installed, with no '%s' on the PATH, node '%s', shim '%s'", executable, h.cfg.Executable, node, h.cfg.Shim)
+	}
 	return fmt.Sprintf("claude code '%s', node '%s', shim '%s'", executable, node, h.cfg.Shim)
+}
+
+// Version is the version the claude code mega would run prints for
+// --version, with the updater's background check off for that one call: a
+// version read never starts an update.
+func (h *Harness) Version(ctx context.Context, find []string) (string, error) {
+	executable, err := h.executable(find)
+	if err != nil {
+		return "", err
+	}
+	return harness.ReadVersion(ctx, []string{executable, "--version"}, append(append([]string{}, find...), "DISABLE_AUTOUPDATER=1"), "Claude Code")
+}
+
+// versionsDir is where claude code's native installer keeps its builds,
+// under the home find names, else mega's own.
+func versionsDir(find []string) string {
+	home, ok := lookup(find, "HOME")
+	if !ok || home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return filepath.Join(home, ".local", "share", "claude", "versions")
+}
+
+// installed lists the native builds in dir, newest first: executable files
+// named by their version, never a script. it reads dir and nothing else.
+func installed(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var builds []string
+	for _, e := range entries {
+		name := e.Name()
+		if harness.ParseVersion(name) != name {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 || script(path) {
+			continue
+		}
+		builds = append(builds, name)
+	}
+	slices.SortFunc(builds, func(a, b string) int { return harness.CompareVersions(b, a) })
+	return builds
 }
 
 // advice is what to do about a configured path that cannot run: install the
 // thing, or set key, where the config says, to where it is.
 func (h *Harness) advice(install, key string) string {
-	where := ""
-	if h.cfg.Where != "" {
-		where = " " + h.cfg.Where + ","
+	return fmt.Sprintf("%s, or set %s%s to where it is", install, key, h.where())
+}
+
+// where is " in '<file>', …," naming where the config is set, or empty.
+func (h *Harness) where() string {
+	if h.cfg.Where == "" {
+		return ""
 	}
-	return fmt.Sprintf("%s, or set %s%s to where it is", install, key, where)
+	return " " + h.cfg.Where + ","
 }
 
 // executable is the claude code executable the shim starts: a configured path
@@ -126,22 +178,45 @@ func (h *Harness) advice(install, key string) string {
 // finds by name on the process's PATH, which the activation sets, so a script
 // (a #! line, or a .js, .mjs or .cjs file) is refused rather than handed over.
 func (h *Harness) executable(find []string) (string, error) {
-	path := h.cfg.Executable
+	path, _, err := h.locate(find)
+	return path, err
+}
+
+// locate finds the claude code executable. a configured path is used while
+// it is installed; once it is gone, the refusal names the builds installed
+// beside it and how to follow the installed one, and says "install" only
+// when there is none. a bare name, the default "claude", is looked up on
+// find's PATH, and with none there, the newest native build in the
+// installer's versions folder is used (fallback): a launcher-started mega
+// whose shell lacks ~/.local/bin still finds it.
+func (h *Harness) locate(find []string) (path string, fallback bool, err error) {
+	path = h.cfg.Executable
 	if strings.Contains(path, "/") {
-		if err := harness.CheckPath(model.HarnessClaude, path, h.advice("install Claude Code", "claude.executable")); err != nil {
-			return "", err
+		if err := harness.CheckPath(model.HarnessClaude, path, ""); err != nil {
+			if beside := installed(filepath.Dir(path)); len(beside) > 0 {
+				return "", false, &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf(
+					"'%s' is not installed; the builds installed beside it are %s. to follow the installed Claude Code, set claude.executable to claude%s or remove it from there; or name one of those builds",
+					path, strings.Join(beside, ", "), h.where())}
+			}
+			return "", false, harness.CheckPath(model.HarnessClaude, path, h.advice("install Claude Code", "claude.executable"))
 		}
 	} else {
 		found, err := harness.LookPath(path, find)
 		if err != nil {
-			return "", &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf("'%s' was not found on the project's PATH", path)}
+			dir := versionsDir(find)
+			builds := installed(dir)
+			if len(builds) == 0 {
+				return "", false, &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf(
+					"'%s' was not found on the project's PATH, and no build is installed in '%s'; %s", path, dir, h.advice("install Claude Code", "claude.executable"))}
+			}
+			found, fallback = filepath.Join(dir, builds[0]), true
 		}
 		path = found
 	}
 	if script(path) {
-		return "", &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf("'%s' is a script, and the sdk would start it through an interpreter found on the project's activated PATH; set claude.executable to a native build, such as ~/.local/share/claude/versions/<version>", path)}
+		return "", false, &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf("'%s' is a script, and the sdk would start it through an interpreter found on the project's activated PATH; set claude.executable to a native build, such as ~/.local/share/claude/versions/<version>", path)}
 	}
-	return path, nil
+	return path, fallback, nil
 }
 
 // script reports whether path is a script the sdk would run through an

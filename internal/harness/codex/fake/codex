@@ -35,6 +35,14 @@
 import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 
+// --version answers as codex-cli does, with the version its manifest,
+// codex-package.json beside it, names, so mega's version check reads it.
+if (process.argv[2] === '--version') {
+  const { readFileSync } = await import('node:fs')
+  const manifest = JSON.parse(readFileSync(new URL('./codex-package.json', import.meta.url), 'utf8'))
+  process.stdout.write(`codex-cli ${manifest.version}\n`)
+  process.exit(0)
+}
 if (process.argv[2] !== 'app-server') {
   process.stderr.write('fake codex: only app-server is supported\n')
   process.exit(2)

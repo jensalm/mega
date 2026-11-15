@@ -27,3 +27,7 @@ export const harnesses: Harness[] = [
 ]
 
 export const harnessLabel = (value: string) => harnesses.find((h) => h.value === value)?.label ?? value
+
+// asSentence is a note the service words for its log (a harness's version
+// against its tested range), begun as a sentence is on the page.
+export const asSentence = (note: string | undefined) => (note ? note.charAt(0).toUpperCase() + note.slice(1) : '')

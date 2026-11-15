@@ -86,6 +86,10 @@ type Service struct {
 	// harnesses in, and harnessWhere names it; nil until it has run.
 	harnessFind  []string
 	harnessWhere string
+	// harnessVersions is each harness's version as last read, and
+	// versionsReading says a read is under way (readVersions).
+	harnessVersions map[string]versionRead
+	versionsReading bool
 }
 
 // New returns a service over reg. it recovers from the previous run before

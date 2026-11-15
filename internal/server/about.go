@@ -1,6 +1,10 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/michaelquigley/mega/internal/harness"
+)
 
 // BuildHeader carries the identity of the interface this service serves on
 // every workspace read, so an open page can compare it with its own and say
@@ -35,7 +39,25 @@ type About struct {
 	Interface string
 }
 
-// getVersion answers from the build information the server was given.
+// versionView is About, with each harness's tested range and the version
+// found, as the start-up check of the harnesses read it.
+type versionView struct {
+	About
+	// Tested is each harness's tested range, by name (harness.Tested).
+	Tested map[string]string
+	// Harnesses is what the start-up check found; absent until it has run.
+	Harnesses []*harnessStatusView `dd:",+omitempty"`
+}
+
+// getVersion answers from the build information the server was given, with
+// the tested ranges and the versions the service has found.
 func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, r, http.StatusOK, &s.about)
+	view := &versionView{About: s.about, Tested: map[string]string{}}
+	for name, r := range harness.Tested {
+		view.Tested[name] = r.String()
+	}
+	for _, h := range s.svc.Harnesses() {
+		view.Harnesses = append(view.Harnesses, newHarnessStatusView(h))
+	}
+	writeJSON(w, r, http.StatusOK, view)
 }

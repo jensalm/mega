@@ -26,13 +26,18 @@
 // mega" on its reply. and each turn's line: hidden at rest, shown on hover
 // and on focus with nothing moving, staying in the notice colour when the
 // fake reports another model than the one asked for, and none on turns
-// recorded before mega kept it. and the MCP servers: an item in the More menu with the
+// recorded before mega kept it. and the runtime-started line: unmarked for a
+// version inside the tested range, marked in the notice colour with the
+// range in its title for one newer, more strongly for one older, and nothing
+// refused. and the MCP servers: an item in the More menu with the
 // count, a mark on More while a server failed or needs signing in, in view at
 // the bottom, and the list the item opens, with each
 // status, an error, the harness's own place to sign in, tools on expansion,
 // and nothing to change; a sign-in followed; never attention; nothing with no
 // runtime; for claude and for codex. it saves the centred conversation, light
-// and dark, with the panel open and collapsed.
+// and dark, with the panel open and collapsed, and the start lines,
+// shots/start-{tested,newer,older}.png.
+import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendImported, appendNative, appendTurns } from './lib/gen.mjs'
 import { suite } from './lib/mega.mjs'
@@ -329,6 +334,79 @@ await until('the in-flight line on hover', async () => (await opacity(pending)) 
 check((await pending.textContent()) === 'Ran Fake Opus · medium · ask' && (await layout()) === flightBefore, `the turn in flight shows what it runs with on hover, and nothing moves: "${await pending.textContent()}"`)
 await t.idle(L)
 await rest()
+await page.evaluate((id) => {
+  location.hash = `#/c/${id}`
+}, C)
+await until('C shown again', async () => (await page.locator('.events .message.assistant', { hasText: 'a reply given in a terminal' }).count()) === 1)
+
+// the runtime-started line names the version the harness reported; one
+// outside mega's tested range is marked on that line, in the notice colour,
+// with the range in its title, and an older build is worded more strongly
+// than a newer one. one inside the range is not marked, and nothing is
+// refused for its version. the fake shim reports the version a file beside
+// it names.
+const versionFile = join(t.dir, 'fakeshim', 'claude-version')
+const claudeTested = '2.1.318 to 2.1.325'
+const startLine = page.locator('.events p.system', { hasText: /^Runtime started/ }).first()
+const startedWith = async (version, name) => {
+  writeFileSync(versionFile, version + '\n')
+  const id = (await t.launch(P.id, 'claude', 'echo\nhello', { name })).id
+  await t.idle(id)
+  await page.evaluate((id) => {
+    location.hash = `#/c/${id}`
+  }, id)
+  await until(`the start line of ${name}`, async () => (await startLine.count()) === 1 && (await startLine.textContent()).includes(`v${version}`))
+  return startLine.evaluate((e) => {
+    const s = getComputedStyle(e)
+    const probe = document.createElement('p')
+    probe.className = 'notice'
+    document.body.append(probe)
+    const want = getComputedStyle(probe)
+    // the line stands in the history's column, where its neighbours do.
+    const r = e.getBoundingClientRect()
+    const column = e.closest('.events').getBoundingClientRect()
+    const inColumn = r.width > 0 && r.left >= column.left && r.right <= column.right && r.top >= column.top && r.bottom <= column.bottom
+    const out = { className: e.className, title: e.getAttribute('title'), text: e.textContent, bg: s.backgroundColor, noticeBg: want.backgroundColor, border: s.borderTopStyle, inColumn }
+    probe.remove()
+    return out
+  })
+}
+// lineShot saves the start line with a margin, once it is in view and has
+// stopped moving.
+const lineShot = async (name) => {
+  await startLine.scrollIntoViewIfNeeded()
+  let b = await startLine.boundingBox()
+  await until(`the start line still, for ${name}`, async () => {
+    await new Promise((r) => setTimeout(r, 100))
+    const now = await startLine.boundingBox()
+    const still = now && b && now.y === b.y && now.x === b.x
+    b = now
+    return still
+  })
+  await page.screenshot({ path: `${t.dir}/shots/${name}.png`, clip: { x: b.x - 24, y: b.y - 24, width: b.width + 48, height: b.height + 48 } })
+}
+const inside = await startedWith('2.1.320', 'version inside')
+t.say(`  inside the range: ${JSON.stringify(inside)}`)
+check(inside.inColumn && inside.className === 'system' && inside.title === null && !inside.text.includes('tested') && inside.bg !== inside.noticeBg, `a start inside the tested range is not marked: "${inside.text}"`)
+await lineShot('start-tested')
+const newer = await startedWith('2.1.999', 'version newer')
+t.say(`  newer than the range: ${JSON.stringify(newer)}`)
+check(
+  newer.inColumn && newer.className === 'system version-outside version-newer' && newer.bg === newer.noticeBg && newer.text.includes(`v2.1.999 · newer than the ${claudeTested} mega was tested with`),
+  `a start newer than the tested range is marked on its line, in the notice colour, naming the range: "${newer.text}"`,
+)
+check(newer.title === `Claude Code '2.1.999' is newer than the builds mega was tested with, '${claudeTested}'; it is likely to work`, `and its title says so: "${newer.title}"`)
+await lineShot('start-newer')
+const older = await startedWith('2.1.300', 'version older')
+t.say(`  older than the range: ${JSON.stringify(older)}`)
+check(
+  older.inColumn && older.className === 'system version-outside version-older' && older.bg === older.noticeBg && older.border === 'solid' && newer.border === 'dashed' && older.text.includes(`v2.1.300 · older than the ${claudeTested} mega was tested with`),
+  `a start older than the tested range is marked more strongly, with a solid edge where a newer one's is dashed: "${older.text}"`,
+)
+check(older.title?.includes("expects Claude Code '2.1.318' or later, so some calls may fail"), `and its title says what the agent sdk expects: "${older.title}"`)
+await lineShot('start-older')
+check((await workspace()).conversations.filter((c) => c.name?.startsWith('version ')).every((c) => c.state === 'running'), 'none of them was refused for its version')
+rmSync(versionFile)
 await page.evaluate((id) => {
   location.hash = `#/c/${id}`
 }, C)

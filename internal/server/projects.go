@@ -45,12 +45,21 @@ type workspaceView struct {
 	Harnesses []*harnessStatusView `dd:",+omitempty"`
 }
 
-// harnessStatusView is one harness, found where or missing and why.
+// harnessStatusView is one harness, found where or missing and why, with its
+// version against its tested range once read.
 type harnessStatusView struct {
-	Name   string
-	Found  bool
-	Where  string `dd:",+omitempty"`
-	Reason string `dd:",+omitempty"`
+	Name     string
+	Found    bool
+	Where    string `dd:",+omitempty"`
+	Reason   string `dd:",+omitempty"`
+	Version  string `dd:",+omitempty"`
+	Tested   string `dd:",+omitempty"`
+	Standing string `dd:",+omitempty"`
+	Note     string `dd:",+omitempty"`
+}
+
+func newHarnessStatusView(h service.HarnessStatus) *harnessStatusView {
+	return &harnessStatusView{Name: h.Name, Found: h.Found, Where: h.Where, Reason: h.Reason, Version: h.Version, Tested: h.Tested, Standing: h.Standing, Note: h.Note}
 }
 
 // shutdownView is the "shut down when idle" gate: whether it is armed, since
@@ -99,7 +108,7 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	for _, h := range workspace.Harnesses {
-		view.Harnesses = append(view.Harnesses, &harnessStatusView{Name: h.Name, Found: h.Found, Where: h.Where, Reason: h.Reason})
+		view.Harnesses = append(view.Harnesses, newHarnessStatusView(h))
 	}
 	for _, b := range workspace.Gate.Blockers {
 		view.Shutdown.Blockers = append(view.Shutdown.Blockers, &blockerView{ConversationID: b.ConversationID, ProjectID: b.ProjectID, Name: b.Name, Turn: b.Turn, Requests: b.Requests, Background: b.Background, Settling: b.Settling})

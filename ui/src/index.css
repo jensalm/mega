@@ -685,6 +685,10 @@ pre {
   color: var(--muted);
 }
 
+.first-run li.found.notice {
+  color: var(--text);
+}
+
 .detail {
   display: flex;
   flex-direction: column;
@@ -1218,6 +1222,30 @@ dialog .actions {
 
 .system.alert {
   color: var(--error);
+}
+
+/* a runtime started on a version outside the tested range: the same line,
+   in the notice colour, with the range and the sentence in its title. an
+   older build is the stronger case, so its mark is solid. */
+.system.version-outside {
+  align-self: flex-start;
+  background: var(--notice-bg);
+  border: 1px dashed var(--notice-line);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 1px 6px;
+}
+
+.system.version-outside.version-older {
+  border-style: solid;
+}
+
+/* a sentence in the notice colour, inside other text. */
+.notice-text {
+  background: var(--notice-bg);
+  border-radius: 3px;
+  color: var(--text);
+  padding: 0 3px;
 }
 
 hr.turn {

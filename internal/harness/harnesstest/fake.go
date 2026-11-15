@@ -28,6 +28,8 @@ type Harness struct {
 	onHistory  func()
 	catalog    harness.Catalog
 	settings   model.TurnSettings
+	version    string
+	versionErr error
 	deferred   bool // runtimes take a model change with the next prompt, as codex does
 	modelLists int
 	exitEarly  bool
@@ -122,6 +124,21 @@ func (h *Harness) SetSettings(settings model.TurnSettings) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.settings = settings
+}
+
+// SetVersion scripts what Version returns: the version its --version would
+// print, or an error, as a build that cannot be read.
+func (h *Harness) SetVersion(version string, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.version, h.versionErr = version, err
+}
+
+// Version is the scripted version (SetVersion), as a harness's --version.
+func (h *Harness) Version(_ context.Context, _ []string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.version, h.versionErr
 }
 
 // DeferModelChanges makes later runtimes take a model change with the next

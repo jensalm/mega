@@ -403,6 +403,19 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 	}
 	s.mu.Unlock()
 
+	// the version that will run, read just before the launch, bounded by
+	// harness.VersionTimeout; one that cannot be read leaves the launch to
+	// proceed and its started line to say unknown.
+	if v, ok := h.(harness.Versioner); ok && inc != nil {
+		version, verr := v.Version(context.Background(), place.Find)
+		if verr != nil {
+			dl.Debugf("reading the version of '%s' before launching '%s': %v", h.Name(), conversationID, verr)
+		}
+		inc.version = version
+		if standing, note := harness.Stand(h.Name(), version); standing != harness.StandingTested {
+			dl.Infof("launching '%s': %s", conversationID, note)
+		}
+	}
 	rt, err := h.Launch(spec, &sink{s: s, l: l, inc: inc})
 	// the harness's own failure: what is recorded and shown is its summary.
 	err = harnessFault(h.Name(), err)

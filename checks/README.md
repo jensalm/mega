@@ -23,7 +23,7 @@ Where things go:
 
 ## What each suite covers
 
-- **`conversation.mjs`** (62 steps): the conversation view, on long conversations and in its layout. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
+- **`conversation.mjs`** (68 steps): the conversation view, on long conversations and in its layout. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
   - opening reads only the tail: ten turns, at the newest reply, saying how much is earlier;
   - Show earlier and Show all, each holding the view;
   - the native events toggle refetching what is shown;
@@ -40,6 +40,7 @@ Where things go:
     - hidden at rest, shown while the pointer is over the turn and while focus is inside it, with nothing moving either way;
     - kept visible at rest, in the notice colour, naming both, on a turn the fake reports another model for (the fake shim's `fallback` verb);
     - on the turn in flight, shown on hover once it has run, with nothing moving;
+  - the "Runtime started" line, with the fake shim reporting the version its `claude-version` file names: unmarked for a version inside the tested range; marked for one newer, in the notice colour with a dashed edge, naming the range after the version and in its title; marked for one older with a solid edge, its title saying what the Agent SDK expects; and none of them refused;
   - MCP servers, for the fake Claude and the fake Codex:
     - nothing of them in the header;
     - the More menu's item with the count, and "not running" with no runtime;
@@ -50,19 +51,20 @@ Where things go:
     - never attention;
     - cleared on release.
 
-  It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, and a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`.
-- **`firstrun.mjs`** (44 steps): the first run on a machine that has never had mega, with no harness installed. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, an absolute path under the scratch `HOME`, does not exist, and Codex's, a bare name, is on no `PATH`. It checks the following:
-  - the start-up log's line for each harness, saying it cannot run and why, naming Claude Code's path;
+  It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, and the start lines as `shots/start-{tested,newer,older}.png`.
+- **`firstrun.mjs`** (52 steps): the first run on a machine that has never had mega, with no harness installed, then with both. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's, a bare name, is on no `PATH`. It checks the following:
+  - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
   - the register dialog opening with the focus in its checkout field, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
-  - the project page before any dialog: both harnesses listed as missing, from the resolution registering started; Claude Code's reason naming its path, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
+  - the project page before any dialog: both harnesses listed as missing, from the resolution registering started; Claude Code's reason saying `claude` was not found and naming the versions folder, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
   - the new-conversation dialog opening with the focus in the opening prompt, both harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
   - the API refusing Claude Code's model list and a launch of either harness as `executable_missing`, with the reason, and making no conversation;
   - never "internal error" on a page, and no answer of 500, on the whole walk;
   - a restart: the project kept, what is missing known again with nothing opened, and the start-up log's lines again;
-  - `--listen`: another mega, on its own scratch data, on the port the flag names, and one refused for `0.0.0.0`, as the config value is.
+  - `--listen`: another mega, on its own scratch data, on the port the flag names, and one refused for `0.0.0.0`, as the config value is;
+  - both harnesses installed, as stand-ins that only say their versions: a native Claude Code build at 2.1.330, built from `internal/harness/claude/fakebuild` into the versions folder, and the fake Codex package at 0.166.0 on the `PATH`. A mega on fresh data says, in its start-up log, that Claude Code can run from the newest build installed with no `claude` on the `PATH`, newer than its tested range, and Codex inside its range; its first page says each version, Claude Code's in the notice colour; `/api/version` names the ranges and what each found is; and `mega version` says the same.
 
-  It prints the words each step showed, so its output is a record of what a newcomer reads. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-missing,restarted}.png`.
+  It prints the words each step showed, so its output is a record of what a newcomer reads. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-missing,restarted,versions}.png`.
 - **`environment.mjs`** (32 steps): a project's environment on its page. It checks the following:
   - the unapproved state, and its refusal on New conversation and Adopt;
   - approval, and the names it records;
@@ -124,7 +126,7 @@ Where things go:
   - the page that asked saying when, while the other shows only what it last knew;
   - both pages recovering when the service returns.
 
-- **`side.mjs`** (44 steps): the side panel and the rail. It checks the following:
+- **`side.mjs`** (46 steps): the side panel and the rail. It checks the following:
   - projects sorted by name ignoring case, the id breaking a tie, and starred first in their own group;
   - project rows bolder than their conversations;
   - folds: a starred project unfolded and any other folded until the operator chooses; his choice kept across a reload and outlasting a star or an unstar; navigation by the needs-you list or Ctrl+/ unfolding without recording a choice; the old folded list carried over as folded choices; a removed project's choice forgotten; a folded project keeping its rollup mark;
@@ -134,7 +136,7 @@ Where things go:
   - the rail: the count, one mark per project in tree order, the working arc, its width, kept across a reload, and a mark opening the panel on its project;
   - a missing checkout's mark in the tree and on the rail, lifting when it is back;
   - project removal refused while a runtime lives and naming it, then deleting the project's logs;
-  - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, the rail's control, and a page older than the service saying so where the connection status is, without reloading;
+  - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, with each harness's tested range and the version found (the fake Codex's inside its range, the stand-in Claude Code's unknown and said so), the rail's control, and a page older than the service saying so where the connection status is, without reloading;
   - every control in the panel and on the rail with a title and a label.
 
 Each suite also checks that the page raised no errors and fetched nothing off 127.0.0.1.

@@ -1,5 +1,18 @@
-import { harnesses } from '../harnesses'
+import { asSentence, harnesses } from '../harnesses'
 import type { HarnessStatus } from '../types'
+
+// HarnessVersion says a found harness's version against its tested range:
+// tested, or the sentence for one outside it or unread. nothing is said
+// until the version has been read.
+function HarnessVersion({ status }: { status: HarnessStatus }) {
+  if (!status.standing) {
+    return null
+  }
+  if (status.standing === 'tested') {
+    return <span className="harness-version"> Version {status.version}, of the {status.tested} mega was tested with.</span>
+  }
+  return <span className="harness-version"> {asSentence(status.note)}.</span>
+}
 
 // FirstRun is the empty workspace's page: what mega is for, the control to
 // begin with, named in words, and what mega needs, each harness found or
@@ -23,8 +36,9 @@ export function FirstRun({ status }: { status: HarnessStatus[] | undefined }) {
               return null
             }
             return (
-              <li key={h.value} data-harness={h.value} className={s.found ? 'found' : 'missing notice'}>
-                <strong>{h.label}</strong> {s.found ? `can run: ${s.where ?? ''}` : `cannot run: ${s.reason ?? ''}`}
+              <li key={h.value} data-harness={h.value} className={s.found ? (s.standing && s.standing !== 'tested' ? 'found notice' : 'found') : 'missing notice'}>
+                <strong>{h.label}</strong> {s.found ? `can run: ${s.where ?? ''}.` : `cannot run: ${s.reason ?? ''}`}
+                {s.found && <HarnessVersion status={s} />}
               </li>
             )
           })}

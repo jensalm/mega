@@ -158,7 +158,8 @@ func TestCheckNamesAMissingBinary(t *testing.T) {
 	if err := New(Config{Binary: "codex"}).Check(os.Environ()); !errors.As(err, &missing) || missing.Executable != "codex" || !strings.Contains(err.Error(), "not found on the project's PATH") {
 		t.Errorf("no codex: %v", err)
 	}
-	if err := New(Config{Binary: os.Args[0]}).Check(os.Environ()); err != nil {
+	// a binary that exists, installed whole (helpers_test.go).
+	if err := New(Config{Binary: codexPackage(t, t.TempDir(), true)}).Check(os.Environ()); err != nil {
 		t.Errorf("a binary that exists: %v", err)
 	}
 }

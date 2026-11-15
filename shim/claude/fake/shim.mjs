@@ -82,6 +82,10 @@ const arg = (name) => {
 }
 const out = (frame) => process.stdout.write(JSON.stringify(frame) + '\n')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// the claude code version it reports, in system/init and ready: what a file
+// named claude-version in its directory says, else 'fake'. a check writes it
+// to see a start inside or outside mega's tested range.
+const claudeVersion = existsSync(join(store, 'claude-version')) ? readFileSync(join(store, 'claude-version'), 'utf8').trim() : 'fake'
 
 if (cmd === 'list') {
   const cwd = arg('--cwd')
@@ -105,7 +109,7 @@ const catalog = [
 const resolve = (value) => catalog.find((m) => m.value === value)?.resolvedModel
 
 if (cmd === 'models') {
-  out({ version: 'fake', models: catalog })
+  out({ version: claudeVersion, models: catalog })
   process.exit(0)
 }
 if (cmd === 'messages') {
@@ -215,7 +219,7 @@ const init = (model = current) =>
       uuid: randomUUID(),
       session_id: session,
       model,
-      claude_code_version: 'fake',
+      claude_code_version: claudeVersion,
       permissionMode: mode,
       cwd,
       mcp_servers: mcpServers().map(({ name, status, source }) => ({ name, status, source })),
@@ -223,7 +227,7 @@ const init = (model = current) =>
   })
 if (rest.includes('--idle')) {
   if (!existsSync(join(store, 'stall-ready'))) {
-    out({ type: 'ready', version: 'fake', model: current })
+    out({ type: 'ready', version: claudeVersion, model: current })
   }
 } else {
   init()

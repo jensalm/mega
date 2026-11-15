@@ -166,7 +166,7 @@ func TestClaudeDefaultsMergeWithFile(t *testing.T) {
 	want := Claude{
 		Node:       "node",
 		Shim:       filepath.Join(root, "shim", "claude"),
-		Executable: filepath.Join(root, ".local", "share", "claude", "versions", "2.1.318"),
+		Executable: "claude",
 	}
 	if cfg.Claude != want {
 		t.Errorf("claude = %+v, want %+v", cfg.Claude, want)

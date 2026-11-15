@@ -140,6 +140,9 @@ type incarnation struct {
 	// env is the environment the runtime was launched with, as names and
 	// fingerprints, recorded with its started report.
 	env *model.EnvironmentFacts
+	// version is what the harness's --version printed just before the
+	// launch, used when its started report names none.
+	version string
 }
 
 // liveLocked returns the conversation's live state, opening its log on first
@@ -602,16 +605,22 @@ func (k *sink) started(ev *model.Event) {
 		s.beginStopLocked(l, refusal)
 		return
 	}
-	if k.inc.env != nil {
-		// the start records what it was launched with, as names and
-		// fingerprints only.
-		withEnv := model.RuntimeFacts{}
-		if ev.Facts != nil {
-			withEnv = *ev.Facts
-		}
-		withEnv.Environment = k.inc.env
-		ev.Facts = cloneFacts(&withEnv)
+	// the start records what it was launched with, as names and
+	// fingerprints only, and where its version stands against the tested
+	// range: the history's started line is marked by it.
+	withEnv := model.RuntimeFacts{}
+	if ev.Facts != nil {
+		withEnv = *ev.Facts
 	}
+	if k.inc.env != nil {
+		withEnv.Environment = k.inc.env
+	}
+	if withEnv.Version == "" {
+		withEnv.Version = k.inc.version
+	}
+	withEnv.Standing, withEnv.VersionNote = harness.Stand(conv.Harness, withEnv.Version)
+	withEnv.Tested = harness.Tested[conv.Harness].String()
+	ev.Facts = cloneFacts(&withEnv)
 	// the facts the service keeps are its own: the event goes to every
 	// subscriber, and none of them may reach what later reads show.
 	facts := cloneFacts(ev.Facts)

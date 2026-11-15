@@ -9,9 +9,11 @@ One Go binary serves the workspace and its UI on loopback. A small Node bridge (
 ## What it needs
 
 - Go (the version in `go.mod`) and Node 24, to build.
-- Claude Code 2.1.318, the build the shim's pinned Agent SDK (0.3.318) was matched against, at `~/.local/share/claude/versions/2.1.318` or wherever `claude.executable` says.
-- codex-cli 0.166.0 on `PATH`, or wherever `codex.binary` says.
+- Claude Code, from its native installer: mega runs `claude` on your `PATH`, the installer's link to the build it last installed. With no `claude` on the `PATH`, as a desktop launcher's shell may have, mega runs the newest build in `~/.local/share/claude/versions/`. `claude.executable` names another, which must be a native build, not a script.
+- Codex, installed whole: with npm, or from the release's `codex-package-<target>.tar.gz`. The release's lone `codex-<target>.tar.gz` lacks the helper programs Codex runs a shell command with, so mega refuses it. mega runs `codex` on your `PATH`, or wherever `codex.binary` says.
 - Your own Claude and Codex logins. mega uses them as they are and changes nothing in them.
+
+mega was tested with Claude Code 2.1.318 to 2.1.325, with the shim's pinned Agent SDK 0.3.318, and with Codex 0.163.0 to 0.169.0. These are its tested ranges. A build outside them still runs: the start-up log, the first page, `mega version` and the version panel say where each build stands, and a conversation's "Runtime started" line is marked when it runs one outside the range. A build older than the range is the likelier to fail, since the Agent SDK expects the Claude Code of its own patch or later.
 
 ## Build and run from source
 
@@ -43,7 +45,7 @@ data: ~/.local/share/mega    # the workspace: registry and conversation logs
 claude:
   node: node
   shim: /path/to/mega/shim/claude
-  executable: ~/.local/share/claude/versions/2.1.318
+  executable: claude         # a bare name is looked up on PATH; a path is used as it is
 codex:
   binary: codex
 ```
@@ -64,13 +66,13 @@ mega desktop remove      # removes exactly those files
 The launcher runs `mega daemon` through your interactive shell (the one `SHELL` names: bash, zsh or fish), so mega itself starts the way a terminal-started mega does. The agents don't depend on it: each project runs in its own environment (below). `integrate` prints the exact `Exec` line it wrote. `mega desktop integrate --plain` writes the direct form if you want it. The launcher runs the binary from wherever it was when you ran `integrate`; run it again if you move the binary. Nothing starts at login.
 
 mega tells you what it is missing before you try to launch anything:
-- **At start-up,** the log has one line per harness: where its programs were found, or why it cannot run.
-- **On the first page,** with no project registered yet, mega names the control to begin with, and lists each harness as found or missing, with the reason.
+- **At start-up,** the log has one line per harness: where its programs were found and which version, against the tested range, or why it cannot run.
+- **On the first page,** with no project registered yet, mega names the control to begin with, and lists each harness as found, with its version, or missing, with the reason.
 - **On a project's page,** once you register a project, mega resolves its environment in the background, and its page lists any harness that cannot run there. It does so again at every start.
 
-A harness that cannot run is marked as unable to run in the new-conversation dialog, and its conversations refuse new work with the name of what is missing. When `claude.executable` or `codex.binary` names a path that is not there, which is what a Claude Code install other than 2.1.318 at its default path looks like, the reason names the path, says to install it or set the value, and names the config file mega read. A harness that fails some other way says so in its own words; the rest goes to the log.
+A harness that cannot run is marked as unable to run in the new-conversation dialog, and its conversations refuse new work with the name of what is missing. When `claude.executable` or `codex.binary` names a path that is not there, the reason names the path, says to install it or set the value, and names the config file mega read. A versioned Claude Code path the installer has since pruned is named with the builds installed beside it and how to follow the installed one instead; it is never told to install what is installed. A Codex without its helper programs is named as a lone binary, with how to install it whole. A harness that fails some other way says so in its own words; the rest goes to the log.
 
-With no terminal, as when the launcher starts it, mega logs to `~/.local/state/mega/mega.log` (or under `XDG_STATE_HOME`); `mega version` prints the path, and so does the panel the version in the side panel's footer opens. At start-up a log past 10 MB becomes `mega.log.1`, replacing an earlier one, and a fresh log begins.
+With no terminal, as when the launcher starts it, mega logs to `~/.local/state/mega/mega.log` (or under `XDG_STATE_HOME`); `mega version` prints the path, with the tested ranges and the version of each harness it finds, and so does the panel the version in the side panel's footer opens. At start-up a log past 10 MB becomes `mega.log.1`, replacing an earlier one, and a fresh log begins.
 
 Launching the daemon while mega is already running opens the running mega's page and exits. `mega serve` beside a running mega refuses to start and names it.
 

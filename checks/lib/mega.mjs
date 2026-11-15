@@ -282,7 +282,9 @@ export async function suite(name, { bare = false } = {}) {
     })
     p.on('request', (r) => {
       const u = r.url()
-      if (!u.startsWith(url) && !u.startsWith(`ws://127.0.0.1:${port}`) && !u.startsWith('data:')) offsite.push(u)
+      // any mega a suite starts serves on loopback; firstrun starts more
+      // than one, on ports of their own.
+      if (!u.startsWith('http://127.0.0.1:') && !u.startsWith('ws://127.0.0.1:') && !u.startsWith('data:')) offsite.push(u)
     })
     return p
   }

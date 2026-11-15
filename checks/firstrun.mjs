@@ -8,11 +8,13 @@
 // is what a newcomer sees between `make` and installing Claude Code and
 // Codex, and it is the walk the clean-machine rehearsal of 2026-11-13 made.
 // nothing it does can reach a real harness, since none can be found. Claude
-// Code's default, an absolute path under the scratch HOME, does not exist;
-// Codex's default, a bare name, is on no PATH.
+// Code's default, the bare name claude, is on no PATH, and the scratch HOME
+// has no build in the installer's versions folder; Codex's default, a bare
+// name, is on no PATH.
 //
 // what it checks:
-// - the start-up log: one line per harness, saying it cannot run and why;
+// - the start-up log: one line per harness, saying it cannot run and why,
+//   Claude Code's naming the versions folder it looked in;
 // - the empty workspace's first page, light and dark: what mega needs, each
 //   harness missing with its reason, the register control named in words,
 //   and that control carrying a word;
@@ -20,7 +22,7 @@
 //   relative path and a path that does not exist with what is wrong, then
 //   registering a git checkout and opening its page;
 // - the project page, before any dialog: both harnesses listed as missing,
-//   Claude's reason naming its path, what to do and the config file mega
+//   Claude's reason naming where it looked, what to do and the config file mega
 //   read; the environment resolved in the background; a trust notice that
 //   does not tell anyone to run a Claude that is not installed; and the New
 //   conversation control carrying a word;
@@ -34,20 +36,28 @@
 //   anything is opened, with the start-up log's lines again;
 // - --listen: another mega on the port the flag names, and one refused for an
 //   address that is not loopback;
+// - the harnesses installed, as stand-ins that only say their versions: a
+//   native Claude Code build in the versions folder, newer than the tested
+//   range and found there with no claude on the PATH, and a whole Codex
+//   package on the PATH, inside it. a mega on fresh data says each version
+//   in its start-up log, against the tested range, and on its first page,
+//   Claude Code's marked in the notice colour; `mega version` says them too;
 // - no page errors and nothing fetched off 127.0.0.1.
 //
 // it saves each page as shots/{empty,empty-dark,register,register-refused,
-// project,launch-missing,restarted}.png. each step's text is printed, so the
+// project,launch-missing,restarted,versions}.png. each step's text is printed, so the
 // run's output is a record of the words a newcomer reads.
-import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
 const t = await suite('firstrun', { bare: true })
 const { url, check, until, api, workspace } = t
 const demo = t.checkout('demo', { git: true })
-const claudePath = join(t.dir, 'home/.local/share/claude/versions/2.1.318')
+// where the default, the bare name claude, falls back to with none on the
+// PATH: every reason for its absence names this folder.
+const claudePath = join(t.dir, 'home/.local/share/claude/versions')
 
 const text = async (locator) => ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim()
 const shown = (what, words) => t.say(`  ${what}: "${words}"`)
@@ -85,7 +95,7 @@ const noInternal = async (p, where) => {
 const atStart = await soon(async () => harnessLines(startupLog()).length >= 2, 15000)
 const lines = harnessLines(startupLog())
 for (const line of lines) shown('the start-up log', line.trim())
-check(atStart && lines.some((l) => l.includes("harness 'claude'") && l.includes('cannot run') && l.includes(claudePath)), 'the start-up log says Claude Code cannot run, naming the path it looked at')
+check(atStart && lines.some((l) => l.includes("harness 'claude'") && l.includes('cannot run') && l.includes(claudePath)), 'the start-up log says Claude Code cannot run, naming the versions folder it looked in')
 check(lines.some((l) => l.includes("harness 'codex'") && l.includes('cannot run')), 'the start-up log says Codex cannot run')
 
 // the empty workspace: what mega needs, what is missing, and where to begin.
@@ -102,7 +112,7 @@ const claudeItem = firstRun.locator('[data-harness="claude"]')
 const codexItem = firstRun.locator('[data-harness="codex"]')
 const firstClaude = await soon(async () => (await claudeItem.count()) > 0 && (await text(claudeItem)).includes(claudePath), 10000)
 shown('the first page on Claude Code', firstClaude ? await text(claudeItem) : '(nothing)')
-check(firstClaude && (await text(claudeItem)).includes('Claude Code') && (await text(claudeItem)).includes(t.config), 'the empty workspace says Claude Code is missing, at which path, and which config file names it')
+check(firstClaude && (await text(claudeItem)).includes('Claude Code') && (await text(claudeItem)).includes(t.config), 'the empty workspace says Claude Code is missing, where it looked, and which config file to set it in')
 const firstCodex = await soon(async () => (await codexItem.count()) > 0 && (await text(codexItem)).includes("'codex' was not found"), 10000)
 check(firstCodex, 'the empty workspace says Codex is missing, and why')
 const empty = page.locator('section.projects p.muted')
@@ -167,8 +177,8 @@ check(knownEarly, 'the project page lists both harnesses as missing before any d
 const claudeMissing = ((await workspace()).projects[0]?.environment?.missing ?? []).find((m) => m.harness === 'claude')?.reason ?? ''
 shown('the project on Claude Code', claudeMissing)
 check(
-  claudeMissing.includes(claudePath) && claudeMissing.includes('claude.executable') && claudeMissing.includes(t.config) && /install claude code/i.test(claudeMissing),
-  'Claude Code is missing because its path does not exist, and the reason says to install it or set claude.executable in the config file mega read',
+  claudeMissing.includes("'claude' was not found") && claudeMissing.includes(claudePath) && claudeMissing.includes('claude.executable') && claudeMissing.includes(t.config) && /install claude code/i.test(claudeMissing),
+  "Claude Code is missing because 'claude' is on no PATH and no build is installed, and the reason says to install it or set claude.executable in the config file mega read",
 )
 shown('the environment section', await text(page.locator('section.environment')))
 check(!(await text(page.locator('section.environment'))).includes('Not resolved yet'), 'the environment section shows a resolution, not "Not resolved yet"')
@@ -197,7 +207,7 @@ const harnessSelect = launch.locator('select').first()
 const bothMarked = await soon(async () => (await launch.locator('p.harness-missing').count()) === 2, 10000)
 const markedTexts = await launch.locator('p.harness-missing').allTextContents()
 for (const m of markedTexts) shown('the dialog on a missing harness', m.replace(/\s+/g, ' ').trim())
-check(bothMarked && markedTexts.some((m) => m.includes(claudePath)), 'the dialog marks Claude Code as unable to run, naming its path, as it does Codex')
+check(bothMarked && markedTexts.some((m) => m.includes(claudePath)), 'the dialog marks Claude Code as unable to run, naming where it looked, as it does Codex')
 check((await harnessSelect.locator('option[value="codex"]').isDisabled()) && (await text(harnessSelect.locator('option[value="codex"]'))) === 'Codex (cannot run)', 'Codex is offered disabled, marked cannot run')
 check((await harnessSelect.locator('option[value="claude"]').isDisabled()) && (await text(harnessSelect.locator('option[value="claude"]'))).endsWith('(cannot run)'), 'Claude Code is offered disabled, marked cannot run')
 const modelSelect = launch.getByRole('combobox', { name: 'Model' })
@@ -220,10 +230,10 @@ await until('the dialog closed', async () => (await page.locator('dialog[open]')
 // the API: each refusal coded, with its reason; never a 500.
 const models = await api('GET', `/api/projects/${P.id}/models?harness=claude`)
 shown('the API on Claude Code’s models', `${models.status} ${models.body?.code}: ${models.body?.message}`)
-check(models.status === 409 && models.body.code === 'executable_missing' && models.body.message.includes(claudePath), 'listing Claude Code’s models is refused as executable_missing, naming the path')
+check(models.status === 409 && models.body.code === 'executable_missing' && models.body.message.includes(claudePath), 'listing Claude Code’s models is refused as executable_missing, naming where it looked')
 const byApi = await api('POST', `/api/projects/${P.id}/conversations`, { harness: 'claude', prompt: 'say hello', effort: 'low' })
 shown('the API on launching Claude Code', `${byApi.status} ${byApi.body?.code}: ${byApi.body?.message}`)
-check(byApi.status === 409 && byApi.body.code === 'executable_missing' && byApi.body.message.includes(claudePath), 'launching Claude Code is refused as executable_missing, naming the path')
+check(byApi.status === 409 && byApi.body.code === 'executable_missing' && byApi.body.message.includes(claudePath), 'launching Claude Code is refused as executable_missing, naming where it looked')
 const codexApi = await api('POST', `/api/projects/${P.id}/conversations`, { harness: 'codex', prompt: 'say hello' })
 shown('the API on launching Codex', `${codexApi.status} ${codexApi.body?.code}: ${codexApi.body?.message}`)
 check(codexApi.status === 409 && codexApi.body.code === 'executable_missing', 'launching Codex is refused as executable_missing')
@@ -280,6 +290,63 @@ const otherLog = join(other, 'state/mega/mega.log')
 const refusal = (existsSync(otherLog) ? readFileSync(otherLog, 'utf8') : '') + refused.out()
 shown('--listen 0.0.0.0', (refusal.match(/[^"]*not a loopback address[^"]*/) ?? [''])[0])
 check(refusedCode !== 0 && refusedCode !== 'still running' && refusal.includes("listen '0.0.0.0:"), '--listen with an address that is not loopback is refused, as the config value is')
+
+// the harnesses installed, as stand-ins that only say their versions: a
+// native Claude Code build, newer than the tested range, in the versions
+// folder the default falls back to, and the fake Codex package, inside it,
+// on the PATH. neither ever runs a conversation here. a mega on fresh data
+// shows its first page with them found.
+const versions = { claude: '2.1.330', codex: '0.166.0' }
+execFileSync('go', ['build', '-o', join(claudePath, versions.claude), './internal/harness/claude/fakebuild'], { cwd: t.repo, stdio: 'inherit' })
+symlinkSync(join(t.repo, 'internal/harness/codex/fake/codex'), join(t.dir, 'bin/codex'))
+const fresh = join(t.dir, 'fresh')
+mkdirSync(join(fresh, 'data'), { recursive: true })
+const freshEnv = { ...otherEnv, XDG_STATE_HOME: join(fresh, 'state'), XDG_CONFIG_HOME: join(fresh, 'config'), XDG_DATA_HOME: join(fresh, 'xdgdata') }
+const freshPort = t.port + 2
+const freshUrl = `http://127.0.0.1:${freshPort}`
+const installed = spawn(t.bin, ['--config', t.config, '--data', join(fresh, 'data'), '--listen', `127.0.0.1:${freshPort}`], { stdio: ['ignore', 'pipe', 'pipe'], env: freshEnv })
+let installedOut = ''
+installed.stdout.on('data', (d) => (installedOut += d))
+installed.stderr.on('data', (d) => (installedOut += d))
+const installedExited = new Promise((r) => installed.once('exit', (code) => r(code)))
+const freshLog = () => (existsSync(join(fresh, 'state/mega/mega.log')) ? readFileSync(join(fresh, 'state/mega/mega.log'), 'utf8') : '') + installedOut
+const versionLines = () => harnessLines(freshLog()).filter((l) => l.includes('can run'))
+const bothRead = await soon(async () => versionLines().length >= 2, 20000)
+for (const line of versionLines()) shown('the start-up log, installed', line.trim())
+const claudeTested = '2.1.318 to 2.1.325'
+const codexTested = '0.163.0 to 0.169.0'
+check(
+  bothRead && versionLines().some((l) => l.includes("harness 'claude' can run") && l.includes(join(claudePath, versions.claude)) && l.includes('the newest build installed') && l.includes(`Claude Code '${versions.claude}' is newer than the builds mega was tested with, '${claudeTested}'`)),
+  'the start-up log says Claude Code can run from the newest installed build, and that its version is newer than the tested range, naming it',
+)
+check(
+  versionLines().some((l) => l.includes("harness 'codex' can run") && l.includes(`version '${versions.codex}', of the '${codexTested}' mega was tested with`)),
+  'the start-up log says Codex can run, and its version inside the tested range',
+)
+await page.goto(freshUrl)
+const freshClaude = page.locator('main .first-run [data-harness="claude"]')
+const freshCodex = page.locator('main .first-run [data-harness="codex"]')
+const versionsShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(versions.claude) && (await text(freshCodex)).includes(versions.codex), 15000)
+shown('the first page on Claude Code, installed', versionsShown ? await text(freshClaude) : '(nothing)')
+shown('the first page on Codex, installed', versionsShown ? await text(freshCodex) : '(nothing)')
+check(versionsShown && (await text(freshClaude)).includes(`Claude Code '${versions.claude}' is newer than the builds mega was tested with, '${claudeTested}'`), 'the first page says Claude Code can run, with its version and that it is newer than the tested range')
+check(versionsShown && (await freshClaude.getAttribute('class'))?.split(' ').includes('notice'), 'the first page marks Claude Code, outside the tested range, in the notice colour')
+check(versionsShown && (await text(freshCodex)).includes(`Version ${versions.codex}, of the ${codexTested} mega was tested with`) && !(await freshCodex.getAttribute('class'))?.split(' ').includes('notice'), 'the first page says Codex’s version, inside the tested range, unmarked')
+const freshVersion = await (await fetch(`${freshUrl}/api/version`)).json()
+const byName = Object.fromEntries((freshVersion.harnesses ?? []).map((h) => [h.name, h]))
+shown('/api/version on the harnesses', JSON.stringify({ tested: freshVersion.tested, harnesses: freshVersion.harnesses?.map((h) => ({ name: h.name, version: h.version, standing: h.standing })) }))
+check(
+  freshVersion.tested?.claude === claudeTested && freshVersion.tested?.codex === codexTested && byName.claude?.version === versions.claude && byName.claude?.standing === 'newer' && byName.codex?.standing === 'tested',
+  '/api/version names the tested ranges and the versions found, with where each stands',
+)
+await t.shot(page, 'versions')
+installed.kill('SIGINT')
+await installedExited
+// `mega version`, in the same environment, says the same.
+const said = execFileSync(t.bin, ['version', '--config', t.config], { env: freshEnv, encoding: 'utf8' })
+for (const line of said.split('\n').filter((l) => /^ {2}(claude|codex):/.test(l))) shown('mega version', line.trim())
+check(said.includes(`claude: tested ${claudeTested}; found `) && said.includes(`Claude Code '${versions.claude}' is newer`), '`mega version` says Claude Code’s tested range and the newer build found')
+check(said.includes(`codex: tested ${codexTested}; found '${versions.codex}'`), '`mega version` says Codex’s tested range and the version found')
 
 // nothing on the walk said "internal error", and nothing answered 500.
 check(internalShown.length === 0, `no page said "internal error"${internalShown.length ? `: ${internalShown.join(', ')}` : ''}`)

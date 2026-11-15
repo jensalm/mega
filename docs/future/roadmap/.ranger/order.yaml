@@ -1,5 +1,5 @@
 building:
-  - a-send-from-above-sometimes-stays-where-it-was.md
+  - harness-version-tolerance.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -10,16 +10,19 @@ horizon:
   - re-entry-briefing.md
   - project-suspension.md
   - per-turn-runtime-mode.md
+  - updating-harnesses-from-mega.md
   - claude-shim-distribution.md
+  - a-workspace-that-can-be-rebuilt-elsewhere.md
   - relocate-a-projects-checkout.md
   - moving-conversations-between-hosts.md
   - central-application.md
   - container-environments.md
   - codex-live-attach.md
 researching:
-  - harness-version-tolerance.md
+  - harness-configuration-backups.md
   - pi-adapter.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
+  - an-interrupted-turn-imports-no-response-requested.md
   - hotkey-for-allow.md
   - action-view-improvements.md
   - conversation-timestamps.md
@@ -35,6 +38,7 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - a-send-from-above-sometimes-stays-where-it-was.md
   - the-newest-line-hides-under-the-dock.md
   - an-external-operator-can-install-mega.md
   - first-run-explains-itself.md

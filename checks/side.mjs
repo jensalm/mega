@@ -17,7 +17,8 @@
 // Ctrl+/ for the next waiting conversation and Ctrl+' for the panel, from
 // anywhere, and no bare n; folds, by default from the star, by choice kept in
 // the browser, and by navigation recording nothing, with the old folded list
-// carried over; the build's label and panel, and a page older than the
+// carried over; the build's label and panel, with each harness's tested
+// range and the version found, and a page older than the
 // service saying so without reloading; and every control named.
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
@@ -290,6 +291,18 @@ const logFile = join(t.dir, 'xdg/state/mega/mega.log')
 check(
   said.includes(`${about.version} (developer build)`) && said.includes(about.go) && said.includes(about.target) && said.includes(logFile) && said.includes('This mega is writing to it.') && said.includes(sdk) && said.includes('Running the interface this mega serves.'),
   `its panel gives the version, Go, the target, the log file, the Claude Agent SDK and this page's standing`,
+)
+// and each harness: its tested range and the version found. the fake codex
+// says one inside its range; the stand-in claude code, /bin/false, says
+// none, so it is unknown, which is said and not marked as outside.
+const codexSaid = ((await panel.locator('dd[data-harness="codex"]').textContent()) ?? '').trim()
+const claudeSaid = ((await panel.locator('dd[data-harness="claude"]').textContent()) ?? '').trim()
+t.say(`  the panel on Codex: "${codexSaid}"`)
+t.say(`  the panel on Claude Code: "${claudeSaid}"`)
+check(about.tested?.codex === '0.163.0 to 0.169.0' && codexSaid === 'Version 0.166.0; tested 0.163.0 to 0.169.0.', 'its panel gives Codex’s version found and its tested range')
+check(
+  claudeSaid.startsWith(`Version unknown; tested ${about.tested?.claude}.`) && claudeSaid.includes('could not be read') && (await panel.locator('dd[data-harness="claude"] .notice-text').count()) === 1,
+  'and Claude Code’s, whose version could not be read, saying so',
 )
 await panel.getByRole('button', { name: 'Close' }).click()
 await until('the panel closed', async () => (await panel.count()) === 0)

@@ -110,6 +110,13 @@ type RuntimeFacts struct {
 	// (codex does; claude does not).
 	Effort string `dd:",+omitempty"`
 	Cwd    string `dd:",+omitempty"`
+	// Standing is where Version stands against the harness's tested range
+	// (harness.Tested): tested, newer, older or unknown; Tested is that range
+	// and VersionNote the sentence saying so, empty for a tested version. the
+	// service records them with a runtime's start, as the range stood then.
+	Standing    string `dd:",+omitempty"`
+	Tested      string `dd:",+omitempty"`
+	VersionNote string `dd:",+omitempty"`
 	// Environment is what the runtime was launched with, as names and
 	// fingerprints only: an environment carries credentials, so no value is
 	// ever recorded.

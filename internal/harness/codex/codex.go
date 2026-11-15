@@ -188,25 +188,31 @@ func (h *Harness) once(ctx context.Context, place harness.Place, method string, 
 	return c.call(ctx, method, params, out)
 }
 
-// Check reports whether the configured codex binary can be found: a path is
-// checked as configured, with what to do if it cannot run, and a bare name
-// on find's PATH.
+// Check reports whether the configured codex can run: a path is checked as
+// configured, with what to do if it cannot run, and a bare name on find's
+// PATH. it must be installed whole, with the helper programs its package
+// names beside it (helpers).
 func (h *Harness) Check(find []string) error {
 	where := ""
 	if h.cfg.Where != "" {
 		where = " " + h.cfg.Where + ","
 	}
-	return harness.FindExecutable(model.HarnessCodex, h.cfg.Binary, find, fmt.Sprintf("install Codex, or set codex.binary%s to where it is", where))
+	if err := harness.FindExecutable(model.HarnessCodex, h.cfg.Binary, find, fmt.Sprintf("install Codex, or set codex.binary%s to where it is", where)); err != nil {
+		return err
+	}
+	path, err := h.resolve(find)
+	if err != nil {
+		return err
+	}
+	return h.helpers(path)
 }
 
 // Locate says where codex was found in find, for a harness that can run
 // there.
 func (h *Harness) Locate(find []string) string {
-	path := h.cfg.Binary
-	if !strings.Contains(path, "/") {
-		if found, err := harness.LookPath(path, find); err == nil {
-			path = found
-		}
+	path, err := h.resolve(find)
+	if err != nil {
+		path = h.cfg.Binary
 	}
 	return fmt.Sprintf("codex '%s'", path)
 }

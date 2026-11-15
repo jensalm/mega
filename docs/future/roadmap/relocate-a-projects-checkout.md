@@ -20,3 +20,7 @@ A conversation's native session is found through the checkout's path. Claude kee
 - An operation on a project with no runtime in any of its conversations: verify the new path exists and looks like the same repository, write the registry, and report what the operator must still do by hand.
 - Mega never renames a harness's own store or edits its trust; it says exactly which directory needs moving and shows the conversations as unable to resume until it has been.
 - The spike: whether a moved Codex thread resumes cleanly with a new working directory, and what each harness does with trust at the new path.
+
+## background
+
+Noted by the planning agent on 2026-11-14. This is the single-host case of the conversation bundle in the epic `a-workspace-that-can-be-rebuilt-elsewhere`: the same session restored under another path. Its spike, what each harness needs rewritten, is the epic's shared one.
