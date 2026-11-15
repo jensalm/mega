@@ -1,6 +1,6 @@
 ---
 title: a send from above sometimes stays where it was
-state: inbox
+state: building
 created: 2026-11-14
 tags: [defect]
 ---

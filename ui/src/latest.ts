@@ -9,6 +9,22 @@ function scrollerOf(content: HTMLElement | null): HTMLElement | null {
   return content?.closest<HTMLElement>('.main') ?? null
 }
 
+// where the view was left last, by a scroll the page read or by mega's own
+// move, per scrolling column. a scroll event that finds the view higher than
+// this was the reader's: mega moves a following view only through place,
+// which records where it put it, so a stale scroll event queued by one of
+// mega's own moves finds the view where mega left it.
+const left = new WeakMap<HTMLElement, number>()
+
+// place moves the view as mega does, to top, and records where it ended:
+// every move of mega's own goes through it. a move to the end of a column
+// whose content has shrunk lands higher than the view was, which the scroll
+// event it queues must not read as the reader's.
+export function place(scroller: HTMLElement, top: number) {
+  scroller.scrollTop = top
+  left.set(scroller, scroller.scrollTop)
+}
+
 function atBottom(scroller: HTMLElement): boolean {
   return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= slack
 }
@@ -17,7 +33,7 @@ function atBottom(scroller: HTMLElement): boolean {
 // ended at the bottom. pending request cards are docked in the input panel,
 // which stays in view, so the bottom of the history is all there is to reach.
 function moveToLatest(scroller: HTMLElement): boolean {
-  scroller.scrollTop = scroller.scrollHeight
+  place(scroller, scroller.scrollHeight)
   return atBottom(scroller)
 }
 
@@ -34,10 +50,19 @@ function moveToLatest(scroller: HTMLElement): boolean {
 // a turn starts, a request docks or leaves, the reply box opens, closes or
 // grows. while the view follows the bottom, any change in the dock's size, or
 // in the scrolling column's, keeps it at the bottom; a reader who scrolled up
-// is not moved. following is the one reckoning of whether the view follows:
-// it is set by scrolling alone, so it still holds the state from before the
-// dock changed, which fires no scroll event, and a tall docked request cannot
-// read as having scrolled away.
+// is not moved.
+//
+// following is the one reckoning of whether the view follows. it ends when
+// a scroll event finds the view higher than where it was left last (left)
+// and not at the bottom: a move up that was not mega's, whatever made it, a
+// wheel, a key, the scrollbar, a touch, the find bar. nothing else ends it:
+// content growing under the view moves nothing, so the scroll event queued
+// by mega's own pin and read after the content grew, which once found the
+// view off the bottom and ended following for good, finds it where mega
+// left it and ends nothing. it begins whenever a scroll finds the view at the
+// bottom, however it got there. it is set by scrolling alone, so it still
+// holds the state from before the dock changed, which fires no scroll event,
+// and a tall docked request cannot read as having scrolled away.
 export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObject<HTMLElement | null>, loaded: boolean, activity: string) {
   const following = useRef(true)
   const seen = useRef<string | null>(null)
@@ -48,11 +73,16 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
     if (!scroller) {
       return
     }
-    scroller.scrollTop = 0
+    place(scroller, 0)
     const onScroll = () => {
-      following.current = atBottom(scroller)
-      if (following.current) {
+      const top = scroller.scrollTop
+      const higher = top < (left.get(scroller) ?? top) - 1
+      left.set(scroller, top)
+      if (atBottom(scroller)) {
+        following.current = true
         setNewer(false)
+      } else if (higher) {
+        following.current = false
       }
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
@@ -69,7 +99,7 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
     if (first) {
       following.current = moveToLatest(scroller)
     } else if (following.current) {
-      scroller.scrollTop = scroller.scrollHeight
+      place(scroller, scroller.scrollHeight)
     } else {
       setNewer(true)
     }
@@ -87,7 +117,7 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
     }
     const observer = new ResizeObserver(() => {
       if (seen.current !== null && following.current) {
-        scroller.scrollTop = scroller.scrollHeight
+        place(scroller, scroller.scrollHeight)
       }
     })
     observer.observe(panel)

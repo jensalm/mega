@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useWallNow } from '../clock'
-import { useLatest } from '../latest'
+import { place, useLatest } from '../latest'
 import type { ConversationLog } from '../log'
 import type { Conversation, Project } from '../types'
 import { waitingLabel, type Waiting } from '../waiting'
@@ -76,7 +76,7 @@ export function ConversationView(props: ConversationViewProps) {
     }
     const row = articleRef.current.querySelector<HTMLElement>(`.events [data-seq="${held.seq}"]`)
     if (row) {
-      scroller.scrollTop += row.getBoundingClientRect().top - held.top
+      place(scroller, scroller.scrollTop + row.getBoundingClientRect().top - held.top)
     }
     anchor.current = null
   }, [from])

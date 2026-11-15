@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+FIX: **A send from above follows the reply.** (2026-11-14) Sending a prompt while scrolled up goes to the end and follows the reply as before, but about one time in four it stopped following straight away, and the prompt and reply arrived below the fold. Now any move up that mega did not make stops the view following, however you made it: the wheel, the keys, the scrollbar, a touch or the find bar. Content growing under the view, or mega moving it, never does. A view you scrolled up is still never moved, and "Newer activity below" still offers the rest.
+
 FIX: **A missing Claude Code is named, not "internal error".** (2026-11-14) When `claude.executable` names a path that is not there, mega says so wherever it says Codex is missing: the project's list, the new-conversation dialog's "(cannot run)", and a refusal coded `executable_missing`. That is also what any Claude Code other than 2.1.318 at the default path looks like. The reason names the path, says to install Claude Code or set `claude.executable`, and names the config file mega read. A `codex.binary` that names a missing path gets the same. Any other failure of a harness itself is now `harness_failed`, with the harness's own first line; its stack goes only to the log, and never to the page as "internal error".
 
 FIX: **The register and new-conversation dialogs open on their field.** (2026-11-14)

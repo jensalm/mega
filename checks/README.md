@@ -30,6 +30,7 @@ Where things go:
   - a log that ends in a native event read through it;
   - a streamed reply re-rendering only the tail with no long task;
   - a dropped stream naming what it waits for, and its reconnect reading only what it missed;
+  - each upward scroll made with the mouse wheel (`toTop`), as a reader makes it;
   - a held, then failed, opening read naming the request, its time, the attempt and the error;
   - the connecting view naming a failing workspace read;
   - the 960px column centred in its pane, with the panel open and collapsed to the rail, light and dark; the header, history, input panel, show-earlier bar, newer-activity control and shutdown banner sharing it; the project page and the connecting view centred the same way;
@@ -73,7 +74,7 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (69 steps): the input panel. It checks the following:
+- **`panel.mjs`** (74 steps): the input panel. It checks the following:
   - the reply box resting at one line and opening to its height;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
   - a control in the bar keeping the box open, and a press outside closing it;
@@ -94,9 +95,12 @@ Where things go:
     - a prompt sent with the reply held keeps its block above the dock once the activity line shows, with the workspace read held so the line arrives after the view went to the end;
     - a docked request;
     - the reply box growing with its draft;
-  - scrolled up, neither the activity line nor a docked request moving the view.
+  - scrolled up, neither the activity line nor a docked request moving the view;
+  - sent from above five times with the reply held, the prompt row in view above the dock before any output, each time;
+  - while following, the reader's wheel during a streaming reply keeping the view where they put it, with "Newer activity below" offered;
+  - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see.
 
-  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`.
+  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`.
 - **`requests.mjs`** (27 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;

@@ -135,10 +135,19 @@ check(await inColumn('.gate-banner'), 'the shutdown banner spans the same column
 await api('POST', '/api/shutdown/cancel')
 await until('the banner gone', async () => (await page.locator('.gate-banner').count()) === 0)
 
+// toTop scrolls to the top of what is shown as a reader does, with the
+// mouse wheel: only the reader ends following, and a view still following
+// the bottom would be put back there at the next change of the dock.
+const toTop = async () => {
+  const box = await page.locator('.main').boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + 80)
+  await page.mouse.wheel(0, -1e7)
+  await until('the view at the top', async () => (await page.evaluate(() => document.querySelector('.main').scrollTop)) === 0)
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+}
+
 // show earlier: ten more turns above, the view held.
-await page.evaluate(() => {
-  document.querySelector('.main').scrollTop = 0
-})
+await toTop()
 const anchor = await firstInView()
 reads.length = 0
 await page.getByRole('button', { name: 'Show the ten turns before these' }).click()
@@ -163,9 +172,7 @@ check(reads.length === 0, `hiding them fetches nothing: ${reads.join(', ')}`)
 check((await rows()).first <= shownFrom, 'the stretch shown is unchanged')
 
 // show all.
-await page.evaluate(() => {
-  document.querySelector('.main').scrollTop = 0
-})
+await toTop()
 const anchor2 = await firstInView()
 reads.length = 0
 await page.getByRole('button', { name: 'Show the whole history' }).click()
@@ -196,14 +203,12 @@ await page.evaluate(() => {
 })
 const body = Array.from({ length: 60 }, (_, i) => `Line ${i + 1} of a streamed reply, with \`code\` and **bold** words.`).join('\n\n')
 const before = (await rows()).count
-// read from higher up, so new activity arrives below the view. a scroll
-// event is delivered before the next frame, so after two frames the page
-// knows the view has left the bottom.
-await page.evaluate(async () => {
-  document.querySelector('.main').scrollTop = 0
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-})
-await until('the view at the top', async () => (await page.evaluate(() => document.querySelector('.main').scrollTop)) === 0)
+// read from higher up, so new activity arrives below the view. the view
+// leaves the bottom by the reader's own wheel: only the reader ends
+// following, so a scripted scroll would not. a scroll event is delivered
+// before the next frame, so after two frames the page knows the view has left
+// the bottom.
+await toTop()
 check((await api('POST', `/api/conversations/${B}/prompt`, { text: `stream 25 12\n${body}` })).status === 202, 'a streamed reply is asked for')
 await page.locator('.message.streaming').waitFor({ timeout: 20000 })
 const newerButton = page.locator('.newer button')

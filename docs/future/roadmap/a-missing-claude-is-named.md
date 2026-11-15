@@ -1,6 +1,6 @@
 ---
 title: a missing claude is named
-state: researching
+state: evaluating
 created: 2026-11-13
 tags: [defect]
 ---
@@ -19,7 +19,7 @@ Found by the clean-machine rehearsal of 2026-11-13, on a scratch home with no Cl
 
 The cause is in `internal/harness/claude/claude.go`. `executable` looks a bare name up on the project's `PATH`, but an absolute path is passed through unchecked, since "a path that cannot be read is left to fail where it is run". So `Check` passes, and the failure arrives from the SDK as a generic error.
 
-This is the commonest first experience a coworker will have. The pin means anyone without exactly 2.1.318 at exactly that path has a "missing" Claude, and a fresh install of Claude Code puts today's build under `versions/<that version>`. `harness-version-tolerance` decides what range mega accepts. This card is only that a missing one is named.
+This is the commonest first experience an external operator will have. The pin means anyone without exactly 2.1.318 at exactly that path has a "missing" Claude, and a fresh install of Claude Code puts today's build under `versions/<that version>`. `harness-version-tolerance` decides what range mega accepts. This card is only that a missing one is named.
 
 ## shape
 

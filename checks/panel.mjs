@@ -81,12 +81,33 @@ const outside = async () => {
   if (right < 24) throw new Error(`no margin beside the history to press in: ${right}px`)
   await page.mouse.click(events.x + events.width + right / 2, main.y + main.height / 3)
 }
+// wheel scrolls the history as a reader does, with the mouse wheel over it,
+// and waits two frames for the page to have read the scroll. only the reader
+// ends following, so a scripted scroll that moves the view up is no reader
+// and ends nothing.
+const settled = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+const wheel = async (dy) => {
+  const b = await scroller.boundingBox()
+  await page.mouse.move(b.x + b.width / 2, b.y + 80)
+  const before = await scroller.evaluate((m) => m.scrollTop)
+  await page.mouse.wheel(0, dy)
+  await until('the wheel to scroll the view', async () => (await scroller.evaluate((m) => m.scrollTop)) !== before)
+  let last = -1
+  await until('the view to settle', async () => {
+    await settled()
+    const now = await scroller.evaluate((m) => m.scrollTop)
+    const still = now === last
+    last = now
+    return still
+  })
+}
 const resting = await height()
 check(!(await expanded()) && resting >= 30 && resting <= 60, `the box rests at one line: ${resting}px`)
 await until('the history taller than the view', async () => (await scroller.evaluate((m) => m.scrollHeight - m.clientHeight)) > 600)
 await scroller.evaluate((m) => {
-  m.scrollTop = m.scrollHeight - m.clientHeight - 300
+  m.scrollTop = m.scrollHeight
 })
+await wheel(-300)
 const anchor = await lineAbove()
 const gapBefore = await gapOf(anchor.seq)
 await box.click()
@@ -130,9 +151,7 @@ check(true, 'a draft is kept across a switch')
 
 // Ctrl+Enter sends, closes and empties the box, and goes to the end,
 // following the reply.
-await page.evaluate(() => {
-  document.querySelector('.main').scrollTop = 0
-})
+await wheel(-1e6)
 await box.fill('drip 4 150')
 await box.press('Control+Enter')
 await until('the box shut and empty', async () => !(await expanded()) && (await box.inputValue()) === '')
@@ -406,7 +425,14 @@ const edges = () =>
     const dock = document.querySelector('.panel-cluster').getBoundingClientRect().top
     const rows = [...document.querySelectorAll('.events [data-seq]')]
     const prompts = [...document.querySelectorAll('.events .message.user')]
-    return { dock, row: rows.at(-1).getBoundingClientRect().bottom, prompt: prompts.at(-1).getBoundingClientRect().bottom, prompts: prompts.length }
+    return {
+      dock,
+      row: rows.at(-1).getBoundingClientRect().bottom,
+      prompt: prompts.at(-1).getBoundingClientRect().bottom,
+      promptTop: prompts.at(-1).getBoundingClientRect().top,
+      prompts: prompts.length,
+      replies: document.querySelectorAll('.events .message.assistant').length,
+    }
   })
 const interrupt = async (id) => {
   await api('POST', `/api/conversations/${id}/interrupt`)
@@ -456,10 +482,7 @@ await until('the request cleared and the turn over', async () => (await docked.c
 // 3. scrolled up by a few hundred pixels, neither moves the view. the prompt
 // comes from the API here, since a send from the box goes to the end.
 await until('at the bottom before scrolling up', async () => (await fromBottom()) <= 1)
-await scroller.evaluate(async (m) => {
-  m.scrollTop -= 400
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-})
+await wheel(-400)
 const firstInView = () =>
   page.evaluate(() => {
     const row = [...document.querySelectorAll('.events [data-seq]')].find((e) => e.getBoundingClientRect().bottom > 0)
@@ -496,5 +519,70 @@ check(grown.row <= grown.dock + 0.5, `following, the reply box growing to ${awai
 await box.fill('')
 await outside()
 await t.shot(page, 'dock')
+
+// 5. sent from above with the reply held: the view goes to the end and
+// follows, so the prompt row is in view above the dock before any output
+// arrives. the old fault, a scroll event queued by mega's own pin and read
+// after the activity line grew the dock, which ended following, was a race
+// that one send rarely loses; this sends five times.
+const heldFromAbove = []
+for (let i = 0; i < 5; i++) {
+  await wheel(-1e6)
+  const before = await edges()
+  await box.click()
+  await box.fill('hold')
+  await box.press('Control+Enter')
+  await until('the held turn under way, sent from above', async () => (await edges()).prompts === before.prompts + 1 && (await convOf(H)).turn_active && (await activityLine.isVisible()))
+  await settled()
+  const e = await edges()
+  heldFromAbove.push({ ok: e.promptTop >= 0 && e.prompt <= e.dock + 0.5 && e.replies === before.replies, top: e.promptTop, bottom: e.prompt, dock: e.dock })
+  await interrupt(H)
+}
+check(
+  heldFromAbove.every((h) => h.ok),
+  `sent from above five times with the reply held, the prompt row is in view above the dock before any output: ${heldFromAbove.map((h) => `${h.top.toFixed(0)}–${h.bottom.toFixed(0)} under ${h.dock.toFixed(0)}`).join(', ')}`,
+)
+
+// 6. while following, the reader wheels up during a streaming reply: the view
+// stays where they put it, and the newer-activity control offers the rest.
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('following before the stream', async () => (await fromBottom()) <= 1)
+const repliesBefore = (await edges()).replies
+check((await api('POST', `/api/conversations/${H}/prompt`, { text: 'drip 8 250' })).status === 202, 'following, a streaming reply is asked for')
+await page.locator('.events .message.streaming').waitFor()
+await wheel(-300)
+const placed = await firstInView()
+await until('the streamed reply landed', async () => (await edges()).replies >= repliesBefore + 8 && !(await convOf(H)).turn_active, 30000)
+const stayed = await topOf(placed.seq)
+const newerShown = await page.locator('.newer button').isVisible()
+check(
+  Math.abs(stayed - placed.top) <= 0.5 && (await fromBottom()) > 32 && newerShown,
+  `the reader's wheel during a streaming reply keeps the view where they put it: row ${placed.seq} at ${placed.top.toFixed(1)}, then ${stayed.toFixed(1)}; ${Math.round(await fromBottom())}px from the bottom; newer activity ${newerShown ? 'offered' : 'not offered'}`,
+)
+
+// 7. while following, the view is moved up during a streaming reply with no
+// input event at all, by setting the position from the page, as the find
+// bar does, or a scrollbar the page cannot see. any move up that is not
+// mega's own ends following, so the view stays where it was put.
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('following before the second stream', async () => (await fromBottom()) <= 1)
+const repliesBefore2 = (await edges()).replies
+check((await api('POST', `/api/conversations/${H}/prompt`, { text: 'drip 8 250' })).status === 202, 'following, another streaming reply is asked for')
+await page.locator('.events .message.streaming').waitFor()
+await scroller.evaluate((m) => {
+  m.scrollTop -= 300
+})
+await settled()
+const put = await firstInView()
+await until('the second streamed reply landed', async () => (await edges()).replies >= repliesBefore2 + 8 && !(await convOf(H)).turn_active, 30000)
+const kept = await topOf(put.seq)
+check(
+  Math.abs(kept - put.top) <= 0.5 && (await fromBottom()) > 32 && (await page.locator('.newer button').isVisible()),
+  `a move up with no input event during a streaming reply keeps the view where it was put: row ${put.seq} at ${put.top.toFixed(1)}, then ${kept.toFixed(1)}; ${Math.round(await fromBottom())}px from the bottom`,
+)
 
 await t.done()

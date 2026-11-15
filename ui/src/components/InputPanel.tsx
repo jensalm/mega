@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
 import { interruptConversation, releaseConversation, removeConversation, resumeConversation, sendPrompt, setModel, setPermissionMode, startRuntime, updateConversation } from '../api'
 import { harnessLabel, harnesses } from '../harnesses'
+import { place } from '../latest'
 import type { ConversationLog } from '../log'
 import type { Conversation, Project } from '../types'
 import { describeActivity } from '../activity'
@@ -151,11 +152,10 @@ export function InputPanel(props: InputPanelProps) {
   //
   // fit pins a following view itself, rather than leaving it to the
   // conversation's resize observer: measuring the box's content collapses it
-  // for a moment, which can clamp the column's scroll; the scroll event that
-  // clamp queues would arrive after the box has grown back and read the view
-  // as scrolled away. pinned here, the view is at the bottom when that event
-  // is read. whether the view follows is the conversation's one reckoning
-  // (isFollowing), taken before the box changes.
+  // for a moment, which can clamp the column's scroll. pinned here, and
+  // recorded through place, the scroll event that clamp queues finds the view
+  // where mega left it. whether the view follows is the conversation's one
+  // reckoning (isFollowing), taken before the box changes.
   const fit = useCallback(() => {
     const box = boxRef.current
     if (!box) {
@@ -174,10 +174,12 @@ export function InputPanel(props: InputPanelProps) {
       box.style.height = `${Math.min(Math.max(height, content), maxHeight())}px`
     }
     if (scroller && cluster && fitted.current) {
+      // mega's own moves, recorded through place (latest.ts), so the scroll
+      // events they queue are never read as the reader's.
       if (following) {
-        scroller.scrollTop = scroller.scrollHeight
+        place(scroller, scroller.scrollHeight)
       } else {
-        scroller.scrollTop += topBefore - cluster.getBoundingClientRect().top
+        place(scroller, scroller.scrollTop + topBefore - cluster.getBoundingClientRect().top)
       }
     }
     fitted.current = true

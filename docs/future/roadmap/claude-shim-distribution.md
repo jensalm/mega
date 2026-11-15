@@ -1,6 +1,6 @@
 ---
 title: claude shim distribution
-state: researching
+state: horizon
 created: 2026-11-11
 tags: [feature, spike]
 ---

@@ -9,7 +9,7 @@ Mega builds and runs on macOS, and runs on Windows inside WSL2 with the page ope
 
 ## why
 
-Michael's coworkers are mostly on Windows and macOS. Mega has only ever been built for linux/amd64, which is all CI builds. A cross-compile for macOS on 2026-11-13 stopped in the tray library, which needs cgo there, so whether mega's own code builds is not yet known.
+The first external operators are mostly on Windows and macOS. Mega has only ever been built for linux/amd64, which is all CI builds. A cross-compile for macOS on 2026-11-13 stopped in the tray library, which needs cgo there, so whether mega's own code builds is not yet known.
 
 ## macos
 
@@ -21,7 +21,7 @@ To establish, then fix:
 - The harness stores: where Claude Code and Codex keep sessions and settings on a Mac, since discovery and adoption read them.
 - CI: a macOS runner that runs `make test`, so the build does not rot. The browser checks there if they are cheap.
 
-Michael has no Mac and expects to find a volunteer among his coworkers. Until then CI is the evidence, and the README says macOS is built and tested there but not yet used.
+Michael has no Mac and expects to find a volunteer among them. Until then CI is the evidence, and the README says macOS is built and tested there but not yet used.
 
 ## windows
 

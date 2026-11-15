@@ -5,6 +5,7 @@ The words mega's documents, cards and interface use, and what each one means her
 ## The workspace
 
 - **Workspace.** Everything one mega instance holds: its projects, their conversations, and the state about them. It lives in the data directory and is written only by the service.
+- **Operator.** The person a mega instance works for: the one who registers projects, sends prompts and answers requests. Mega has one. An **external operator** is anyone other than Michael running their own mega, on their own machine with their own harness logins; the word for the people the install work is for.
 - **Project.** The stable home for work: a name and a checkout. Conversations belong to a project and stay with it.
 - **Checkout.** The directory a project's work happens in, usually a git repository. Mega never modifies or deletes it on its own account.
 - **Conversation.** A durable identity wrapped around one native session of one harness. It keeps its history, name and place when its runtime stops.

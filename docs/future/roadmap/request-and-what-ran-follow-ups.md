@@ -13,6 +13,8 @@ When Claude changes its own mode, the request on the panel does not follow. The 
 
 That is honest and errs strict, and it is noise in a routine flow. Before the batch the bar showed the live mode while running, so this is new.
 
+Low priority. Michael, 2026-11-14: "i don't really use plan mode these days... our spec, work-order, mercurius process is kinda baked into the pie, which is a team-based 'plan mode'." So the flow this item worries about is one he rarely runs. It matters again for external operators, who may well use plan mode.
+
 - **To observe first.** What mode Claude reports after an approved exit from plan mode under the SDK, recorded in the capability report with its version. Nothing there says today.
 - **The choice.** Leave it, and let the line prompt one press on the control. Or let the request follow when the change comes from Michael's own approval of the exit, limited to modes mega offers, recorded as an event that says why. The second needs a sentence in `permissions-never-weakened`, which now says only the operator changes a conversation's mode.
 
