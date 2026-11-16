@@ -487,17 +487,43 @@ pre {
   margin: 6px 0 0 18px;
 }
 
+/* the mega's name, beside the connection status, so two megas open side by
+   side are told apart: plain text, the last thing in the footer to give
+   way. it never shrinks; only a name longer than 12em is cut short. the
+   status wraps instead, and the version label yields first. */
+.mega-name {
+  color: var(--text);
+  flex-shrink: 0;
+  font: calc(11px * var(--fs)) var(--mono);
+  margin-left: 8px;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* the build's version, beside the connection status: discreet, and a press
-   opens what the service says of its build. */
+   opens what the service says of its build. in a narrow footer it is the
+   first to give way, cut short with an ellipsis; its title names it whole. */
 .version-label {
   background: none;
   border: 0;
   border-radius: 4px;
   color: var(--muted);
   cursor: pointer;
+  flex-shrink: 4;
   font: calc(11px * var(--fs)) var(--mono);
   margin: 0 auto 0 8px;
+  min-width: 0;
+  overflow: hidden;
   padding: 1px 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the connection status in the footer wraps before the name gives way. */
+.side-foot .stream {
+  min-width: 0;
 }
 
 .version-label:hover,

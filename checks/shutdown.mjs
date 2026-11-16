@@ -107,11 +107,11 @@ await other.getByRole('button', { name: 'Interrupt', exact: true }).click()
 await until('idle', async () => (await banner(page).locator('strong').textContent()) === 'Every agent is idle')
 const shutDown = banner(page).getByRole('button', { name: 'Shut down mega now' })
 check((await shutDown.count()) === 1 && (await shutDown.locator('.word').textContent()) === 'Shut down', 'at idle the banner says so and offers Shut down')
-await until('the title', async () => (await page.title()) === 'Ready to shut down · mega')
+await until('the title', async () => (await page.title()) === 'Ready to shut down · mega · mega-check')
 check(true, 'the title says it is ready')
 await until('the notification', async () => (await page.evaluate(() => window.__notes.length)) >= 1)
 const sent = await page.evaluate(() => window.__notes)
-check(sent.length === 1 && sent[0].body === 'Every agent is idle. Shut down from the banner when you are ready.', `one notification: ${JSON.stringify(sent)}`)
+check(sent.length === 1 && sent[0].title === 'mega · mega-check' && sent[0].body === 'Every agent is idle. Shut down from the banner when you are ready.', `one notification: ${JSON.stringify(sent)}`)
 
 // Shut down ends the service cleanly.
 const askedFrom = Date.now()
@@ -128,6 +128,12 @@ for (let ms = askedFrom - 1000; ms <= askedTo + 1000; ms += 500) could.push(awai
 check(could.includes(saidAt) && !could.includes(await clockIn(askedFrom, 'UTC')), `the page that asked says when, in the service's zone, not the page's UTC: "${saidAt}"`)
 await until('its footer', async () => (await page.locator('.side-foot .stream').textContent()) === 'Shut down from here, retrying')
 check(true, 'and its footer says it keeps trying')
+// the footer's longest status: the mega's name is the last thing to give
+// way, shown whole, while the status wraps and the version yields.
+const footName = page.locator('.side-foot .mega-name')
+const nameFits = await footName.evaluate((e) => ({ text: e.textContent, whole: e.scrollWidth <= e.clientWidth, width: e.clientWidth }))
+check(nameFits.text === 'mega-check' && nameFits.whole && nameFits.width > 0, `beside it, the mega's name is shown whole: ${JSON.stringify(nameFits)}`)
+await page.locator('.side-foot').screenshot({ path: `${t.dir}/shots/foot-shut-down.png` })
 await until('the other page loses it', async () => (await other.locator('.side-foot .stream').textContent()) !== 'Live')
 await until('the other page shows the last known gate', async () => (await banner(other).locator('strong').textContent()) === 'Last known: Every agent is idle')
 check((await banner(other).getByRole('button', { name: 'Shut down mega now' }).count()) === 0, `the other page shows only what it last knew, offering nothing: "${await other.locator('.side-foot .stream').textContent()}"`)
@@ -140,6 +146,6 @@ await until('the banners gone', async () => (await page.locator('section.gate-ba
 await until('the asking page free', async () => (await page.locator('form.reply button[type=submit]').getAttribute('aria-label')) === 'Send (Ctrl+Enter)')
 const after = await workspace()
 check(!after.shutdown.armed && after.conversations.every((c) => c.state === 'none'), 'when the service returns both pages recover, the gate unarmed and every runtime released')
-check((await page.title()) !== 'Ready to shut down · mega', `and the title is back: "${await page.title()}"`)
+check((await page.title()) !== 'Ready to shut down · mega · mega-check', `and the title is back: "${await page.title()}"`)
 
 await t.done()

@@ -35,6 +35,15 @@ export function AboutPanel({
   return (
     <Dialog title="This mega" onClose={onClose}>
       <dl className="about">
+        {about.name && (
+          <>
+            <dt>Name</dt>
+            <dd data-name="">
+              {about.name}
+              <span className="muted">{about.name_from === 'config' ? 'Set as name in the config file.' : 'The machine’s hostname; set name in the config file to call it something else.'}</span>
+            </dd>
+          </>
+        )}
         <dt>Version</dt>
         <dd>
           {about.version}

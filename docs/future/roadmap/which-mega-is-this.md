@@ -1,6 +1,6 @@
 ---
 title: which mega is this
-state: researching
+state: evaluating
 created: 2026-11-16
 tags: [enhancement]
 ---

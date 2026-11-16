@@ -18,10 +18,11 @@ export const isNewer = (serviceBuild: string) => pageBuild !== '' && serviceBuil
 
 export const newerLabel = 'A newer mega is running; reload this page'
 
-// aboutTitle names the build on the controls that open its panel.
+// aboutTitle names the mega and its build on the controls that open its
+// panel.
 export function aboutTitle(about: About | null): string {
   if (!about) {
     return 'mega: the build is not known yet'
   }
-  return `mega ${about.version}${about.developer ? ', a developer build' : ''}: show the build`
+  return `mega${about.name ? ` ${about.name}` : ''}, ${about.version}${about.developer ? ', a developer build' : ''}: show the build`
 }

@@ -1,5 +1,4 @@
 building:
-  - a-large-named-directory-starves-the-path-search.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -19,8 +18,6 @@ horizon:
   - container-environments.md
   - codex-live-attach.md
 researching:
-  - which-mega-is-this.md
-  - readme-for-newcomers.md
   - the-demo.md
   - agent-hand-off-turns.md
   - imported-turns-carry-their-own-times.md
@@ -35,6 +32,9 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - readme-for-newcomers.md
+  - which-mega-is-this.md
+  - a-large-named-directory-starves-the-path-search.md
   - action-view-improvements.md
   - path-search-beyond-the-checkout.md
   - conversation-timestamps.md

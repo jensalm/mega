@@ -1,6 +1,6 @@
 ---
 title: readme for newcomers
-state: researching
+state: evaluating
 created: 2026-11-13
 tags: [documentation]
 ---
@@ -40,3 +40,7 @@ Read against the README as committed at c751ef9.
 - **Fixed since.** The harness requirement is now a tested range per harness, and Claude Code is taken from `claude` on the `PATH`. A missing or pruned Claude Code is named on the page. `--listen` exists.
 - **Still true.** `mega` is not found after `make` unless the Go bin directory is on `PATH`. Nothing says how to install or log in to either harness, or that Claude's trust dialog is accepted once per checkout. The config example still carries the placeholder shim path. The binary is still stamped with its checkout, which must stay put.
 - **New since, and wanted here.** The first page now says what mega needs and what it found. Configuration snapshots exist. pi is arriving as a third harness, with the plain statement that it asks for nothing unless an extension does.
+
+## built, 2026-11-16
+
+Rewritten and walked from a fresh clone in a scratch home with no harness logins. What that walk could not reach is the same as on 2026-11-13: installing a real harness, logging in, the trust dialog and a first launch. Michael's install on his laptop is the first time a person follows it end to end on a second machine. Two things in it are untested and say so: the WSL2 route, and Codex's own install script, which may or may not install Codex whole.

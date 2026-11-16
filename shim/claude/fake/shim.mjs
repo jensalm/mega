@@ -76,6 +76,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 import { join } from 'node:path'
+import { toolResultMessage, toolUseMessage } from './messages.mjs'
 
 const store = process.cwd()
 const [cmd, ...rest] = process.argv.slice(2)
@@ -170,21 +171,9 @@ const end = (subtype = 'success') =>
 // toolCall records a tool call, waits ms as if it ran, then records its result.
 async function toolCall(name, input, ms, result = 'ok', isError = false) {
   const id = 'tu-' + randomUUID().slice(0, 8)
-  keep({
-    type: 'assistant',
-    uuid: randomUUID(),
-    session_id: session,
-    parent_tool_use_id: null,
-    message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
-  })
+  keep(toolUseMessage({ id, name, input, uuid: randomUUID(), session }))
   await sleep(ms)
-  keep({
-    type: 'user',
-    uuid: randomUUID(),
-    session_id: session,
-    parent_tool_use_id: null,
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: result, ...(isError ? { is_error: true } : {}) }] },
-  })
+  keep(toolResultMessage({ id, result, isError, uuid: randomUUID(), session }))
 }
 const filler = (i) =>
   `Message ${i}. ` + 'This line stands in for a paragraph of agent output, long enough to wrap. '.repeat(3)

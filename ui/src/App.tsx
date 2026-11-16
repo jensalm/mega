@@ -342,8 +342,8 @@ export function App() {
   // operator, live only; the shutdown gate's title wins while it applies.
   const waitingCount = workspace?.needs_you.length ?? 0
   useEffect(() => {
-    showTab(tabState(waitingCount, ready, stale || workspace === null))
-  }, [waitingCount, ready, stale, workspace])
+    showTab(tabState(waitingCount, ready, stale || workspace === null, about?.name))
+  }, [waitingCount, ready, stale, workspace, about?.name])
   useEffect(() => {
     if (workspace === null) {
       return
@@ -352,13 +352,14 @@ export function App() {
     // change to idle is announced.
     if (wasReady.current === false && ready && 'Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(productName, { body: 'Every agent is idle. Shut down from the banner when you are ready.', tag: 'mega-shutdown' })
+        // titled with the mega's name, as the tab is, to say which one is idle.
+        new Notification(about?.name ? `${productName} · ${about.name}` : productName, { body: 'Every agent is idle. Shut down from the banner when you are ready.', tag: 'mega-shutdown' })
       } catch {
         // a browser that refuses notifications still has the title and banner.
       }
     }
     wasReady.current = ready
-  }, [ready, workspace])
+  }, [ready, workspace, about?.name])
 
   const projects = workspace?.projects ?? []
   const conversations = workspace?.conversations ?? []

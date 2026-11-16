@@ -17,6 +17,8 @@ var testAbout = About{
 	LogFile:   "/home/someone/.local/state/mega/mega.log",
 	ClaudeSDK: "0.3.318",
 	Interface: "/assets/index-a.js /assets/index-b.css",
+	Name:      "made-up-host",
+	NameFrom:  "hostname",
 }
 
 func TestVersionOnTheWire(t *testing.T) {
@@ -34,6 +36,8 @@ func TestVersionOnTheWire(t *testing.T) {
 		"logs_to_file": false,
 		"claude_sdk":   "0.3.318",
 		"interface":    "/assets/index-a.js /assets/index-b.css",
+		"name":         "made-up-host",
+		"name_from":    "hostname",
 	}
 	for key, value := range want {
 		if body[key] != value {

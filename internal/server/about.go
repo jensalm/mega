@@ -38,6 +38,11 @@ type About struct {
 	ClaudeSDK string
 	// Interface is the identity of the embedded interface (ui.Build).
 	Interface string
+	// Name is what this mega is called (config.MegaName), and NameFrom where
+	// it came from, config or hostname; both absent where there is none.
+	// only someone who can already reach the page is told it.
+	Name     string `dd:",+omitempty"`
+	NameFrom string `dd:",+omitempty"`
 }
 
 // versionView is About, with each harness's tested range and the version

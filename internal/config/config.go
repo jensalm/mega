@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/michaelquigley/df/dd"
 )
@@ -37,6 +38,10 @@ var defaultClaudeShim string
 type Config struct {
 	Listen string
 	Data   string
+	// Name is what this mega is called on its pages and in 'mega version',
+	// so megas open side by side are not mistaken for each other; empty is
+	// the machine's hostname (MegaName).
+	Name   string
 	Claude Claude
 	Codex  Codex
 	Pi     Pi
@@ -169,6 +174,7 @@ func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 		}
 		*path = expanded
 	}
+	cfg.Name = strings.TrimSpace(cfg.Name)
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -191,6 +197,9 @@ func (c *Config) Validate() error {
 	if c.Snapshots.Keep < 0 || c.Snapshots.KeepAtVersion < 0 {
 		return fmt.Errorf("snapshots: keep and keep_at_version are counts, 0 or more")
 	}
+	if len([]rune(c.Name)) > maxName || strings.ContainsFunc(c.Name, unicode.IsControl) {
+		return fmt.Errorf("name: at most %d characters, and none a control character", maxName)
+	}
 	for _, dir := range c.PathSearch.Directories {
 		if !filepath.IsAbs(dir) {
 			return fmt.Errorf("path_search: '%s' is not absolute; name a directory from / or ~/", dir)
@@ -207,6 +216,37 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("listen '%s' is not a loopback address", c.Listen)
 	}
 	return nil
+}
+
+// maxName bounds a configured name, which a tab title carries.
+const maxName = 64
+
+// Hostname is the machine's hostname, os.Hostname unless a test replaces it.
+var Hostname = os.Hostname
+
+// the sources of a mega's name (MegaName).
+const (
+	NameFromConfig   = "config"
+	NameFromHostname = "hostname"
+)
+
+// MegaName is what this mega is called, and where the name came from: the
+// config's name when set, else the machine's hostname up to its first dot,
+// so a fully qualified one reads as the machine. both are empty where the
+// hostname cannot be read, and the pages say only "mega".
+func (c *Config) MegaName() (name, from string) {
+	if c.Name != "" {
+		return c.Name, NameFromConfig
+	}
+	host, err := Hostname()
+	if err != nil {
+		return "", ""
+	}
+	host, _, _ = strings.Cut(strings.TrimSpace(host), ".")
+	if host == "" {
+		return "", ""
+	}
+	return host, NameFromHostname
 }
 
 // SnapshotsPath is where configuration snapshots are kept.

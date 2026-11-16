@@ -1,6 +1,6 @@
 ---
 title: a large named directory starves the path search
-state: building
+state: evaluating
 created: 2026-11-16
 tags: [defect]
 ---

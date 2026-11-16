@@ -33,9 +33,27 @@ func versionCmd() *cobra.Command {
 		if path, err := logPath(); err == nil {
 			fmt.Printf("log file, when serving with no terminal: %s\n", path)
 		}
+		printName()
 		printHarnesses()
 	}
 	return cmd
+}
+
+// printName says what this mega is called on its pages, and where the name
+// came from, by the config mega would read.
+func printName() {
+	cfg, err := config.Load(configPath, dataPath, listenAddr)
+	if err != nil {
+		return
+	}
+	switch name, from := cfg.MegaName(); from {
+	case config.NameFromConfig:
+		fmt.Printf("name: %s, set in the config\n", name)
+	case config.NameFromHostname:
+		fmt.Printf("name: %s, the machine's hostname\n", name)
+	default:
+		fmt.Println("name: none, since the hostname could not be read; set name in the config")
+	}
 }
 
 // printHarnesses says, for each harness, the range mega was tested with and
@@ -97,7 +115,7 @@ func found(h harness.Harness) string {
 // about is what the service answers on /api/version: what 'mega version'
 // prints, from the same build information, with where it logs, the Claude
 // Agent SDK beside the shim, and the identity of the interface it serves.
-func about(claudeHarness *claude.Harness) server.About {
+func about(cfg *config.Config, claudeHarness *claude.Harness) server.About {
 	a := server.About{
 		Version:    build.Version,
 		Developer:  build.Version == "" || build.Hash == "",
@@ -111,6 +129,7 @@ func about(claudeHarness *claude.Harness) server.About {
 	} else {
 		a.Commit, a.Built, a.Branch = build.Hash, build.Date, build.Branch
 	}
+	a.Name, a.NameFrom = cfg.MegaName()
 	if build.CGO == "1" {
 		a.Go += " (cgo)"
 	}

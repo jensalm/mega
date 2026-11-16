@@ -277,3 +277,45 @@ func TestPathSearchDirectories(t *testing.T) {
 		t.Errorf("a relative directory: %v", err)
 	}
 }
+
+// a mega is called what the config names it, else the machine's hostname up
+// to its first dot; with neither, nothing. a name too long or holding a
+// control character is refused. the hostname here is made up, never the
+// machine's own.
+func TestMegaName(t *testing.T) {
+	root := isolate(t)
+	host, hostErr := "made-up-host.example.net", error(nil)
+	saved := Hostname
+	Hostname = func() (string, error) { return host, hostErr }
+	t.Cleanup(func() { Hostname = saved })
+	cfg, err := Load("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, from := cfg.MegaName(); name != "made-up-host" || from != NameFromHostname {
+		t.Errorf("default: %q from %q", name, from)
+	}
+	file := filepath.Join(root, "mega.yaml")
+	if err := os.WriteFile(file, []byte("name: '  desk mega  '\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(file, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, from := cfg.MegaName(); name != "desk mega" || from != NameFromConfig {
+		t.Errorf("configured: %q from %q", name, from)
+	}
+	hostErr = errors.New("no hostname")
+	if name, from := (&Config{}).MegaName(); name != "" || from != "" {
+		t.Errorf("no hostname: %q from %q", name, from)
+	}
+	for _, body := range []string{"name: \"a\\tb\"\n", "name: " + strings.Repeat("x", 65) + "\n"} {
+		if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(file, "", ""); err == nil || !strings.Contains(err.Error(), "name") {
+			t.Errorf("%q: %v", body, err)
+		}
+	}
+}

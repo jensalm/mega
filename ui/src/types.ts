@@ -255,6 +255,11 @@ export interface About {
   logs_to_file: boolean
   claude_sdk: string
   interface: string
+  // what this mega is called, so megas open side by side are not mistaken
+  // for each other: the config's name, or the machine's hostname, as
+  // name_from says; both absent where there is none.
+  name?: string
+  name_from?: 'config' | 'hostname'
   // each harness's tested range, by name ("2.1.318 to 2.1.325"), and what
   // the service's start-up check found, with each version against it.
   tested: Record<string, string>

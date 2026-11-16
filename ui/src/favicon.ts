@@ -9,13 +9,14 @@ const dataUrl = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`
 export const markIcon = dataUrl(mark)
 export const needsYouIcon = dataUrl(needsYouMark)
 
-const baseTitle = productName
-
 // tabState is what the tab shows: the needs-you mark and the count while
 // something needs the operator, and the shutdown gate's title, which wins
 // while it applies. a page showing only last-known state shows neither the
-// count nor the needs-you mark, since it cannot say they are live.
-export function tabState(waiting: number, ready: boolean, stale: boolean): { title: string; icon: string } {
+// count nor the needs-you mark, since it cannot say they are live. every
+// title ends with the mega's name, "mega · fortyfive", once the service has
+// said it, so two megas open side by side are told apart.
+export function tabState(waiting: number, ready: boolean, stale: boolean, name?: string): { title: string; icon: string } {
+  const baseTitle = name ? `${productName} · ${name}` : productName
   const live = stale ? 0 : waiting
   const icon = live > 0 ? needsYouIcon : markIcon
   if (ready) {

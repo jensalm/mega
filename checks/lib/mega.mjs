@@ -74,8 +74,11 @@ const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 // its pages another and check that times are said in the service's.
 // { searchDirs } names directories beyond the checkout for the reply box's @
 // search (path_search.directories), written as given, ~ for the suite's
-// scratch HOME.
-export async function suite(name, { bare = false, tz, searchDirs = [] } = {}) {
+// scratch HOME. { megaName } is what the service is called on its pages,
+// mega-check by default, so the machine's own hostname never lands in a
+// screenshot or a step; false leaves it out of the config, for a step about
+// the default, which must print and save nothing that shows it.
+export async function suite(name, { bare = false, tz, searchDirs = [], megaName = 'mega-check' } = {}) {
   const port = Number(process.env.MEGA_CHECK_PORT || 18470)
   if (port === 8470) {
     cannotRun('port 8470 is the operator’s mega; checks use another (MEGA_CHECK_PORT)')
@@ -114,7 +117,7 @@ export async function suite(name, { bare = false, tz, searchDirs = [] } = {}) {
     writeFileSync(join(dir, 'home/.profile'), `export PATH="${join(dir, 'bin')}:$PATH"\n`)
     writeFileSync(
       config,
-      [`listen: 127.0.0.1:${port}`, `data: ${join(dir, 'data')}`, 'claude:', `  shim: ${join(repo, 'shim/claude')}`, 'environment:', '  shell: /bin/bash', ''].join('\n'),
+      [`listen: 127.0.0.1:${port}`, `data: ${join(dir, 'data')}`, ...(megaName ? [`name: ${megaName}`] : []), 'claude:', `  shim: ${join(repo, 'shim/claude')}`, 'environment:', '  shell: /bin/bash', ''].join('\n'),
     )
   } else {
     // the fake claude shim, beside the real shim's dependencies, since mega's
@@ -140,6 +143,7 @@ export async function suite(name, { bare = false, tz, searchDirs = [] } = {}) {
       [
         `listen: 127.0.0.1:${port}`,
         `data: ${join(dir, 'data')}`,
+        ...(megaName ? [`name: ${megaName}`] : []),
         'claude:',
         '  node: node',
         `  shim: ${join(dir, 'fakeshim')}`,

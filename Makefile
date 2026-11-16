@@ -10,7 +10,7 @@ endif
 SHIM_DIR := $(CURDIR)/shim/claude
 LDFLAGS := -X github.com/michaelquigley/mega/internal/config.defaultClaudeShim=$(SHIM_DIR)
 
-.PHONY: build test e2e checks checks-deps checks-browser clean frontend frontend-test shim
+.PHONY: build test e2e checks checks-deps checks-browser clean frontend frontend-test shim readme-image
 
 # browser checks keep their binary, data, logs and screenshots here.
 CHECKS_DIR ?= $(or $(TMPDIR),/tmp)/mega-checks
@@ -60,6 +60,13 @@ checks: frontend shim checks-deps
 	MEGA_CHECKS_DIR="$(CHECKS_DIR)" MEGA_CHECK_BIN="$(CHECKS_DIR)/mega" node checks/run.mjs $(SUITE)
 
 # the checks' pinned playwright, exactly as locked.
+# the README's picture of a workspace: the readme suite builds a scratch one
+# with the fakes and saves it, and this copies it into the repository.
+readme-image:
+	$(MAKE) checks SUITE=readme
+	mkdir -p docs/images
+	cp "$(CHECKS_DIR)/readme/shots/workspace.png" docs/images/workspace.png
+
 checks-deps:
 	npm --prefix checks ci
 

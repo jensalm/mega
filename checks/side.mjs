@@ -20,12 +20,17 @@
 // carried over; the build's label and panel, with each harness's tested
 // range and the version found, and when the newest configuration snapshot
 // was taken and where, and a page older than the
-// service saying so without reloading; and every control named.
-import { existsSync, readFileSync, renameSync } from 'node:fs'
+// service saying so without reloading; and every control named. and the
+// mega's name: in the tab title, the footer beside the connection status,
+// the rail's title and the version panel, first as the config names it,
+// side-check, then by default, the machine's hostname, which the steps
+// compare without printing it and with no screenshot taken.
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
-const t = await suite('side')
+const t = await suite('side', { megaName: 'side-check' })
 const { url, check, until, api, convOf, workspace } = t
 
 // projects whose names test the order: two that differ only in case, and one
@@ -282,13 +287,29 @@ const pageBuild = await page.evaluate(() =>
 )
 check(about.developer === true && about.claude_sdk === sdk && about.interface !== '' && about.interface === pageBuild, `the service answers for its build, and its interface is this page's: ${about.version}, sdk ${about.claude_sdk}, "${about.interface}"`)
 const label = page.locator('.side-foot .version-label')
-const buildTitle = `mega ${about.version}, a developer build: show the build`
+const buildTitle = `mega side-check, ${about.version}, a developer build: show the build`
+// the name the config gives it, wherever a page says which mega it is.
+const megaName = page.locator('.side-foot .mega-name')
+check(about.name === 'side-check' && about.name_from === 'config', `the service says what it is called, as the config names it: ${about.name}, from ${about.name_from}`)
+check(/^(\(\d+\) )?mega · side-check$/.test(await page.title()), `the tab title carries it: "${await page.title()}"`)
+check(
+  (await megaName.textContent()) === 'side-check' &&
+    (await page.locator('.side-foot').evaluate((foot) => {
+      const parts = [...foot.children].map((e) => e.className)
+      return parts.indexOf('mega-name') === parts.findIndex((c) => c.startsWith('stream')) + 1
+    })),
+  `the footer shows it beside the connection status: "${await megaName.textContent()}"`,
+)
 check((await label.textContent()) === about.version && (await label.getAttribute('title')) === buildTitle, `the footer shows the version beside the connection status: "${await label.textContent()}"`)
 await label.click()
 const panel = page.locator('dialog[open]')
 await panel.waitFor()
 const said = await panel.textContent()
 const logFile = join(t.dir, 'xdg/state/mega/mega.log')
+check(
+  said.includes('side-check') && ((await panel.locator('dd[data-name]').textContent()) ?? '').includes('Set as name in the config file.'),
+  'its panel gives the name and that the config set it',
+)
 check(
   said.includes(`${about.version} (developer build)`) && said.includes(about.go) && said.includes(about.target) && said.includes(logFile) && said.includes('This mega is writing to it.') && said.includes(sdk) && said.includes('Running the interface this mega serves.'),
   `its panel gives the version, Go, the target, the log file, the Claude Agent SDK and this page's standing`,
@@ -323,7 +344,7 @@ await page.getByRole('button', { name: /^Collapse the side panel/ }).click()
 const railBuild = rail.getByRole('button', { name: buildTitle })
 await railBuild.click()
 await panel.waitFor()
-check((await railBuild.getAttribute('title')) === buildTitle && (await panel.textContent()).includes(logFile), 'the rail carries the build as a title, and opens the same panel')
+check((await railBuild.getAttribute('title')) === buildTitle && (await panel.textContent()).includes(logFile), 'the rail carries the name and the build as a title, and opens the same panel')
 await panel.getByRole('button', { name: 'Close' }).click()
 await until('the panel closed again', async () => (await panel.count()) === 0)
 
@@ -364,5 +385,27 @@ await page.getByRole('button', { name: /^Collapse the side panel/ }).click()
 await rail.waitFor()
 const railUnnamed = await unnamed()
 check(openUnnamed.length === 0 && railUnnamed.length === 0, `every control has a title and a label${openUnnamed.length + railUnnamed.length ? `: ${JSON.stringify([...openUnnamed, ...railUnnamed])}` : ''}`)
+
+// with no name in the config, the machine's hostname, up to its first dot.
+// it is compared, never printed, and nothing from here on is saved.
+await t.stop()
+writeFileSync(t.config, readFileSync(t.config, 'utf8').replace(/^name: .*\n/m, ''))
+await t.start()
+await page.reload()
+const host = hostname().split('.')[0]
+const defaultAbout = (await api('GET', '/api/version')).body
+await until('the default name', async () => (await page.locator('.side-foot .mega-name').count()) === 1 || (await rail.count()) === 1)
+if ((await rail.count()) === 1) await page.getByRole('button', { name: /^Expand the side panel/ }).click()
+await until('the footer name', async () => (await page.locator('.side-foot .mega-name').count()) === 1)
+check(defaultAbout.name === host && defaultAbout.name_from === 'hostname', 'by default, the service is called by the machine’s hostname (not printed here)')
+check((await page.title()).endsWith(`mega · ${host}`), 'the tab title carries the hostname')
+check((await page.locator('.side-foot .mega-name').textContent()) === host, 'and so does the footer')
+await page.getByRole('button', { name: /^Collapse the side panel/ }).click()
+await rail.waitFor()
+check(((await rail.locator('.rail-version').getAttribute('title')) ?? '').startsWith(`mega ${host}, `), 'and the rail’s title')
+await rail.locator('.rail-version').click()
+await page.locator('dialog[open]').waitFor()
+check(((await page.locator('dialog[open] dd[data-name]').textContent()) ?? '').includes('The machine’s hostname'), 'and the version panel, saying it is the hostname')
+await page.locator('dialog[open]').getByRole('button', { name: 'Close' }).click()
 
 await t.done()

@@ -18,7 +18,7 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - **pi is slipstreamed in.** The spec deferred it; Michael pulled it forward.
 - **The work is sequential.** One story at a time, in the order below. Running two implementers at once on one repository is coordination that falls on Michael, and helping with that is something mega has yet to grow into.
 
-## stories, as of the evening of 2026-11-16
+## stories, as of the night of 2026-11-16
 
 **Built, in evaluating**
 
@@ -29,15 +29,13 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - `pi-adapter`: the third harness, built against pi 1.5.2 and the local model.
 - The conversation polish: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `conversation-timestamps`, `action-view-improvements` and `path-search-beyond-the-checkout`.
 
-**Building**
-
-- `a-large-named-directory-starves-the-path-search`: a defect the last of those showed within minutes of being switched on.
+- `a-large-named-directory-starves-the-path-search`: a defect the last of those showed within minutes of being switched on, fixed the same day.
+- `which-mega-is-this`: each page names its mega.
+- `readme-for-newcomers`: the README rewritten for someone who has just seen the demo, with a contributor document beside it.
 
 **Next, in order**
 
-1. `which-mega-is-this`: small, and wanted now that Michael reaches several megas at once.
-2. `readme-for-newcomers`.
-3. `the-demo`: a workspace made for showing, with no freeze before it.
+1. `the-demo`: mega installed on Michael's laptop from the new README, which is that README's first test on a second machine. Everything else before the demo is built.
 
 Michael, 2026-11-16: with everything up to `the-demo` handled, mega is in good shape for the demo.
 

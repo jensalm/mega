@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+CHANGE: **The README is written for someone trying mega for the first time.** (2026-11-16) It opens with what mega is and a picture of a workspace. It then walks from what you need to a first conversation:
+- installing and logging in to each harness, by its vendor's own instructions;
+- Claude Code's trust dialog;
+- the Go bin directory on your `PATH`, and keeping the clone where it was built;
+- registering a project.
+
+It says plainly what to expect, which platforms have been tried, and what mega shows when something is wrong and what to do. Its configuration example is safe to copy whole. What only someone working on mega needs (the browser checks, the harness round trips, the probes, `make clean`'s details and the dependency audit notes) moved to `CONTRIBUTING.md`.
+
+FIX: **The mega's name stays whole in the side panel's footer.** (2026-11-16) With a long status such as "Shut down from here, retrying", the name was the first thing cut short. Now the status wraps and the version gives way first.
+
+FEATURE: **Each page says which mega it is.** (2026-11-16) With several megas open at once, each through its own port, every tab used to read "mega". Now the tab title carries the mega's name, as in "mega · fortyfive", in every title it shows, including "Ready to shut down" and the idle notification. The side panel's footer shows the name beside the connection status, and the rail carries it in its build control's title. The version panel and `mega version` say it too. The name is the machine's hostname, or `name` in the config file.
+
 FEATURE: **An expanded action shows what it ran, in full.** (2026-11-16) An action's row still reads as one line. Expanded, it now shows what was invoked, then what came back. A shell command shows as the whole command, where the line stops at 200 bytes. Any other tool shows as its name and input, field by field: an edit's file and text, a read's path, an MCP tool's arguments. A copy button takes all of it. Claude Code, Codex and pi each say what their own calls invoked, read from what mega already recorded, so nothing new is stored and older actions show it too. A long command or result scrolls in its box, as results did.
 
 FIX: **A failed pi action is marked, and one held by a dialog is not shown as running.** (2026-11-16) A pi tool call that failed, or that an extension blocked, now reads " failed" in the error colour on its collapsed row, as Claude Code's and Codex's do. While a pi dialog is waiting, the action it holds says "waiting on a dialog" rather than spinning, since pi has not run it.

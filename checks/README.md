@@ -126,6 +126,7 @@ Where things go:
   - `@~/` opening the list of the named directory, shown with `~`, its own files newest first and then a newer one deeper, with nothing from a dot-directory or outside it, and a directory not named never listed; `@~/Screenshots/`, the second named directory, looked in and listing its own files; the pick written per harness, `@"~/Sandbox/shots/shot one.png"` for Claude and the bare absolute path for Codex and pi.
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
+- **`readme.mjs`** (5 steps): the README's picture of a workspace. A scratch workspace of three projects, with conversations on all three harnesses in the states the side panel shows: a Claude Code approval waiting, a Codex reply unread, a pi turn running, one read and idle, and one Claude Code conversation holding hand-written turns from `lib/scene.mjs`, so its history reads as real work. It checks that needs-you holds the approval and the unread reply and that the pi turn is running. It then opens the hand-written conversation, unfolds every project, opens the last action, and saves the page at 1440×900 as `shots/workspace.png`. `make readme-image` runs it and copies the picture to `docs/images/workspace.png`.
 - **`requests.mjs`** (56 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
@@ -151,19 +152,20 @@ Where things go:
     - a release with a dialog pending, whose dialog warns that pi is ended and the gated command does not run, leaving the dialog's row "never answered".
 
   It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`, and the approval the keys answer, with its Allow's title written under it by the check, since the browser draws a title outside the page, as `shots/approval-key.png`.
-- **`shutdown.mjs`** (23 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
+- **`shutdown.mjs`** (24 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
   - arming from the footer, with the banner naming what it waits for by count and by name, and the request marked as the operator's;
   - a second page seeing it;
   - new work refused with the reason, on the page and by the API;
   - a blocker's name opening it;
   - Shut down neither offered nor accepted before idle;
   - cancelling lifting it on both pages;
-  - at idle, Shut down offered, the title saying so and one notification;
+  - at idle, Shut down offered, the title saying so and one notification, each carrying the mega's name;
   - Shut down ending the service with status 0;
   - the page that asked saying when, in the service's zone, while the other shows only what it last knew;
+  - with the footer's longest status, "Shut down from here, retrying", the mega's name beside it shown whole, saved as `shots/foot-shut-down.png`;
   - both pages recovering when the service returns.
 
-- **`side.mjs`** (48 steps): the side panel and the rail. It checks the following:
+- **`side.mjs`** (57 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
   - projects sorted by name ignoring case, the id breaking a tie, and starred first in their own group;
   - project rows bolder than their conversations;
   - folds: a starred project unfolded and any other folded until the operator chooses; his choice kept across a reload and outlasting a star or an unstar; navigation by the needs-you list or Ctrl+/ unfolding without recording a choice; the old folded list carried over as folded choices; a removed project's choice forgotten; a folded project keeping its rollup mark;
@@ -174,7 +176,9 @@ Where things go:
   - a missing checkout's mark in the tree and on the rail, lifting when it is back;
   - project removal refused while a runtime lives and naming it, then deleting the project's logs;
   - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, with each harness's tested range and the version found (the fake Codex's inside its range, the stand-in Claude Code's unknown and said so, in the notice colour), and when the newest configuration snapshot was taken and where the snapshots are, with nothing of what one holds, the rail's control, and a page older than the service saying so where the connection status is, without reloading;
-  - every control in the panel and on the rail with a title and a label.
+  - every control in the panel and on the rail with a title and a label;
+  - the mega's name, `side-check`, as the config sets it: on `GET /api/version` with where it came from, in the tab title, in the footer beside the connection status, in the version panel, and in the rail's title;
+  - then, restarted with no name in the config, the machine's hostname in the same places. These steps compare it without printing it, and nothing is saved after them.
 
 Each suite also checks that the page raised no errors and fetched nothing off 127.0.0.1.
 
@@ -200,7 +204,7 @@ t.check(true, 'the reply is shown')
 await t.done()
 ```
 
-`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. `suite(name, { searchDirs })` names directories beyond the checkout for the `@` search, `path_search.directories`, `~` being the suite's scratch `HOME`. It returns the following:
+`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. `suite(name, { searchDirs })` names directories beyond the checkout for the `@` search, `path_search.directories`, `~` being the suite's scratch `HOME`. Every suite's mega is named `mega-check` in its config, or `{ megaName }`, so no machine's hostname lands in a screenshot or a step; `{ megaName: false }` leaves the name out, for a step about the default. It returns the following:
 
 - `check(ok, what)` records a step. `must(ok, what)` records one the suite cannot go past: a suite checks with it, before any Allow, that the request is exactly the one the fake raised, so nothing unexpected is approved. `until(what, pred, ms)` waits on a condition, checking every 50 ms, and fails saying what it waited for.
 - `api(method, path, body)`, `workspace()`, `projectOf(id)` and `convOf(id)` read and call the service.

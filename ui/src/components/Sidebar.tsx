@@ -222,6 +222,11 @@ export function Sidebar(props: SidebarProps) {
           label={down ? 'Shut down from here, retrying' : showNewer ? newerLabel : connectionLabel(knowledge, streamState)}
           waiting={waitingFor}
         />
+        {about?.name && (
+          <span className="mega-name" title={`This mega is ${about.name}`}>
+            {about.name}
+          </span>
+        )}
         {about && (
           <button type="button" className="version-label" title={aboutTitle(about)} aria-label={aboutTitle(about)} onClick={onAbout}>
             {about.version}
