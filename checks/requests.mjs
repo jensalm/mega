@@ -14,7 +14,13 @@
 // approval from the fake codex, with its server, tool and parameter and no
 // reason box, allowed for the session or denied; a typed form needing its
 // required field; Interrupt aborting a pending card, with a late answer
-// refused. it approves only where the approval itself is under test, and
+// refused. and pi, from the fake pi: its extension's gate docked as a question
+// from a pi extension, with Dismiss and no answer of one's own or allow for
+// the session, answered; Dismiss sending pi's cancel; an input and an editor
+// dialog; a dialog that expires; an interrupt that waits on a dialog until it
+// is dismissed; and a release with a dialog pending, whose dialog warns that
+// pi is ended, leaving the dialog never answered. it saves the pi dialog and
+// the release warning as shots/pi-{dialog,release-warning}.png. it approves only where the approval itself is under test, and
 // only once it has checked, as a step it cannot go past, that the request is
 // exactly the one the fake raised; where the decision is incidental, it
 // denies.
@@ -196,5 +202,113 @@ await until('its row says aborted', async () => (await rows(page, 'aborted').cou
 const late = await api('POST', `/api/conversations/${X}/answer`, { request_id: lateID, decision: 'deny' })
 check(late.status === 409 && late.body.code === 'not_pending', `Interrupt aborts the card, and a late answer is refused: ${late.status} ${late.body.code}`)
 await t.shot(page, 'requests')
+
+// pi: every dialog an extension raises is a question, docked as the others,
+// never an approval and never allowed for the session. each offers Dismiss,
+// pi's own cancel, sent only when it is pressed.
+const Pi = (await t.launch(P.id, 'pi', 'echo hello')).id
+await t.idle(Pi)
+await page.evaluate((id) => {
+  location.hash = `#/c/${id}`
+}, Pi)
+await until('the pi conversation', async () => (await reply(page, 'hello').count()) === 1)
+await prompt(Pi, 'ask')
+await docked.waitFor()
+const piCard = docked.first()
+must(
+  (await piCard.getAttribute('aria-label')) === 'Question' &&
+    (await piCard.locator('h2').textContent()) === 'Question from a pi extension' &&
+    (await piCard.textContent()).includes('Approve bash command: sleep 1'),
+  "the extension's gate is a question from a pi extension, never an approval",
+)
+const dismiss = piCard.getByRole('button', { name: /^Dismiss/ })
+check(
+  (await dismiss.count()) === 1 &&
+    (await dismiss.locator('.word').textContent()) === 'Dismiss' &&
+    (await piCard.getByPlaceholder('Or write your own answer').count()) === 0 &&
+    (await piCard.getByRole('button', { name: /for the session/ }).count()) === 0,
+  "it offers Dismiss, takes only pi's own choices, and has no allow for the session",
+)
+await piCard.screenshot({ path: `${t.dir}/shots/pi-dialog.png` })
+// the only Allow to a pi gate: the one the fake raised, checked above.
+await piCard.getByLabel('Allow').check()
+await piCard.getByRole('button', { name: 'Answer', exact: true }).click()
+await until('the gate answered', async () => (await reply(page, 'ran').count()) === 1 && (await docked.count()) === 0)
+check(true, 'answered, the gated command runs and the turn goes on')
+await t.idle(Pi)
+
+// Dismiss sends pi's cancel: the extension gets no answer.
+await prompt(Pi, 'choose')
+await docked.waitFor()
+await docked.first().getByRole('button', { name: /^Dismiss/ }).click()
+await until('the choice dismissed', async () => (await reply(page, 'dismissed').count()) === 1 && (await docked.count()) === 0)
+check(true, 'Dismiss reaches pi as its cancel')
+await t.idle(Pi)
+
+// an input dialog is a one-field form; an editor's is several lines,
+// prefilled.
+await prompt(Pi, 'input')
+await docked.waitFor()
+await docked.first().getByRole('textbox').fill('Ada')
+await docked.first().getByRole('button', { name: 'Answer', exact: true }).click()
+await until('the input answered', async () => (await reply(page, 'you typed: Ada').count()) === 1)
+await t.idle(Pi)
+await prompt(Pi, 'editor')
+await docked.waitFor()
+const editorBox = docked.first().locator('textarea')
+check((await editorBox.inputValue()) === 'line one\nline two', 'an editor dialog is several lines, prefilled as pi gave it')
+await editorBox.fill('line one\nline three')
+await docked.first().getByRole('button', { name: 'Answer', exact: true }).click()
+await until('the editor answered', async () => (await reply(page, 'line three').count()) === 1)
+check(true, 'input and editor answers reach pi as text')
+await t.idle(Pi)
+
+// a dialog with its own time limit expires when pi settles it, and says so.
+await prompt(Pi, 'timed')
+await docked.waitFor()
+await until('the dialog expired', async () => (await docked.count()) === 0 && (await reply(page, 'timed out').count()) === 1, 10000)
+const expired = rows(page, 'expired')
+await until('its row says expired', async () => (await expired.count()) === 1)
+t.say(`  the row: "${await expired.textContent()}"`)
+check((await expired.textContent()).includes('its time ran out before an answer'), 'the row says the dialog expired, in plain words')
+await t.idle(Pi)
+
+// an interrupt with a dialog pending waits on it, and says so; the turn ends
+// once the operator dismisses the dialog. mega answers it for nobody.
+await prompt(Pi, 'ask')
+await docked.waitFor()
+await page.getByRole('button', { name: 'Interrupt', exact: true }).click()
+const waiting = page.locator('.events p.system.waiting')
+await until('the interrupt waiting', async () => (await waiting.count()) === 1)
+t.say(`  the row: "${await waiting.textContent()}"`)
+check((await waiting.textContent()).startsWith("Interrupt waiting on a dialog: the interrupt waits on pi's dialog 'Approve bash command: sleep 1'"), 'the interrupt says it waits on the dialog, naming it')
+await new Promise((r) => setTimeout(r, 800))
+check((await docked.count()) === 1 && (await convOf(Pi)).turn_active, 'the dialog stays docked and the turn goes on until it is answered')
+await docked.first().getByRole('button', { name: /^Dismiss/ }).click()
+await until('the turn interrupted', async () => !(await convOf(Pi)).turn_active && (await docked.count()) === 0)
+check((await rows(page, 'Turn ended: interrupted').count()) === 1, 'dismissed, the interrupt goes through and the turn ends interrupted')
+
+// releasing with a dialog pending: the release dialog says pi is ended, and
+// the dialog is recorded as never answered.
+await prompt(Pi, 'ask')
+await docked.waitFor()
+await page.getByRole('button', { name: 'More', exact: true }).click()
+await page.getByRole('menuitem', { name: 'Release' }).click()
+const releaseDialog = page.locator('dialog[open]')
+await releaseDialog.waitFor()
+const warning = releaseDialog.locator('p.release-pi-dialog')
+check(
+  (await warning.count()) === 1 &&
+    (await warning.textContent()).includes('pi cannot be stopped politely while it waits, so releasing ends its process') &&
+    (await warning.textContent()).includes('the command the dialog gates does not run'),
+  'the release dialog warns that pi is ended and the gated command does not run',
+)
+await releaseDialog.screenshot({ path: `${t.dir}/shots/pi-release-warning.png` })
+await releaseDialog.getByRole('button', { name: 'Release', exact: true }).click()
+await until('pi ended', async () => (await convOf(Pi)).state === 'none', 30000)
+const never = rows(page, 'never answered')
+await until('its row says never answered', async () => (await never.count()) === 1)
+t.say(`  the row: "${await never.textContent()}"`)
+check((await reply(page, 'ran').count()) === 1, 'the gated command did not run')
 
 await t.done()

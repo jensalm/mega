@@ -9,9 +9,19 @@
 // words; removing a mark is removing its file and its icon line here.
 // iconMono: the file is a single dark colour, so the bar draws its shape in
 // the text colour, legible in either theme, rather than as it is.
-// iconScale: how much larger than the bar's icon to draw a mono file whose
-// mark sits inside clear space, so the mark itself fills the icon; the file
-// is not changed.
+// iconScale: how much larger than the bar's icon to draw a file whose mark
+// sits inside clear space, so the mark itself fills the icon; the file is
+// not changed. pi's three shapes span about 59% of their box.
+// permissionModes: the harness has permission modes the operator chooses
+// (claude); one without has no mode control at all.
+// listsMcp: the harness reports its MCP servers to mega, which the More menu
+// lists; one that does not has no MCP item.
+// loneEffort: the effort control is left out when the model takes one level
+// or none, rather than shown with nothing to choose (pi).
+// notice: what the launch dialog and the conversation say about how the
+// harness asks, where it differs from the others.
+// terminal: the command that continues a released session in a terminal,
+// followed by the session id.
 export interface Harness {
   value: string
   label: string
@@ -19,12 +29,30 @@ export interface Harness {
   icon?: string
   iconMono?: boolean
   iconScale?: number
+  permissionModes?: boolean
+  listsMcp?: boolean
+  loneEffort?: boolean
+  notice?: string
+  terminal?: string
 }
 
 export const harnesses: Harness[] = [
-  { value: 'claude', label: 'Claude Code', attachesMentions: true, icon: 'claude-code.svg' },
-  { value: 'codex', label: 'Codex', attachesMentions: false, icon: 'codex.svg', iconMono: true, iconScale: 2 },
+  { value: 'claude', label: 'Claude Code', attachesMentions: true, icon: 'claude-code.svg', permissionModes: true, listsMcp: true, terminal: 'claude --resume' },
+  { value: 'codex', label: 'Codex', attachesMentions: false, icon: 'codex.svg', iconMono: true, iconScale: 2, listsMcp: true, terminal: 'codex resume' },
+  {
+    value: 'pi',
+    label: 'pi',
+    attachesMentions: false,
+    icon: 'pi.svg',
+    iconScale: 1.6,
+    loneEffort: true,
+    notice:
+      'pi asks for nothing unless an extension asks: it runs its tools without asking, as it does in its own terminal. It runs its own MCP servers, which mega cannot list.',
+    terminal: 'pi --session',
+  },
 ]
+
+export const harnessOf = (value: string): Harness | undefined => harnesses.find((h) => h.value === value)
 
 export const harnessLabel = (value: string) => harnesses.find((h) => h.value === value)?.label ?? value
 

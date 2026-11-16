@@ -29,16 +29,19 @@ func (r Range) String() string { return fmt.Sprintf("%s to %s", r.Low, r.High) }
 // build, recorded in docs/research/harness-capabilities.md. extending it
 // means running that probe against the new build and recording what it
 // saw, then changing it here. claude code is with the shim's pinned agent
-// sdk; codex is installed whole, with its helper programs.
+// sdk; codex is installed whole, with its helper programs. pi's range is the
+// one build probed, 1.5.2 (probes/pi, capability report, 2026-11-16).
 var Tested = map[string]Range{
 	model.HarnessClaude: {Low: "2.1.318", High: "2.1.325"},
 	model.HarnessCodex:  {Low: "0.163.0", High: "0.169.0"},
+	model.HarnessPi:     {Low: "1.5.2", High: "1.5.2"},
 }
 
 // labels are the harnesses' names in a sentence.
 var labels = map[string]string{
 	model.HarnessClaude: "Claude Code",
 	model.HarnessCodex:  "Codex",
+	model.HarnessPi:     "pi",
 }
 
 // standings: where a version stands against its harness's tested range.

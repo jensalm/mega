@@ -80,7 +80,7 @@ An unreachable environment is not proof its agents stopped. Its projects stay in
 
 The first slice is built and in daily use, as of 2026-11-09: the environment service alone on `fortyfive`, serving its UI on localhost, with Claude and Codex at cold-handoff level, long-lived mode only, attention from native facts, and the roster surviving restarts. `docs/current/mega.md` describes it. Refinement now comes from use, in polish rounds, with workflow discoveries landing here before code.
 
-Not in it: pi, the briefing, suspension as an explicit operation, per-turn mode, Codex live attach, work groups, the central application and a second environment, containers, live model and effort changes beyond what adapters disclose cheaply. Each has a roadmap item under `docs/future/roadmap/`.
+Not in it: the briefing, suspension as an explicit operation, per-turn mode, Codex live attach, work groups, the central application and a second environment, containers, live model and effort changes beyond what adapters disclose cheaply. Each has a roadmap item under `docs/future/roadmap/`. pi was first on this list; Michael brought it in on 2026-11-13, for the install work, and it was built on 2026-11-16.
 
 ## Seam census
 

@@ -229,7 +229,9 @@ func (s *Service) applyFillLocked(conversationID string, filled model.TurnSettin
 // nothing to fill. callers hold s.mu.
 func (s *Service) fillChoicesLocked() {
 	for _, conv := range s.reg.Snapshot().Conversations {
-		lacks := conv.Model == "" || (conv.Harness == model.HarnessClaude && conv.PermissionMode == "") || (conv.Harness != model.HarnessClaude && conv.Effort == "")
+		// pi came after every request was concrete, and a pi model with no
+		// thinking levels takes no effort: only codex's can lack one.
+		lacks := conv.Model == "" || (conv.Harness == model.HarnessClaude && conv.PermissionMode == "") || (conv.Harness == model.HarnessCodex && conv.Effort == "")
 		if !lacks {
 			continue
 		}

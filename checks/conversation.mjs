@@ -26,7 +26,10 @@
 // mega" on its reply. and each turn's line: hidden at rest, shown on hover
 // and on focus with nothing moving, staying in the notice colour when the
 // fake reports another model than the one asked for, and none on turns
-// recorded before mega kept it. and the runtime-started line: unmarked, with
+// recorded before mega kept it. and a pi conversation: pi's own words about
+// how it asks under its header, its prompt, tool call and reply as the
+// others', the prompt's bookkeeping hidden, and its turn line with no mode.
+// and the runtime-started line: unmarked, with
 // no added words, for a version inside the tested range and for one newer,
 // the normal state; marked in the notice colour for one older, the range
 // after the version and the sentence in its title; and nothing refused. and the MCP servers: an item in the More menu with the
@@ -36,7 +39,8 @@
 // and nothing to change; a sign-in followed; never attention; nothing with no
 // runtime; for claude and for codex. it saves the centred conversation, light
 // and dark, with the panel open and collapsed, and the start lines,
-// shots/start-{tested,newer,older}.png.
+// shots/start-{tested,newer,older}.png, and the pi conversation,
+// shots/pi-conversation.png.
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendImported, appendNative, appendTurns } from './lib/gen.mjs'
@@ -569,6 +573,36 @@ await page.evaluate((id) => {
 }, P.id)
 await page.locator('article.detail').waitFor()
 check(centred(await column(page, 'article.detail')), 'the project page is centred in the pane')
+
+// a pi conversation: pi's own words under the header about how it asks, its
+// prompt, its tool call and reply in the history as the others', and each
+// turn's line saying what it ran with, with no permission mode. the prompt
+// pi records under its own identity is bookkeeping, shown only with the
+// native events. the extension's gate is blocked: allowing it is not what
+// this check is about, and a check allows only the approval it is about.
+const Pi = (await t.launch(P.id, 'pi', 'echo hello from pi', { name: 'pi' })).id
+await t.idle(Pi)
+await page.evaluate((id) => {
+  location.hash = `#/c/${id}`
+}, Pi)
+await until('the pi reply', async () => (await page.locator('.events .message.assistant', { hasText: 'hello from pi' }).count()) === 1)
+const piNote = await page.locator('.conversation .harness-notice').textContent()
+check(piNote.includes('pi asks for nothing unless an extension asks') && piNote.includes('which mega cannot list'), `the conversation says how pi asks, under its header: "${piNote}"`)
+const ask = await api('POST', `/api/conversations/${Pi}/prompt`, { text: 'ask' })
+check(ask.status === 202, 'a prompt to pi is accepted')
+await until('the gate', async () => (await convOf(Pi)).pending.length === 1)
+const gate = (await convOf(Pi)).pending[0]
+const gateTitle = gate.payload?.questions?.[0]?.question
+if (gate.kind !== 'question' || gateTitle !== 'Approve bash command: sleep 1') throw new Error(`stopped before answering: ${JSON.stringify(gate)}`)
+await api('POST', `/api/conversations/${Pi}/answer`, { request_id: gate.id, answers: { [gateTitle]: 'Block' } })
+await t.idle(Pi)
+await until('the tool row and reply', async () => (await page.locator('.events .message.assistant', { hasText: /^blocked$/ }).count()) === 1)
+const piTools = await page.locator('.events details.tool summary').allTextContents()
+check(piTools.some((tool) => tool.includes('bash sleep 1')), `the tool call is a row in the history: ${JSON.stringify(piTools)}`)
+check((await page.locator('.events .message.user', { hasText: /^ask$/ }).count()) === 1 && (await page.locator('.events', { hasText: 'user/recorded by pi' }).count()) === 0, 'the prompt shows once, and the record of pi\'s identity for it is hidden with the native events')
+const piLine = await page.locator('.events .turn-end:not(.pending) .turn-line').last().textContent()
+check(piLine === 'Ran Fake Large · medium', `each turn's line says what it ran with, and no mode: "${piLine}"`)
+await t.shot(page, 'pi-conversation')
 
 // dark: the centred conversation, with the panel open and collapsed.
 const dark = await t.page({ width: 1440, height: 900, colorScheme: 'dark' })

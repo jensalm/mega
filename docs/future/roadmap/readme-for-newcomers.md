@@ -32,3 +32,11 @@ What following today's README, top to bottom, left a newcomer to guess. The rehe
 - **The port.** There is no flag for it; only `listen:` in the config file changes it. The config example's `shim: /path/to/mega/shim/claude` is a placeholder that breaks Claude if the block is copied whole to change the port: "'claude' cannot run: claude shim: stat /path/to/mega/shim/claude/shim.mjs: no such file or directory". The example could show only what a newcomer would change, with the harness keys as optional overrides.
 - **The missing-harness paragraph is not true for Claude yet.** "the new-conversation dialog marks that harness as unable to run" holds for Codex and for `node`, not for Claude's executable, until `a-missing-claude-is-named` lands.
 - **What went well.** The clone and `make` worked first time in 22 s, with no warning and no vulnerability reported. A relative or missing checkout path, a non-loopback `listen`, and a missing `codex` each drew a refusal that says what is wrong.
+
+## which of those still hold, 2026-11-16
+
+Read against the README as committed at c751ef9.
+
+- **Fixed since.** The harness requirement is now a tested range per harness, and Claude Code is taken from `claude` on the `PATH`. A missing or pruned Claude Code is named on the page. `--listen` exists.
+- **Still true.** `mega` is not found after `make` unless the Go bin directory is on `PATH`. Nothing says how to install or log in to either harness, or that Claude's trust dialog is accepted once per checkout. The config example still carries the placeholder shim path. The binary is still stamped with its checkout, which must stay put.
+- **New since, and wanted here.** The first page now says what mega needs and what it found. Configuration snapshots exist. pi is arriving as a third harness, with the plain statement that it asks for nothing unless an extension does.

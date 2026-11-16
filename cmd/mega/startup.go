@@ -20,6 +20,7 @@ import (
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/claude"
 	"github.com/michaelquigley/mega/internal/harness/codex"
+	"github.com/michaelquigley/mega/internal/harness/pi"
 	"github.com/michaelquigley/mega/internal/registry"
 	"github.com/michaelquigley/mega/internal/server"
 	"github.com/michaelquigley/mega/internal/service"
@@ -107,6 +108,7 @@ func start(cfg *config.Config) (*instance, error) {
 		Harnesses: []harness.Harness{
 			claudeHarness,
 			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}),
+			pi.New(pi.Config{Binary: cfg.Pi.Binary, Where: cfg.Where()}),
 		},
 		Snapshots: snapshotStore(cfg),
 	})

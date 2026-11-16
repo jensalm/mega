@@ -24,3 +24,7 @@ What the SDK's licence allows for redistribution, which decides between installi
 ## not in this card
 
 Replacing the shim altogether, which waits for a Go SDK or a stable control protocol, as the spec's seam census records.
+
+## background
+
+Noted by the planning agent on 2026-11-16. Two things have moved since this was written. Building from source is acceptable for the first external operators, by Michael's decision of 2026-11-13, so this card left the path to the demo. And "a matching Claude Code" is now a tested range, with Claude Code found on the `PATH` and the versions shown in `mega version` and on the first page, which was this card's third bullet. What is left is the first two: the shim reaching a machine that did not build it, and the SDK installed beside it.

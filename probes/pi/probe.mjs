@@ -6,7 +6,7 @@
 // Usage:
 //   node probe.mjs run --cwd DIR --turns scenarios/x.json --log logs/x.jsonl \
 //        [--session-id UUID | --session PATH_OR_ID] [--approve-project] [--model M] \
-//        [--answer REGEX] [--answer-delay-ms N] [--interrupt-on-dialog] \
+//        [--expect 'TITLE_REGEX=>ANSWER|...'] [--answer-delay-ms N] [--interrupt-on-dialog] \
 //        [--stale-after-cancel] [--never-answer] [--interrupt-after-ms N] \
 //        [--kill-owner-after-ms N] [--timeout-ms N] [--turn-timeout-ms N]
 //        [--relay SOCK [--hold]]  owner mode: dialogs wait for a relay client's answer
@@ -98,7 +98,32 @@ const waitFor = (test, timeoutMs) => Promise.race([
 ]);
 
 // ---- extension UI dialog policy
-const answerRe = opt.answer ? new RegExp(opt.answer) : null;
+// --expect 'TITLE_REGEX=>ANSWER|TITLE_REGEX=>ANSWER': the only dialogs the
+// probe answers, each by its title, with an answer it must offer (a select's
+// option, or Yes or No for a confirm). any other dialog is left unanswered
+// and stops the run: the probe never answers what it was not told to
+// expect, and never picks an answer of its own.
+const expected = String(opt.expect === true ? '' : opt.expect ?? '')
+  .split('|')
+  .filter(Boolean)
+  .map((rule) => {
+    const [title, answer] = rule.split('=>');
+    return { title: new RegExp(title), answer };
+  });
+const expectedAnswer = (f) => {
+  const rule = expected.find((r) => r.title.test(f.title ?? ''));
+  if (!rule) return null;
+  if (f.method === 'confirm') return rule.answer === 'Yes' || rule.answer === 'No' ? { confirmed: rule.answer === 'Yes' } : null;
+  if (f.method === 'select') return (f.options ?? []).includes(rule.answer) ? { value: rule.answer } : null;
+  return { value: rule.answer };
+};
+const unexpected = async (f) => {
+  rec('unexpected_dialog', { dialogId: f.id, method: f.method, title: f.title, options: f.options });
+  say(`STOP: an unexpected dialog, left unanswered: ${f.method} ${JSON.stringify(f.title)} ${JSON.stringify(f.options ?? [])}`);
+  child.stdin.end();
+  setTimeout(() => child.kill('SIGTERM'), 3000);
+  setTimeout(() => child.kill('SIGTERM'), 6000);
+};
 const summary = { sessionId: null, sessionFile: null, model: null, dialogs: [], turns: [], events: {} };
 handlers.push(f => { if (f.type && f.type !== 'response') summary.events[f.type] = (summary.events[f.type] ?? 0) + 1; });
 handlers.push(async f => {
@@ -131,7 +156,9 @@ handlers.push(async f => {
     d.abortResponse = r; rec('abort_during_dialog', { dialogId: f.id, response: r });
     if (opt['stale-after-cancel']) {
       await new Promise(r => setTimeout(r, 1500));
-      const resp = f.method === 'confirm' ? { type: 'extension_ui_response', id: f.id, confirmed: true } : { type: 'extension_ui_response', id: f.id, value: (f.options ?? ['x'])[0] };
+      const late = expectedAnswer(f);
+      if (!late) { await unexpected(f); return; }
+      const resp = { type: 'extension_ui_response', id: f.id, ...late };
       await send(resp); d.stale = resp; rec('stale_dialog_response_sent', { dialogId: f.id });
       say('sent STALE dialog response after abort');
     }
@@ -139,10 +166,9 @@ handlers.push(async f => {
   }
   const delay = Number(opt['answer-delay-ms'] ?? 0);
   if (delay) await new Promise(r => setTimeout(r, delay));
-  let resp;
-  if (f.method === 'confirm') resp = { type: 'extension_ui_response', id: f.id, confirmed: true };
-  else if (f.method === 'select') { const pick = (answerRe && (f.options ?? []).find(o => answerRe.test(o))) ?? (f.options ?? [])[0]; resp = { type: 'extension_ui_response', id: f.id, value: pick }; }
-  else resp = { type: 'extension_ui_response', id: f.id, value: 'probe-text' };
+  const answer = expectedAnswer(f);
+  if (!answer) { await unexpected(f); return; }
+  const resp = { type: 'extension_ui_response', id: f.id, ...answer };
   d.answer = resp; d.answeredAt = ts();
   await send(resp); say(`answered ${f.method} with ${JSON.stringify(resp.value ?? resp.confirmed)}`);
 });

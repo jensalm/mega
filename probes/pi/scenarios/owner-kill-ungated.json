@@ -1,0 +1,1 @@
+["Using the bash tool, run exactly `timeout 30 tail -f /dev/null` and then reply OWNER-KILL-1. Nothing else."]

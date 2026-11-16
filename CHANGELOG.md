@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+FEATURE: **pi is the third harness.** (2026-11-16) Conversations on pi (`@earendil-works/pi-coding-agent`, tested with 1.5.2) are launched, prompted, answered, interrupted, released, resumed by their exact session, discovered and adopted, as Claude Code and Codex conversations are. pi runs as it does in its own terminal, which differs from the other two in ways the page says plainly.
+- **pi asks for nothing unless an extension asks.** It has no permission model and runs its tools without asking. The launch dialog and the conversation say so, and that it runs its own MCP servers, which mega cannot list.
+- **A pi conversation lacks what pi lacks.** It has no permission mode control and no MCP menu item, and no effort control where the model takes one thinking level or none.
+- **Its model and thinking level** come from pi's own settings, whatever provider they name, local or hosted, so a model pi is set up for works under mega unchanged.
+- **Every pi dialog is a question.** pi marks none of its extensions' dialogs as an approval, so none is shown as one or allowed for the session. Each has **Dismiss**, which sends pi's own cancel, as Escape does in its terminal, and only when you press it.
+- **mega never trusts a project for pi.** It never passes `--approve` and never writes pi's trust, so a project you have not trusted in pi's terminal runs without its extensions, and its conversations say so when they start.
+- **Releasing with a pi dialog waiting ends pi's process**, since the dialog holds pi open, and the command it gates does not run; the release dialog warns you first. An interrupt with a dialog waiting says which dialog it waits on. A dialog's row in the history now ends "expired" when its own time limit ran out, or "never answered" when a release ended pi with it waiting.
+- **Configuration snapshots** include pi's settings, models, MCP servers, extensions, skills, prompts and themes. Never its credentials, trust decisions, caches or sessions.
+- **`make e2e`** has pi round trips, run on pi's own default model and skipped when it does not answer.
+
 FEATURE: **mega keeps snapshots of each harness's configuration.** (2026-11-15) Claude Code and Codex update themselves and rewrite their own files, and nothing kept a copy from before. Now mega does, in its data directory under `snapshots/`, readable only by you, so a settings file an update rewrote or removed can be put back.
 - **What is copied:** your settings, instructions, rules, skills, agents, commands and prompts, the plugin lists, the version and migration markers, and `~/.claude.json`. It follows `CLAUDE_CONFIG_DIR` and `CODEX_HOME` from your shell. A credential, transcript, session, history, database or cache is never copied, nor anything the list does not name. A link stays a link and is never followed.
 - **When:** in the background at start-up when the configuration changed, and when a harness reports a new version, which is when a migration may just have run.

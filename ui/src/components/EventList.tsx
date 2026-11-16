@@ -25,6 +25,11 @@ const outcomeLabels: Record<string, string> = {
   answered: 'answered',
   aborted: 'aborted',
   lost: 'lost when the service restarted',
+  // a pi dialog whose own time limit ran out: pi settled it with no answer.
+  expired: 'expired: its time ran out before an answer, and pi went on without one',
+  // a pi dialog pending when its runtime was ended, as a release ends pi
+  // with a dialog waiting: the command it gated did not run.
+  unanswered: 'never answered: the runtime was ended while it waited, and what it gated did not run',
 }
 
 // EventList renders recorded history. requests appear here only as history;
@@ -173,6 +178,15 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
           return (
             <p key={event.seq} data-seq={event.seq} className="system">
               Request {event.text ?? 'filled in'}: {filled.join(' · ')}
+            </p>
+          )
+        }
+        if (event.status === 'waiting') {
+          // an interrupt pi cannot act on yet: its abort waits until the
+          // pending dialog is answered or dismissed. mega answers neither.
+          return (
+            <p key={event.seq} data-seq={event.seq} className="system waiting">
+              Interrupt waiting on a dialog{event.text && `: ${event.text}`}
             </p>
           )
         }

@@ -11,11 +11,20 @@
 //	MEGA_E2E_CODEX_FIXTURE   a git checkout whose AGENTS.md names the same
 //	                         marker token, with fixture.txt and the fixture MCP
 //	                         server in .codex/config.toml
+//	MEGA_E2E_PI_FIXTURE      a git checkout whose AGENTS.md names the same
+//	                         marker token, with fixture.txt and an extension in
+//	                         .pi/extensions that asks before any bash command
+//	                         containing "sleep" and gives the model an ask_user
+//	                         question. it must be trusted in pi's own terminal
+//	                         once (run pi in it and accept); mega never trusts
+//	                         a checkout for pi. the pi round trips run on pi's
+//	                         own default model, and skip when it does not
+//	                         answer
 //
 // `make e2e` also reads them from e2e.local.mk, an optional, git-ignored
 // file of make assignments beside the Makefile, and passes on only those set.
 //
-// MEGA_E2E_NODE, MEGA_E2E_CLAUDE, MEGA_E2E_CODEX and the *_MODEL variables
+// MEGA_E2E_NODE, MEGA_E2E_CLAUDE, MEGA_E2E_CODEX, MEGA_E2E_PI and the *_MODEL variables
 // override the executables and models used. Claude Code defaults to what mega
 // runs by default, config.DefaultClaudeExecutable, found as mega finds it.
 //

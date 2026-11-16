@@ -1,5 +1,5 @@
 building:
-  - harness-configuration-backups.md
+  - pi-adapter.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -20,13 +20,13 @@ horizon:
   - codex-live-attach.md
 researching:
   - an-external-operator-can-install-mega.md
-  - pi-adapter.md
   - the-version-shown-goes-stale-after-an-update.md
   - hotkey-for-allow.md
   - action-view-improvements.md
   - conversation-timestamps.md
   - path-search-beyond-the-checkout.md
   - agent-hand-off-turns.md
+  - remote-access-through-zrok.md
   - readme-for-newcomers.md
   - the-demo.md
   - clean-machine-rehearsal.md
@@ -38,6 +38,7 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - harness-configuration-backups.md
   - an-interrupted-turn-imports-no-response-requested.md
   - harness-version-tolerance.md
   - a-send-from-above-sometimes-stays-where-it-was.md

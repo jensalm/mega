@@ -13,6 +13,9 @@ interface ModelPickerProps {
   // short: the control bar's closed controls, which show short values; the
   // launch dialog has room for the full ones.
   short?: boolean
+  // loneEffort: leave the effort control out when the model takes one level
+  // or none, as for pi, rather than show it with nothing to choose.
+  loneEffort?: boolean
   onChange: (model: string, effort: string) => void
 }
 
@@ -22,8 +25,9 @@ interface ModelPickerProps {
 // longer offering it, or a full id the harness reported) is kept and shown
 // as it is. an effort the model takes but nobody has chosen shows as a
 // choice still to make.
-export function ModelPicker({ models, model, effort, disabled, unavailable = false, short = false, onChange }: ModelPickerProps) {
+export function ModelPicker({ models, model, effort, disabled, unavailable = false, short = false, loneEffort = false, onChange }: ModelPickerProps) {
   const efforts = effortsFor(models, model)
+  const effortOffered = !(loneEffort && models !== null && efforts.length <= 1 && (effort === '' || efforts.includes(effort)))
   const noEfforts = models !== null && efforts.length === 0
   const listed = models?.models.some((option) => option.id === model) ?? false
   const modelOptions = (
@@ -65,9 +69,11 @@ export function ModelPicker({ models, model, effort, disabled, unavailable = fal
         <ShortSelect label="Model" value={model} short={shortModel(models, model) || '…'} disabled={disabled} onChange={changeModel}>
           {modelOptions}
         </ShortSelect>
-        <ShortSelect label="Effort" value={effort} short={effort || (noEfforts ? 'none' : 'choose')} disabled={effortDisabled} onChange={changeEffort}>
-          {effortOptions}
-        </ShortSelect>
+        {effortOffered && (
+          <ShortSelect label="Effort" value={effort} short={effort || (noEfforts ? 'none' : 'choose')} disabled={effortDisabled} onChange={changeEffort}>
+            {effortOptions}
+          </ShortSelect>
+        )}
       </>
     )
   }
@@ -79,12 +85,14 @@ export function ModelPicker({ models, model, effort, disabled, unavailable = fal
           {modelOptions}
         </select>
       </label>
-      <label>
-        Effort
-        <select value={effort} disabled={effortDisabled} onChange={(event) => changeEffort(event.target.value)}>
-          {effortOptions}
-        </select>
-      </label>
+      {effortOffered && (
+        <label>
+          Effort
+          <select value={effort} disabled={effortDisabled} onChange={(event) => changeEffort(event.target.value)}>
+            {effortOptions}
+          </select>
+        </label>
+      )}
     </>
   )
 }

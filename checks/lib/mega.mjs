@@ -141,6 +141,8 @@ export async function suite(name, { bare = false } = {}) {
         '  executable: /bin/false',
         'codex:',
         `  binary: ${join(repo, 'internal/harness/codex/fake/codex')}`,
+        'pi:',
+        `  binary: ${join(repo, 'internal/harness/pi/fake/pi')}`,
         'environment:',
         '  shell: /bin/bash',
         '',

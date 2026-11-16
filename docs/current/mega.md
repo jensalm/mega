@@ -4,7 +4,7 @@ build your constellation.
 
 The words used here and across the cards are fixed in `docs/current/glossary.md`.
 
-This describes what exists now: the whole first slice, whose work order was retired when its last stage gated (git history holds it; the spec is `docs/future/mega.md`). That is the environment service with projects; Claude Code and Codex conversations launched, prompted, answered, interrupted, released for a terminal, and resumed; native sessions discovered and adopted; and attention, with a needs-you list, reading positions, and a next-waiting shortcut. Polish since then: conversations can be removed, and a conversation opens at its latest activity.
+This describes what exists now: the whole first slice, whose work order was retired when its last stage gated (git history holds it; the spec is `docs/future/mega.md`). That is the environment service with projects; Claude Code, Codex and pi conversations launched, prompted, answered, interrupted, released for a terminal, and resumed; native sessions discovered and adopted; and attention, with a needs-you list, reading positions, and a next-waiting shortcut. Polish since then: conversations can be removed, and a conversation opens at its latest activity.
 
 ## Shape of the code
 
@@ -22,6 +22,9 @@ internal/harness/        the Harness, Runtime and Sink interfaces, and a fake fo
 internal/harness/claude/ the shim process, its protocol, mapping, history, discovery, trust
 internal/harness/codex/  the app-server child, JSON-RPC, mapping, questions, MCP elicitations, history,
                          discovery, and a fake app-server for browser checks
+internal/harness/pi/     the `pi --mode rpc` child, JSONL, mapping, extension dialogs, session files,
+                         history, discovery, the trust notice, and a fake pi for tests and checks
+internal/snapshot/       the configuration snapshot store
 internal/service/        the single authority: registry, logs, runtimes, pending sets, attention
 internal/server/         the HTTP API, the stream, the embedded UI
 shim/claude/             the Node shim, its pinned SDK, its test, and a fake shim for browser checks
@@ -50,6 +53,7 @@ Dependencies point inward. `server` depends on `service`; `service` on `harness`
 | Claude shim | `shim/claude` in the checkout `make` ran in | `claude.shim` |
 | Claude Code | `claude` on the project's `PATH`, else the newest native build in `~/.local/share/claude/versions/` | `claude.executable`, a native build (a script is refused); a path is checked before anything runs |
 | Codex | `codex` on the project's `PATH`, installed whole | `codex.binary`; a path is checked before anything runs |
+| pi | `pi` on the project's `PATH`, with the `node` its `#!/usr/bin/env node` line names | `pi.binary`; a path is checked before anything runs |
 | Shell for project environments | the absolute path `SHELL` names, else `/bin/sh` | `environment.shell` (absolute) |
 | Resolution timeout | `10s` | `environment.timeout`, a Go duration |
 | Configuration snapshots kept | 10 ordinary, 20 taken at a version change | `snapshots.keep` (0 takes none) and `snapshots.keep_at_version` |
@@ -63,6 +67,8 @@ claude:
   executable: claude
 codex:
   binary: codex
+pi:
+  binary: pi
 environment:
   shell: /bin/bash
   timeout: 10s
@@ -137,6 +143,8 @@ mega keeps dated copies of each harness's configuration under the data directory
 - **What is copied.** Each adapter owns an include list (`harness.Configurer`), so another harness adds its own. A file the list does not name is never copied, so whatever a new harness version adds stays out until someone decides.
   - **Claude Code,** in `CLAUDE_CONFIG_DIR`, else `~/.claude`: `settings.json`, `CLAUDE.md`, `keybindings.json`, `skills/` without `skills/synced/`, `agents/`, `commands/`, `output-styles/`, and `plugins/installed_plugins.json`, `known_marketplaces.json` and `blocklist.json`. Also `.claude.json`, in `CLAUDE_CONFIG_DIR` when that is set, else in the home directory.
   - **Codex,** in `CODEX_HOME`, else `~/.codex`: `config.toml` and the `*.config.toml` beside it, `AGENTS.md`, `rules/`, `skills/` without `skills/.system/`, `prompts/`, `version.json`, `.sandbox_migration` and `.personality_migration`.
+  - **pi,** in `PI_CODING_AGENT_DIR`, else `~/.pi/agent`: `settings.json`, `models.json`, `mcp.json`, `keybindings.json`, `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `SYSTEM.md`, `APPEND_SYSTEM.md`, and `extensions/`, `skills/`, `prompts/` and `themes/`. Never `auth.json` or `mcp-auth.json` (credentials), `trust.json` (trust decisions), `models-store.json`, the MCP cache, onboarding and log files, `npm/`, `bin/`, `tools/`, `tmp/` or `sessions/` (capability report, 2026-11-16).
+  - **A secret inside a configuration file is copied with it.** A file on a list is configuration, and copied whole, even when it holds a secret: an `env` block in a settings file, an MCP server's `env` in `mcp.json`, or an API key for a custom provider in pi's `models.json`, which Michael's holds. A snapshot is a private copy beside the original and is treated as one (Michael, 2026-11-16).
   - **Never:** a credential or token file, a transcript, a session store, a history, a database or a cache. The skills a harness syncs or bundles itself (Claude's `skills/synced/`, Codex's `skills/.system/`) are the harness's to restore (Michael, 2026-11-15). A file over 16 MB in an included tree is recorded as skipped.
 - **Where the configuration is.** `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `HOME` are read from the operator's shell environment, as the start-up check of the harnesses resolves it.
 - **The store.** `snapshots/` and each snapshot in it are `0700`.
@@ -254,7 +262,7 @@ The needs-you order lists every conversation in `request` or `unread`, requests 
 
 ## Discovery and adoption
 
-Discovery lists the native sessions stored for a project's checkout that no conversation holds yet: Claude through the shim's `list` (the SDK's `listSessions`), Codex through `thread/list` on a short-lived app-server. Each session's `preview` is the harness's own (usually the first prompt) and is passed on whole; the adopt dialog shows its first three lines. It never chooses one. Adoption binds the session the operator picked, which must be one discovery lists, to a new conversation, imports its history as `native`-origin events between `resuming` and `resumed` runtime events, and starts no runtime; the first prompt resumes the session by its id. Close any terminal that holds the session first; an idle terminal is still a writer.
+Discovery lists the native sessions stored for a project's checkout that no conversation holds yet: Claude through the shim's `list` (the SDK's `listSessions`), Codex through `thread/list` on a short-lived app-server, and pi by scanning its session folder for the checkout, since its protocol lists none. Each session's `preview` is the harness's own (usually the first prompt) and is passed on whole; the adopt dialog shows its first three lines. It never chooses one. Adoption binds the session the operator picked, which must be one discovery lists, to a new conversation, imports its history as `native`-origin events between `resuming` and `resumed` runtime events, and starts no runtime; the first prompt resumes the session by its id. Close any terminal that holds the session first; an idle terminal is still a writer.
 
 ## The Codex adapter
 
@@ -331,6 +339,50 @@ Each `system/background_tasks_changed` (Claude sends one on every change, a whol
   - **An API error** arrives live with its `error`, such as `authentication_failed`.
   - **On import,** the SDK's history reader drops both fields. So the shim's `messages` reads the session's transcript as well: `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/<the checkout's path, every other character a dash>/<session>.jsonl`, or any project folder holding that session. It passes each `<synthetic>` message's `isApiErrorMessage`, and `error` if any, on by uuid. This reads Claude's own storage format, as the trust check reads `~/.claude.json`.
   - **The mapping.** A `<synthetic>` message whose `isApiErrorMessage` is present and false, with no `error`, is bookkeeping: a `native` event, "assistant/synthetic", keeping its identity, so it is never output and never attention. Anything else written by no model stays an `assistant` event: an API error, live or read back, and a message whose transcript could not be read. Unknown is shown, never hidden. `isQueuedCommand` alone stays a `user` event: a prompt typed ahead while a turn ran. History recorded before this rule is not rewritten. A backgrounded tool keeps the CLI alive after `close` until it finishes, so release has no deadline and shows `stopping` until the exit. `run` starts or resumes a session in the mode the service passes, and with default setting sources, so every approval the mode asks for reaches the operator and the checkout's instructions, hooks and permission rules load as in a terminal. `set_permission_mode` calls the SDK's `setPermissionMode` and reports the result; `set_model` calls `setModel` and `set_effort` calls `applyFlagSettings({effortLevel})`, each replying with the result. The shim chooses no mode, model or effort itself. Each request waits for the service's answer, and the shim confirms every answer as accepted or rejected, so an answer that lost a race with an abort is reported `not_pending` rather than as answered. A request becomes answerable only once its event is recorded. On `close` it waits for an interrupt in flight before ending input, because ending input with a request pending keeps Claude alive for minutes. `messages` wraps `getSessionMessages` and `list` wraps `listSessions`. The service runs the shim in its own process group, so a terminal interrupt aimed at the service does not cut short the orderly release.
+
+## The pi adapter
+
+pi (`@earendil-works/pi-coding-agent`) runs as one private `pi --mode rpc` child per runtime, speaking JSONL on stdio in its own process group, split on LF only, as pi's framing requires (pi 1.5.2, `docs/rpc.md`). `internal/harness/pi` holds everything protocol-shaped. The capability report's pi section and its follow-up of 2026-11-16 are the evidence.
+
+- **What pi changes about mega's promises.** pi has no permission model. It runs its tools without asking unless an extension asks, and under mega that stays exactly so. The launch dialog and the conversation say it in plain words: "pi asks for nothing unless an extension asks: it runs its tools without asking, as it does in its own terminal. It runs its own MCP servers, which mega cannot list."
+  - **No trust from mega.** mega never passes `--approve` and never writes pi's `trust.json`. A checkout with project resources (a `.pi/` settings, MCP file, extensions, skills, prompts, themes or system prompt, or `.agents/skills`) that pi's saved decisions do not trust runs without them. The runtime's start then says so, from reading `trust.json` and `defaultProjectTrust` in pi's settings, writing neither.
+  - **No lock.** pi has none, so mega's one-writer rule is the only protection. Nothing in the interface suggests mega can tell a terminal is open on a session; the release dialog says that both would write to the file.
+- **Launch.** A new session is `--session-id <uuid mega mints>`. A resume is `--session <file>`, found by scanning pi's session folders, since a bare id that matches only another checkout's session makes pi ask `[y/N]` on stdin before RPC starts. Each passes `--model provider/id` and, for a model that takes one, `--thinking <level>`. `get_state` must name the session asked for, and the start's facts carry the model, the thinking level, no permission mode, and the version from the pre-launch read, since RPC reports none.
+- **Models and the request.** A short-lived `pi --mode rpc --no-session --no-mcp` answers the list and the copy, so nothing is written to a session file.
+  - **The list** is `get_available_models`, the models whose provider has credentials, each named `provider/id`. A model with reasoning lists the thinking levels `set_model` then `get_available_thinking_levels` give. pi writes none of its settings for `set_model` over RPC, which leaves `settings.json` as it was.
+  - **The copy** is what `get_state` reports before any change: pi's own `defaultProvider`, `defaultModel` and `defaultThinkingLevel`, as pi resolves them. A level the model does not take is clamped, and a model without reasoning takes no effort, so Michael's `ollama/qwen3.8-27b` copies none.
+  - **A change** is `set_model` and `set_thinking_level`, reported as `model_changed` from `get_state`.
+- **A turn.** A `prompt` answered `started` opens it, and one sent while a run is active goes as a `followUp`, as one typed ahead does; `handled` (an extension command) ends it at once. Events map as follows:
+  - `message_end` messages map to `assistant`, `tool_use` and `tool_result` events, and `text_delta` to the live deltas;
+  - `agent_settled` ends the turn: `success`, `interrupted` when aborted, or `error` with the failed response's message;
+  - `system` messages, which pi writes before a user message, yield nothing;
+  - thinking blocks, notifications, retries, compactions and extension errors are native events.
+- **Identity.** A message's native id is its session entry's id, which pi writes to the file, and an assistant block's adds `/<index>`.
+  - **Live,** pi's events carry no entry id. So the adapter handles what pi sends, in order, on one goroutine, and for each message asks `get_entries` for the entries after a cursor: the first message entry with the message's role, timestamp and call is its own. pi writes each message unchanged.
+  - **The cursor** moves past each match, so two messages of one role written in the same millisecond keep their own entries. A message reported a moment before its entry is recorded is asked about again for up to two seconds.
+  - **A resumed session's** existing entries are behind the cursor from the start.
+  - **On import,** the file's entry ids are used directly.
+  - **Once pi can no longer be asked,** its input closed for a release or the process gone, the session file is read with the same cursor, since it holds the same entries. A message whose entry is not found within the wait is not recorded yet. It and every message after it wait, in pi's order, and are looked for again as the run settles or pi exits. One still unfound is recorded with no identity, so its output is shown and counted as unread, and the turn (or the exit) ends in error, saying a later import of the session may bring it in again; mega never records a message under an identity an import would not share.
+  - **A dialog's timeout** runs from when the dialog arrived, not from when the queue reached it: its record is settled `expired` at pi's own deadline, and an answer after it is refused as not pending.
+  - **The prompt.** pi's `prompt` takes no client id, so the service's uuid cannot reach the file. When pi reports the user message it recorded, the adapter records a native event, "user/recorded by pi", under pi's id, and an import passes over the prompt.
+- **Dialogs.** Every `extension_ui_request` dialog is a question, never an approval, with no allow for the session:
+  - **The kinds:** `select` is a question with its options and no answer of one's own; `confirm` is Yes or No; `input` is a one-field form; `editor` is the same field over several lines, prefilled.
+  - **Dismiss.** Each offers it (`"dismiss": true`): pi's own cancel, which the extension sees as no answer, as Escape does in pi's terminal. It is sent only when the operator presses it; the service accepts `dismiss` only where the payload offers it.
+  - **A timeout.** A dialog with one is settled by pi on its own, sending nothing, so the adapter settles its record as `expired` when the time runs out.
+- **Interrupt** sends `abort` without waiting: pi answers it only once the run is idle, and a pending dialog holds the run until it is answered or dismissed (R2). With a dialog pending, the history records a runtime event, `waiting`, naming it: "Interrupt waiting on a dialog: the interrupt waits on pi's dialog '…': pi stops once it is answered or dismissed". mega answers it for nobody. An extension that passed its dialog pi's abort signal lets the interrupt cancel it. The run then settles aborted, and a dialog still pending when a run settles aborted or failed is settled as `aborted`, with nothing sent to pi, so no later answer is taken for one pi no longer reads.
+- **Release always works** (Michael, 2026-11-16).
+  - **How.** Close closes pi's input. A pending dialog holds pi through that and a first SIGTERM (pi 1.5.2), so a pi still running is ended in steps: a SIGTERM 3 s after the close with a dialog pending (30 s without), a second SIGTERM 3 s later, which pi takes at once, then SIGKILL to the process group 3 s after that.
+  - **The dialog** still pending is recorded as `unanswered`, and the command it gated does not run. The exit says mega ended the process, and anything left in the process group is named, as for Codex.
+  - **Where.** mega's own exit takes the same path. The shutdown gate still waits while a request is pending.
+  - **The warning.** Before the operator confirms, the release dialog says it: a pi dialog is waiting, pi cannot be stopped politely while it waits, releasing ends its process, and the command the dialog gates does not run.
+- **History and discovery.** A session file is read directly: its conversation is the chain from the file's last entry back by `parentId`, as pi reopens it, so a file two writers branched follows the last writer. Discovery scans the checkout's folder in `PI_CODING_AGENT_SESSION_DIR`, else `sessions/` in pi's agent directory, named from the checkout's path, with each session's first prompt as its preview. pi's `sessionDir` setting is not read.
+- **What pi lacks is absent, not pretended.**
+  - **No permission mode:** a pi conversation has no mode control.
+  - **No MCP list:** pi runs its own MCP servers and reports them only as free text answering `/mcp`, so the More menu has no MCP item.
+  - **No background jobs.**
+  - **`@path`** is not attached over RPC, so mentions are inserted as bare paths, as for Codex.
+  - **A lone effort:** where the model takes one thinking level or none, there is no effort control.
+- **The version** is `pi --version`, the bare version. pi's tested range is the one build probed, 1.5.2.
 
 ## HTTP surface
 
@@ -478,7 +530,7 @@ At start-up, in the background, the service resolves the operator's shell in the
 
 ### Harness versions and the tested ranges
 
-A harness's **tested range** is the builds, lowest to highest, whose every call mega makes was seen to work: Claude Code 2.1.318 to 2.1.325, with the shim's pinned Agent SDK 0.3.318, and Codex 0.163.0 to 0.169.0, installed whole (capability report, follow-up of 2026-11-14). They live in one place, `harness.Tested` in `internal/harness/versions.go`.
+A harness's **tested range** is the builds, lowest to highest, whose every call mega makes was seen to work: Claude Code 2.1.318 to 2.1.325, with the shim's pinned Agent SDK 0.3.318, Codex 0.163.0 to 0.169.0, installed whole (capability report, follow-up of 2026-11-14), and pi 1.5.2 (follow-up of 2026-11-16). They live in one place, `harness.Tested` in `internal/harness/versions.go`.
 - **Reading a version.** mega runs the harness's own `--version`, as it would run the harness: Claude Code's executable, with `DISABLE_AUTOUPDATER=1` for that call, and Codex through the interpreters its wrapper names. It takes the first `x.y.z` from output that names the harness, "2.1.325 (Claude Code)" or "codex-cli 0.169.0", so another program at the configured path is not read as the harness. The call runs in its own process group and is killed with its children after two seconds (`harness.VersionTimeout`); every build seen answers in about 10 ms.
 - **When.** At the start-up check of the harnesses, by `mega version`, and before each launch, in the project's environment. A version that cannot be read is `unknown`, and the launch goes on.
 - **Standing.** `tested` inside the range, `newer` above it, `older` below it, `unknown` unread. Nothing is refused for its version.
@@ -576,6 +628,24 @@ The input panel is the conversation's control cluster, pinned to the foot of the
   - **The request controls** show short values, each capped at 140px, so the bar stays one row at 1280px. A longer value shows truncated, and in full in its list.
   - **The menu** holds the MCP servers' item, Release, Resume when it applies, Name and label, Remove from workspace, and the native events toggle. It takes focus when it opens, and closes on Escape, on a choice, or on a press outside it.
 - **Release** opens a confirmation instead of releasing at once. When background jobs are running it names them and says what release does with them. Claude waits for them before it stops, and takes one more turn on its own when they finish, so the release lasts until then. Codex is not asked to wait, and any still running when it exits are reported. It says the runtime stops and the session is freed, and that a turn in flight is interrupted first. It shows the exact `cd <checkout> && claude --resume <id>` or `codex resume <id>` command with a copy control, and the rule: close the terminal before resuming or prompting here again, since an idle terminal still holds the session. The handoff paragraph that used to sit on the page is gone. Name and label, and Remove, open their own dialogs. A dialog hands focus back to what opened it when it closes.
+- **pi on the page.** pi's own mark is on the bar, from its published logo (`ui/src/harness-icons/SOURCES.md`). The harness table (`ui/src/harnesses.ts`) says what each harness has, so what pi lacks is absent:
+  - no permission mode control;
+  - no MCP item in More, and no mark on More;
+  - no effort control where the model takes one thinking level or none.
+
+  Beyond that:
+  - **pi's note.** The launch dialog, below the harness, and the conversation, under its header, say: "pi asks for nothing unless an extension asks: it runs its tools without asking, as it does in its own terminal. It runs its own MCP servers, which mega cannot list." It is a fact, in the muted tone, not a notice.
+  - **A docked pi dialog** is headed "Question from a pi extension". A select takes only pi's own options, with no answer of one's own, and an editor's field is several lines. Every pi dialog has **Dismiss** beside Answer, which sends pi's cancel and only when pressed.
+  - **The release dialog,** with a pi dialog pending, warns in the notice colour: "A pi dialog is waiting for your answer. pi cannot be stopped politely while it waits, so releasing ends its process, and the command the dialog gates does not run. The dialog is recorded as never answered."
+  - **Its terminal advice** for pi says that pi has no lock, so a terminal still open on the session and mega would both write to its file, and that mega cannot tell one is open. The command it offers is `pi --session <id>` in the checkout.
+- **Request endings in the history.** A request's one-line row ends:
+  - "answered";
+  - "aborted";
+  - "lost when the service restarted";
+  - for pi, "expired: its time ran out before an answer, and pi went on without one";
+  - for pi, "never answered: the runtime was ended while it waited, and what it gated did not run".
+
+  An interrupt pi cannot act on yet is a row of its own: "Interrupt waiting on a dialog: the interrupt waits on pi's dialog '…': pi stops once it is answered or dismissed".
 
 Directly above the reply box, an activity line says what the conversation is doing now, and is absent when nothing is:
 - with a turn in flight, a spinner, what is happening, and how long the turn has run (`8s`, `1m 12s`, `1h 12m`): `Writing` while text streams; `Working · Bash go test ./...`, the summary of the newest tool call of the turn without a result; otherwise `Working`;
@@ -657,7 +727,7 @@ The UI re-reads the workspace whenever the stream connects or reports a change. 
 The page distinguishes three states of its own knowledge, and shows an empty workspace ("No projects yet.", "Nothing waiting.", and the first page) only when a successful read returned one.
 
 The first page, with no project registered:
-- **Where to begin.** "mega runs Claude Code and Codex conversations in the checkouts you register. To begin, press **Register a project**, the folder button at the top of the side panel, and give it a checkout's absolute path."
+- **Where to begin.** "mega runs Claude Code, Codex and pi conversations in the checkouts you register. To begin, press **Register a project**, the folder button at the top of the side panel, and give it a checkout's absolute path."
 - **What mega needs.** One short line per harness, from the workspace read's `harnesses`: the build, where it was found and the range in plain words, "Claude Code can run: version 2.1.330, at '…/versions/2.1.330', newer than the 2.1.318 to 2.1.325 mega was tested with." (or "within the" range), or "Codex cannot run: 'codex' was not found on your shell's PATH", the missing ones on the notice tone. Where it was found is the harness's own program (`path`); node and the shim are the start-up log's to name. A found harness older than its range, or whose version could not be read, says "can run: at '…'." with the sentence for it, on the notice tone too. Until the start-up check has run, it says it is looking for them.
 - **Where it looked.** It says the harnesses are looked for in the shell's environment as a project with no activation of its own gets it, and that a project's page says what its own environment is missing.
 - **Words on the controls.** While there is no project, Register carries the word "Register" beside its icon. While the workspace has no conversation, a project's New conversation carries "New conversation".
@@ -704,6 +774,15 @@ PNG renderings of both states, for the daemon's tray and desktop integration, ar
 
 The fake shim speaks the same frames as the shim, acts on the text of each prompt (`burst`, `drip`, `ask`, `askq`, an `AskUserQuestion` question with two choices, `echo`, `stream`, `tool`, a Bash call that runs for a while before its result, `ask2`, two permission requests at once, `hold`, a turn that starts and says nothing until it is interrupted, `output N`, a Bash call whose result is N lines, and `background N MS`, N backgrounded Bash calls, job i finishing after i×MS with the frames Claude sends and a woken turn, and `busy`, a sentence, three tool calls, a reply with a code block, then a permission request), and records its sessions in the directory it runs in; its header says how to set one up. For Codex, `internal/harness/codex/fake/codex` stands in for `codex app-server` when a scratch service's `codex.binary` points at it. It speaks the subset of the app-server protocol the adapter uses, with the frames codex-cli 0.166.0 sends, and acts on the turn's text: `mcp TEXT` raises an MCP tool approval, `form` a typed form, `background MS` a command left running as a terminal session that completes MS after its turn, and anything else replies `ok`. It lists two models and a hidden one, names `fake-large` at `medium` in `config/read`, and reports a turn's model or effort override with `thread/settings/updated`. The fake shim lists `default`, `fake-opus`, `fake-sonnet` and an effortless `fake-haiku`, reports the resolved model in `system/init`, and answers `set_model` (refusing an id it does not offer) and `set_effort`. Its `fallback MODEL` turn reports MODEL in that turn's `system/init` in place of the model requested, as Claude falling back to another model would, so a turn's line can be seen to name both. Run with `--idle`, it sends no `system/init` until the first prompt and reports `ready` instead, as the shim does. It reports the Claude Code version a file named `claude-version` in its directory holds, else `fake`, so a check can start a runtime inside or outside the tested range. The fake Codex is laid out as a whole package, with `codex-package.json` and a `codex-code-mode-host` beside it, and answers `--version` with the manifest's version, 0.166.0. `internal/harness/claude/fakebuild` stands in for a native Claude Code build: built into a versions folder, it answers `--version` with the version its file is named for, and nothing else.
 
+The fake pi, `internal/harness/pi/fake/pi`, stands in for `pi --mode rpc` when a scratch service's `pi.binary` points at it, and the pi adapter's Go tests run it through node. It speaks the subset of pi's JSONL RPC the adapter uses, with the records pi 1.5.2 sends, writes session files as pi does, and acts on a prompt's text:
+- `ask` is a bash call gated by an extension's select;
+- `choose`, `confirm`, `input` and `editor` are the other dialogs;
+- `timed` is a select that expires;
+- `hold` is a call that runs until it is aborted;
+- `fail` is a failed response, `notify` a notification, and `echo TEXT` a reply.
+
+Like pi 1.5.2, a pending dialog holds an abort until it is answered or dismissed, and holds the process through its input closing and a first SIGTERM. It offers `fake/large`, which takes thinking levels, and `fake/small`, which takes none. The browser checks' scratch services name it in `pi.binary`, since node's directory, where a real pi may live, is on their `PATH`.
+
 Both fakes report MCP servers, shaped as each harness shapes them (capability report, 2026-11-12):
 - **The fake shim** answers `mcp_status` with three servers. `fixture` is `pending` at the first ask and `connected` after, with two tools by name and no description, as Claude gives none. `notes` is a claude.ai connector that is `needs-auth` until a turn whose prompt starts `mcp-sign-in`. `broken` has `failed` with an error. Its `system/init` lists the three with their statuses.
 - **The fake Codex** announces each server's startup with `mcpServer/startupStatus/updated` on `thread/start` and `thread/resume`. It answers `mcpServerStatus/list`, for the thread's own id only, with three servers: `fixture`, connected, with two described tools; `docs`, `authenticationRequired` until an `mcp-sign-in` turn; and `broken`, failed with a `toolsError`.
@@ -714,5 +793,6 @@ The adapters' MCP tests use recorded answers: the Claude adapter's from the spik
 
 - Claude, against `claude-rt1`: an interrupted turn, with its approval pending and never answered, then a release, a prompt in a resumed run (which is when Claude writes "No response requested." to its transcript), a release and a resume. That import must bring in that message as a native event, no reply, and no unread output. The model list through an idle session, and a marker turn launched with `sonnet` at `low` whose `system/init` must report the resolved model. Then a marker turn, a question, a delayed approval, release, an import that must add nothing, and a resumed turn that recites every marker. Then, separately, a conversation launched in auto mode whose `sleep` turn, held back by the fixture's `ask` rule, must still arrive as a request raised in auto mode and wait for an answer. And a conversation launched in `default` that is switched to `auto` mid-turn, while its `sleep` approval is pending: Claude must confirm, the live mode must follow from that report, the request must survive and be answerable, and the next turn's `system/init` must report the same mode.
 - Codex, against `codex-rt1`: discovery and history with no model turn; the model list and what a new conversation copies from the config, and a marker turn launched with `gpt-6-luna` at `low`, which Codex must report as running, with exactly one `model_changed` event as the turn starts; then a marker turn, a delayed approval for a write outside the checkout, the async question steered into its turn, a clean release, an import that must add nothing, and a resumed turn; and a release during a running command, which must report what the sandbox left running. Then a turn that calls the fixture's MCP `echo` tool (`mcp/fixture-server.mjs`, named in the fixture's `.codex/config.toml`): the approval must arrive as a permission card for `fixture/echo` with its parameter, the tool must not run while the card waits (the server logs each call to `mcp/mcp-calls.log`), and it must run after Allow. The discovery test reads the fixture's newest thread and expects a user and an assistant message in it, so a probe that leaves an interrupted thread newest in `codex-rt1` makes it fail until a complete one is newer.
+- pi, against `pi-rt1`, on pi's own default model (Michael's is `ollama/qwen3.8-27b` on eleven), skipping with a plain message when it does not answer, and asserting on markers and protocol events, never on phrasing. A conversation copies pi's own model and thinking level, then runs a marker turn, the extension's `ask_user` question answered, its gate on `sleep 3` holding the turn and then allowed, a release, an import that must add nothing, and an exact-id resume that recites every marker. An interrupt with the gate pending records what it waits on and ends only once the dialog is dismissed. A release with the gate pending ends pi's process: no process names the session afterwards, the gated `touch` never ran, the dialog is recorded never answered, and the session resumes by its exact id. A fresh workspace discovers the fixture's sessions and adopts the newest. The fixture must be trusted in pi's own terminal once; mega never trusts it.
 
 Each Claude run costs a few model turns, and the Codex runs together about five.

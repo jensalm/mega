@@ -35,7 +35,7 @@ export function FirstRun({ status }: { status: HarnessStatus[] | undefined }) {
   return (
     <div className="first-run">
       <p>
-        mega runs Claude Code and Codex conversations in the checkouts you register. To begin, press <strong>Register a project</strong>,
+        mega runs Claude Code, Codex and pi conversations in the checkouts you register. To begin, press <strong>Register a project</strong>,
         the folder button at the top of the side panel, and give it a checkout&apos;s absolute path.
       </p>
       <h2>What mega needs</h2>

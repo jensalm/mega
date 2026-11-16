@@ -408,4 +408,9 @@ const (
 	// only for a request whose payload offers it ("allow_session": true); the
 	// service checks that before any harness sees it.
 	DecisionAllowSession = "allow_session"
+	// DecisionDismiss dismisses a question without answering it, as Escape
+	// does in the harness's own terminal: pi's own cancel. it is valid only
+	// for a request whose payload offers it ("dismiss": true), and only the
+	// operator sends it; mega never dismisses a dialog itself.
+	DecisionDismiss = "dismiss"
 )

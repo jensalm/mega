@@ -21,7 +21,10 @@
 // the permission mode switched live, and stored when nothing runs; a model
 // and effort applied, for claude and for codex, shown on the bar at once
 // while the harness still runs the old ones, with the header keeping
-// identity only; the harness's mark leftmost on the bar,
+// identity only; the harness's mark leftmost on the bar, for claude, codex
+// and pi; a pi conversation with no mode control and no MCP item, saying how
+// pi asks, in the launch dialog too, and with no effort control for a model
+// that takes no choice of levels,
 // collapsed and open; the bar on one row; and the dock keeping the newest content in view as its
 // height changes while the view follows the bottom (a turn's activity line,
 // a docked request, the reply box growing), never moving a view scrolled up.
@@ -362,6 +365,37 @@ await box.press('Control+Enter')
 await until('the turn reports them', async () => (await convOf(X)).model === 'fake-small' && (await convOf(X)).effort === 'low', 30000)
 check(true, 'the next turn runs them')
 
+// a pi conversation: pi's mark, the request pi's own settings resolve, no
+// permission mode control and no MCP item, since pi has neither for mega,
+// pi's own words about how it asks, and the effort control only where the
+// model takes a choice of levels.
+const PiConv = (await t.launch(P.id, 'pi', 'echo hello')).id
+await t.idle(PiConv)
+await go(PiConv)
+await until('the pi conversation shown', async () => (await page.locator('.conversation-head .facts').first().textContent()).startsWith('pi'))
+const pc = await convOf(PiConv)
+check(pc.model_choice === 'fake/large' && pc.effort_choice === 'medium' && !pc.permission_mode_choice, `a pi conversation copies pi's own model and thinking level, and no mode: ${pc.model_choice} · ${pc.effort_choice}`)
+await until('the pi shorts', async () => (await shorts()) === 'Fake Large · medium')
+const piMark = bar.getByRole('img', { name: 'pi' })
+check((await mode.count()) === 0 && (await oneRow()) && (await piMark.isVisible()) && (await leftmost(piMark)), 'a pi bar shows pi\'s mark leftmost and the request, with no permission mode control, on one row')
+await page.getByRole('button', { name: 'More', exact: true }).click()
+await page.getByRole('menuitem', { name: 'Release' }).waitFor()
+check((await page.getByRole('menuitem', { name: /MCP server/ }).count()) === 0 && (await page.locator('.control-bar .more .more-mark').count()) === 0, 'and no MCP item in More, since pi runs its own MCP servers and mega cannot list them')
+await page.keyboard.press('Escape')
+await outside()
+const piNotice = await page.locator('.harness-notice').textContent()
+check(piNotice.includes('pi asks for nothing unless an extension asks') && piNotice.includes('runs its own MCP servers, which mega cannot list'), `the conversation says how pi asks: "${piNotice}"`)
+await barShot('bar-pi-collapsed')
+// a model with one level or none: no effort control at all.
+await pickers.nth(0).selectOption('fake/small')
+check((await pickers.count()) === 1, 'a pi model with no thinking levels to choose from has no effort control')
+await page.getByRole('button', { name: 'Apply the model and effort', exact: true }).click()
+await until('the pi request applied', async () => (await convOf(PiConv)).model_choice === 'fake/small' && (await shorts()) === 'Fake Small')
+const small = await convOf(PiConv)
+t.say(`  applied: ${small.model_choice} · "${small.effort_choice ?? ''}", one row ${await oneRow()}`)
+check(!small.effort_choice && (await oneRow()), 'applied, the request is Fake Small with no effort, on one row')
+await barShot('bar-pi-small')
+
 // the launch dialog offers concrete values only, preselected from the
 // settings as the service copies them, and a launch from it is concrete.
 await page.goto(`${url}/#/p/${P.id}`)
@@ -382,12 +416,28 @@ await until('the dialog launched', async () => (await t.workspace()).conversatio
 const launched = (await t.workspace()).conversations.find((c) => c.name === 'hello from the dialog')
 check(launched.model_choice === 'fake-large' && launched.effort_choice === 'medium', `a codex conversation launched from the dialog is concrete: ${launched.model_choice} · ${launched.effort_choice}`)
 await until('the dialog conversation idle', async () => !(await convOf(launched.id)).turn_active)
+// for pi: its own words about how it asks, no mode, and no effort control
+// for a model that takes no choice of levels.
+const fresh = await t.page({ width: 1280, height: 700 })
+await fresh.goto(`${url}/#/p/${P.id}`)
+await fresh.locator('.section-actions button[aria-label="New conversation"]').click()
+const piDialog = fresh.locator('dialog[open]')
+await piDialog.waitFor()
+const piField = (name) => piDialog.getByRole('combobox', { name })
+await piField('Harness').selectOption('pi')
+await until('the pi copy preselected', async () => (await piField('Model').inputValue()) === 'fake/large' && (await piField('Effort').inputValue()) === 'medium')
+const dialogNotice = await piDialog.locator('.harness-notice').textContent()
+check((await piField('Permission mode').count()) === 0 && dialogNotice.includes('pi asks for nothing unless an extension asks'), `for pi: no mode, and the dialog says how pi asks: "${dialogNotice}"`)
+await piField('Model').selectOption('fake/small')
+check((await piField('Effort').count()) === 0, 'and no effort control for a model with no levels to choose')
+await fresh.close()
 await go(D)
 // the marks in the dark theme, collapsed and open, for each harness.
 const dark = await t.page({ width: 1280, height: 700, colorScheme: 'dark' })
 for (const [id, label, name] of [
   [D, 'Claude Code', 'claude'],
   [X, 'Codex', 'codex'],
+  [PiConv, 'pi', 'pi'],
 ]) {
   await dark.goto(`${url}/#/c/${id}`)
   const darkBar = dark.locator('form.reply .control-bar')

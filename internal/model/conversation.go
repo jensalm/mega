@@ -3,6 +3,7 @@ package model
 const (
 	HarnessClaude = "claude"
 	HarnessCodex  = "codex"
+	HarnessPi     = "pi"
 
 	// ModeLongLived is the only runtime mode in this slice.
 	ModeLongLived = "long-lived"

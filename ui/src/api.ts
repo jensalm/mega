@@ -150,7 +150,9 @@ export const getHistory = (id: string, read: HistoryRead) => request<History>('G
 export const sendPrompt = (id: string, text: string) => request<void>('POST', `${conversationPath(id)}/prompt`, { text })
 
 export interface Answer {
-  decision?: 'allow' | 'deny' | 'allow_session'
+  // dismiss: a pi dialog's own cancel, sent only when the operator presses
+  // Dismiss, where the request offers it.
+  decision?: 'allow' | 'deny' | 'allow_session' | 'dismiss'
   message?: string
   answers?: Record<string, string>
 }

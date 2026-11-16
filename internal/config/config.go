@@ -39,6 +39,7 @@ type Config struct {
 	Data   string
 	Claude Claude
 	Codex  Codex
+	Pi     Pi
 	// Environment is how each project's shell environment is resolved.
 	Environment Environment
 	// Snapshots bounds the configuration snapshots kept under the data
@@ -78,6 +79,11 @@ const (
 	defaultSnapshotKeepAtVersion = 20
 )
 
+// Pi locates the pi executable, which the pi adapter runs in RPC mode.
+type Pi struct {
+	Binary string
+}
+
 // Codex locates the codex executable, whose app-server the codex adapter runs.
 type Codex struct {
 	Binary string
@@ -100,6 +106,7 @@ func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 		Listen:    defaultListen,
 		Claude:    Claude{Node: "node", Shim: defaultClaudeShim, Executable: DefaultClaudeExecutable},
 		Codex:     Codex{Binary: "codex"},
+		Pi:        Pi{Binary: "pi"},
 		Snapshots: Snapshots{Keep: defaultSnapshotKeep, KeepAtVersion: defaultSnapshotKeepAtVersion},
 	}
 	if configPath != "" {

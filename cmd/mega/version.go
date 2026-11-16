@@ -13,6 +13,7 @@ import (
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/claude"
 	"github.com/michaelquigley/mega/internal/harness/codex"
+	"github.com/michaelquigley/mega/internal/harness/pi"
 	"github.com/michaelquigley/mega/internal/model"
 	"github.com/michaelquigley/mega/internal/server"
 	"github.com/michaelquigley/mega/ui"
@@ -47,10 +48,11 @@ func printHarnesses() {
 	if err == nil {
 		harnesses = append(harnesses,
 			claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where(), FileRead: cfg.FileRead}),
-			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}))
+			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}),
+			pi.New(pi.Config{Binary: cfg.Pi.Binary, Where: cfg.Where()}))
 	}
 	fmt.Println("harnesses, as tested and as found in mega's own environment:")
-	for _, name := range []string{model.HarnessClaude, model.HarnessCodex} {
+	for _, name := range []string{model.HarnessClaude, model.HarnessCodex, model.HarnessPi} {
 		line := fmt.Sprintf("  %s: tested %s", name, harness.Tested[name])
 		for _, h := range harnesses {
 			if h.Name() != name {

@@ -23,7 +23,7 @@ Where things go:
 
 ## What each suite covers
 
-- **`conversation.mjs`** (67 steps): the conversation view, on long conversations and in its layout. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
+- **`conversation.mjs`** (72 steps): the conversation view, on long conversations and in its layout. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
   - opening reads only the tail: ten turns, at the newest reply, saying how much is earlier;
   - Show earlier and Show all, each holding the view;
   - the native events toggle refetching what is shown;
@@ -49,15 +49,19 @@ Where things go:
     - nothing to change in it;
     - a sign-in followed in the open list and the item;
     - never attention;
-    - cleared on release.
+    - cleared on release;
+  - a pi conversation, on the fake pi:
+    - pi's own words under its header about how it asks;
+    - its prompt, tool call and reply in the history as the others', the prompt shown once, its record of pi's identity hidden with the native events;
+    - its turn line with no permission mode. Its extension's gate is blocked, since allowing it is not what the suite is about.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, and the start lines as `shots/start-{tested,newer,older}.png`.
-- **`firstrun.mjs`** (53 steps): the first run on a machine that has never had mega, with no harness installed, then with both. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's, a bare name, is on no `PATH`. It checks the following:
+- **`firstrun.mjs`** (53 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
   - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
   - the register dialog opening with the focus in its checkout field, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
-  - the project page before any dialog: both harnesses listed as missing, from the resolution registering started; Claude Code's reason saying `claude` was not found and naming the versions folder, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
-  - the new-conversation dialog opening with the focus in the opening prompt, both harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
+  - the project page before any dialog: all three harnesses listed as missing, from the resolution registering started; Claude Code's reason saying `claude` was not found and naming the versions folder, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
+  - the new-conversation dialog opening with the focus in the opening prompt, all three harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
   - the API refusing Claude Code's model list and a launch of either harness as `executable_missing`, with the reason, and making no conversation;
   - never "internal error" on a page, and no answer of 500, on the whole walk;
   - a restart: the project kept, what is missing known again with nothing opened, and the start-up log's lines again;
@@ -78,7 +82,7 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (74 steps): the input panel. It checks the following:
+- **`panel.mjs`** (83 steps): the input panel. It checks the following:
   - the reply box resting at one line and opening to its height;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
   - a control in the bar keeping the box open, and a press outside closing it;
@@ -90,7 +94,13 @@ Where things go:
   - the header keeping identity only: the harness and version in words, and no model, effort or permission mode;
   - a new conversation's request concrete from creation, for Claude and for Codex, and none of the removed inherit and next-send fields on the wire;
   - the bar's closed controls showing the request in short values, Claude's `default` mode as "ask", with the full names and descriptions in their lists, and no control or note on the bar saying inherit, requested or next;
-  - the harness's mark on the bar, by name, for Claude and for Codex, with the box collapsed and open, in the light and dark themes;
+  - the harness's mark on the bar, by name, for Claude and for Codex, with the box collapsed and open, in the light and dark themes, and pi's in the dark theme;
+  - a pi conversation:
+    - pi's own model and thinking level copied, and pi's mark leftmost;
+    - no permission mode control, no MCP item in More and no mark on it;
+    - pi's words about how it asks;
+    - a model with no thinking levels to choose from having no effort control, and applied with none;
+    - in the launch dialog, the same words, no mode, and no effort control for such a model;
   - the permission mode switched live, and stored when nothing runs, recorded as one `mode_requested` event drawn in the history with no attention, a live switch recorded as a request before Claude's confirmation with only the confirmation drawn, the bar showing the request at once;
   - a model and effort applied for Claude and for Codex, the bar showing the request at once while the harness still runs the old ones;
   - the launch dialog preselecting the copy from the settings for each harness, with no inherit choice, and a launch from it holding a concrete request;
@@ -104,8 +114,8 @@ Where things go:
   - while following, the reader's wheel during a streaming reply keeping the view where they put it, with "Newer activity below" offered;
   - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see.
 
-  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`.
-- **`requests.mjs`** (27 steps): requests. It checks the following:
+  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`.
+- **`requests.mjs`** (39 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -115,7 +125,16 @@ Where things go:
   - a request answered on another page refused on a page still showing it, and by the API;
   - an MCP approval from the fake Codex, allowed for the session or denied;
   - a typed form needing its required field;
-  - Interrupt aborting a pending card, with a late answer refused.
+  - Interrupt aborting a pending card, with a late answer refused;
+  - pi, on the fake pi:
+    - its extension's gate docked as a "Question from a pi extension", with Dismiss and no answer of one's own or allow for the session, and answered;
+    - Dismiss reaching pi as its cancel;
+    - an input dialog's text and an editor dialog's several prefilled lines;
+    - a dialog that expires, its row saying so;
+    - an interrupt waiting on a dialog, saying so, until the dialog is dismissed;
+    - a release with a dialog pending, whose dialog warns that pi is ended and the gated command does not run, leaving the dialog's row "never answered".
+
+  It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`.
 - **`shutdown.mjs`** (23 steps): the shutdown gate. It checks the following:
   - arming from the footer, with the banner naming what it waits for by count and by name, and the request marked as the operator's;
   - a second page seeing it;

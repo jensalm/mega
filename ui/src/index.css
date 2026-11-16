@@ -708,6 +708,16 @@ pre {
   padding: 8px 12px;
 }
 
+/* what a harness does differently, in plain words, where the operator
+   would otherwise assume it acts as the others: pi asks for nothing unless
+   an extension does. a fact, not a warning, so not in the notice colour. */
+.harness-notice {
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  margin: 0;
+  padding: 2px 10px;
+}
+
 .error {
   color: var(--error);
   margin: 0;

@@ -20,3 +20,7 @@ Michael demonstrates mega in under a week from 2026-11-13, to the people most li
 - **A fallback.** Screenshots of each step, in case the network or a harness login fails in the room.
 
 Harness logins are live credentials. The demo workspace uses Michael's own logins and shows no settings pages, tokens or environment values.
+
+## additions to the list, 2026-11-16
+
+Built since this was written and worth showing: the first page saying what mega needs and found, a pi conversation on the local model if its adapter has landed, and `mega snapshots`.

@@ -879,6 +879,58 @@ For the card `an-interrupted-turn-imports-no-response-requested`: how Claude Cod
 - **The real `~/.codex`** was unchanged.
 - **One probe fix.** Under a scratch `CODEX_HOME` in a temporary directory, `codex --version` first prints a warning that it will not create its PATH aliases. The runner now takes the `codex-cli` line.
 
+## Follow-up (2026-11-16): pi 1.5.2
+
+For the card `pi-adapter`: everything in the pi section above was observed at pi 1.1.0, and the installed pi is now 1.5.2 (`@earendil-works/pi-coding-agent`, `~/local/node/bin/pi`). The probes were rerun against it, and the open points answered from the documents 1.5.2 ships (`docs/` beside the package) and, where they are silent, its `dist/` source. `[observed]` is a run on this machine on 2026-11-16, `[docs]` the shipped documents, `[source]` the shipped code.
+
+**How it was run.** `probes/pi/rerun.sh` reran P1 to P4, R1 to R4 and P7 in the fixture `pi-rt1`.
+- **The model** was Michael's own default, as pi's settings name it: `qwen3.8-27b` from the custom provider `ollama`, an OpenAI-compatible server on his host `eleven`. No `--model` was passed.
+- **The fixture's trust.** No `--approve` was passed. The fixture is in `~/.pi/agent/trust.json` from Michael's terminal visit at 1.1.0 (P5), and pi honoured that saved decision in RPC mode: the fixture's extension loaded and raised its dialogs `[observed]`.
+- **Two more probes,** `probes/pi/inspect.mjs` (state, models, thinking levels, commands and MCP, with no model turn) and `probes/pi/close-with-dialog.mjs`, are committed beside it.
+- **Nothing written.** No setting, trust decision or credential was written. `auth.json` and `models-store.json` were never opened. `models.json` was read with its key values left out, and `trust.json` by its paths only.
+
+**What held, unchanged from 1.1.0** `[observed]`:
+- **P1 to P4.** The marker, a `cat`, the `ask_user` select and the extension's approval select for `sleep 3`, answered after 4 s, all passed. The session reopened by exact id recited all seven markers, and its approval fired again.
+- **Turn signals.** The `prompt` response with `disposition: "started"` is acceptance only, `agent_settled {aborted}` ends the turn, `message_end.message.stopReason` is `stop`, `toolUse` or `aborted`, and `tool_execution_start` still comes before the extension's dialog.
+- **R1, an abort during a running command:** settled `aborted: true` at once, the command was killed, and the next turn answered. The `abort` response now arrives just after `agent_settled`.
+- **R2, an abort while a dialog is pending:** unanswered for 31 s, until the dialog was answered. The late answer released it, the turn settled `aborted: true`, the gated command did not run (`tool_execution_end isError`), and the next turn answered. The source shows why: a pending dialog resolves on `abort` only if the extension passed a `signal`, which the fixture's does not `[source]`.
+- **R3, a dialog never answered:** the run blocked.
+- **R4, the owner SIGKILLed with the approval pending:** a resume by exact id answered with the markers.
+- **P7, two processes on one session id:** no lock and no error. Both appended to one file, which branches at A's second prompt. pi 1.5.2 still locks only `auth.json`, `settings.json`, `trust.json`, `models-store.json` and MCP OAuth, never a session file `[source]`.
+- **The local model** answered every marker exactly, usually within two seconds a turn.
+- **R1 and R4 rerun without the gate, the same day.** The rerun's first R1 and R4 allowed the fixture's gate, since their commands say `time.sleep`, so that the abort and the owner kill could be reached. They now run `timeout 45 tail -f /dev/null` and `timeout 30 tail -f /dev/null` (`scenarios/*-ungated.json`), which the gate does not ask about, and the probe answers only dialogs a scenario names with `--expect`. Both results held with no dialog: the abort settled `aborted: true` and the next turn answered, and the resume after the owner kill recited the markers `[observed]`.
+
+**What changed** `[observed]`:
+- **A pending dialog now holds pi open when its input closes.** At 1.1.0, closing stdin with a dialog pending exited within about 40 ms (R3). At 1.5.2 (`close-with-dialog.mjs`), with the fixture's approval select pending and never answered:
+  - closing stdin left pi running for 30 s;
+  - a first SIGTERM left it running for 30 s more;
+  - a second SIGTERM ended it at once, exit 143.
+
+  An `abort` sent first made no difference. In R3, where the probe sent a single SIGTERM, pi exited 8 minutes 20 seconds later. The changelog's 1.5.1 entry explains it: "Once a shutdown has started, a stdin EOF or a single signal no longer interrupts it; a second signal still exits at once" `[docs]`. So with a dialog pending, nothing but an answer, a cancel or a second signal ends the run.
+- **MCP.** pi 1.5.2 has MCP built in. It starts the servers in `~/.pi/agent/mcp.json` (and in a trusted project's `.pi/mcp.json`) when a session starts, unless `--no-mcp` `[docs]`. Michael's three, grimoire, mercurius and terminus, all connected, as `codemode` tools. pi reports their state only as free text: the `/mcp` command, sent as a prompt over RPC, is handled without a turn and answered by a `notify` dialog reading "grimoire: connected, 11 tools (codemode)…". There is no structured MCP status in the protocol `[observed]`. MCP tools appear in events as `mcp__<server>__<tool>` `[docs]`. Unlike 1.1.0, no MCP warning arrived at start-up.
+- **A `system` message entry** is written to the session file before each user message `[observed]`. An import skips it.
+- **A missing working directory** now makes `--session` exit with an error outside the terminal (1.5.2 changelog) `[docs]`.
+- **`--session <id>` may prompt.** It looks in the project first, then matches a prefix, then searches every project; a match in another project prompts `[y/N]` on stdin before RPC starts, which would swallow a client's first frame `[source]`. A client passes the session file's path instead.
+
+**The card's open points**:
+- **Models.** `get_available_models` lists the models whose provider has credentials, each `{provider, id, reasoning, …}`, here 8 `openai-codex` models and `ollama/qwen3.8-27b` `[observed]`. A model is `provider` plus `id`. It is set with `--model provider/id`, or `set_model {provider, modelId}` over RPC, which appends a `model_change` entry and does not write the settings `[source]`. It is reported in `get_state.model` and on each assistant message's `provider` and `model`; no event announces a change `[docs]`.
+- **The copy.** A new session takes `defaultProvider` and `defaultModel` from `settings.json` (`ollama`, `qwen3.8-27b`) `[observed]`. Those are what a conversation copies.
+- **Thinking levels.** The levels are `off, minimal, low, medium, high, xhigh, max`, and depend on the model: `get_available_thinking_levels` answered `["off"]` for `qwen3.8-27b`, which has no reasoning. Michael's `defaultThinkingLevel: "medium"` is therefore clamped, and `get_state.thinkingLevel` reads `off` `[observed]`. A level is set with `--thinking`, or `set_thinking_level` over RPC, which clamps silently and still answers success, and is reported in `get_state` and the `thinking_level_changed` event `[docs]` `[source]`. So the concrete request for this model is `off`, as pi reports it, not the setting.
+- **`@path`.** RPC does not attach a file. `@file` is a CLI-argument feature, refused in RPC mode, and `@path` in a prompt's text reaches the model as text `[docs]` `[source]`. The harness table marks pi as not attaching mentions, as Codex is.
+- **The version.** `pi --version` prints the bare version, `1.5.2` `[observed]`. RPC carries none: no start-up frame, and nothing in `get_state` `[docs]`.
+- **Which chain is the conversation.** No entry marks the current leaf. pi takes the last entry in the file and walks `parentId` back to the root `[source]`, so an import follows the same rule. A file two writers branched (P7) reopens on whichever wrote last.
+- **Finding pi.** The `pi` on `PATH` is npm's link to `dist/bundle/cli.js`, whose first line is `#!/usr/bin/env node`; it needs Node 22.19 or later `[docs]`. The adapter runs it through `harness.Program`, as it does Codex's `codex.js`. `PI_CODING_AGENT_DIR` moves `~/.pi/agent`, and `PI_CODING_AGENT_SESSION_DIR` the sessions `[docs]`.
+- **Sessions.** Format version 3 is unchanged. The files are in `~/.pi/agent/sessions/--<cwd, / replaced by ->--/<time>_<id>.jsonl` `[observed]`, and a file is written only once the first prompt arrives. The protocol still lists no sessions, so discovery is a directory scan `[docs]`.
+- **Trust.** `trust.json` maps directories to `true` or `false`. A saved decision is honoured in RPC; with none, `defaultProjectTrust: "ask"` means untrusted, without a prompt and without writing `[docs]`. An untrusted project loses its extensions, settings, MCP file, skills, prompts and themes; `AGENTS.md` still loads. RPC reports no trust state. mega can read `trust.json` to say so, without writing it.
+
+**pi's configuration, for a snapshot's include list** (`~/.pi/agent`, or `PI_CODING_AGENT_DIR`) `[docs]`:
+- **Configuration:** `settings.json`, `models.json`, `mcp.json`, `keybindings.json`, `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `SYSTEM.md`, `APPEND_SYSTEM.md`, and the `extensions/`, `skills/`, `prompts/` and `themes/` folders. `models.json` and `mcp.json` may hold secrets, an API key or a server's `env`: Michael's `models.json` names an API key for his provider.
+- **Credentials:** `auth.json`, and `mcp-auth.json` (MCP OAuth tokens).
+- **Trust state:** `trust.json`.
+- **Caches, logs and installed packages:** `models-store.json`, `mcp-cache.json` and `mcp-onboarding.json` (undocumented, likely a third-party MCP adapter's), `mcp.log`, `pi-debug.log`, `npm/`, `bin/`, `tools/`, `tmp/`.
+- **Session data:** `sessions/`.
+- **Not pi's:** `~/.pi/context-mode/`.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

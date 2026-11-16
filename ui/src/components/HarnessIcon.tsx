@@ -24,5 +24,7 @@ export function HarnessIcon({ harness }: { harness: string }) {
     const size = `${(entry.iconScale ?? 1) * 100}%`
     return <span className="harness-icon mono" role="img" aria-label={label} title={label} style={{ maskImage: `url(${JSON.stringify(url)})`, maskSize: size }} />
   }
-  return <img className="harness-icon" src={url} alt={label} title={label} />
+  // a coloured mark inside clear space is drawn larger, the file unchanged.
+  const scale = entry?.iconScale ? { transform: `scale(${entry.iconScale})` } : undefined
+  return <img className="harness-icon" src={url} alt={label} title={label} style={scale} />
 }

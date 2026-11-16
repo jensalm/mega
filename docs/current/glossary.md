@@ -9,7 +9,7 @@ The words mega's documents, cards and interface use, and what each one means her
 - **Project.** The stable home for work: a name and a checkout. Conversations belong to a project and stay with it.
 - **Checkout.** The directory a project's work happens in, usually a git repository. Mega never modifies or deletes it on its own account.
 - **Conversation.** A durable identity wrapped around one native session of one harness. It keeps its history, name and place when its runtime stops.
-- **Harness.** The coding agent program mega drives: Claude Code or Codex. An **adapter** is mega's code for one harness; the **shim** is the small Node program the Claude adapter runs to reach Claude's SDK.
+- **Harness.** The coding agent program mega drives: Claude Code, Codex or pi. An **adapter** is mega's code for one harness; the **shim** is the small Node program the Claude adapter runs to reach Claude's SDK.
 - **Native session.** The harness's own record of a conversation, in the harness's own store. **Discovery** lists the sessions a checkout has that no conversation holds; **adopting** one makes it a conversation.
 
 ## A conversation over time
@@ -22,6 +22,10 @@ The words mega's documents, cards and interface use, and what each one means her
 - **Action.** One thing the agent did during a turn, shown as a single expandable row: a shell command, a file edit, a search, an MCP tool. It is the word for what the operator sees. An **action group** is a run of actions between two pieces of speech, indented behind a hairline.
 - **Tool call** and **tool result.** The recorded events underneath an action: what the harness asked for and what came back. Use these words for the event log and the adapters, and "action" for the row on screen.
 - **Request.** Something the agent is waiting on the operator for: an **approval** to run something, or a **question** with choices or fields. A request is answerable only while it is pending. A pending request is **docked** above the input panel; its row in the history records that it happened.
+- **Extension dialog.** A question a pi extension asks: a choice, a yes or no, a line of text, or a few lines to edit. pi has no permission model of its own, so even a dialog that gates a command is a question, never an approval, and never offered for the session.
+- **Dismiss.** The operator's way to close a pi dialog without answering it: pi's own cancel, as Escape is in pi's terminal. mega never dismisses a dialog itself.
+- **Request endings.** How a request's row in the history ends: **answered**; **aborted**, settled by an interrupt; **lost**, pending when the service restarted; **expired**, a pi dialog whose own time limit ran out, which pi settled with no answer; **never answered**, a pi dialog still waiting when its runtime was ended, as a release ends pi, whose gated command did not run.
+- **Waiting on a dialog.** An interrupt pi cannot act on yet: pi stops a run only once its pending dialog is answered or dismissed, and the history says which dialog the interrupt waits on.
 - **Native events.** What a harness emits that mega passes through without interpreting: status, bookkeeping, reasoning summaries. Hidden unless the native events box is ticked, and never counted as output.
 - **Background job.** Work an agent left running after its turn ended. It is activity, not attention.
 - **MCP server.** A program a harness connects to for more tools, configured in the harness's own settings, as an MCP tool approval's server is. A running conversation reports its servers, each **connected**, **connecting**, **failed**, **needs sign-in** or **disabled**, with its tools. mega shows them and changes nothing: signing in is done in the harness's own terminal. Like a background job, it is state to see, not attention.

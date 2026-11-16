@@ -22,3 +22,9 @@ Every install of mega so far was made by someone who already knew how. The READM
 ## rules
 
 The account is disposable and so is everything in it. Nothing is installed or changed for Michael's own account, and his mega keeps running untouched.
+
+## where this stands, 2026-11-16
+
+The agent's pass ran on 2026-11-13. Its findings became the first-run batch and fed the version work, both built since. What remains is Michael's own pass under a fresh WSL2, with real logins, through to a working conversation.
+
+That pass now tests more than this card first described: the first page naming what is missing, Claude Code found on the `PATH` at whatever version a fresh install gives, the tested-range wording, and a first configuration snapshot. The "why" above still names an exact Claude Code build at an exact path; that requirement is gone.

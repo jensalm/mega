@@ -25,12 +25,21 @@ export function RequestCard({ conversationId, request }: RequestCardProps) {
     }
   }
 
+  // a pi dialog offers Dismiss: pi's own cancel, as Escape is in pi's
+  // terminal, sent only when the operator presses it.
+  const dismiss = request.payload?.dismiss ? () => void send({ decision: 'dismiss' }) : undefined
   return (
     <section className="request-card" aria-label={request.kind === 'question' ? 'Question' : 'Approval'}>
       {request.kind === 'question' && request.payload?.fields ? (
-        <FormQuestion payload={request.payload} sending={sending} onAnswer={(answers) => void send({ answers })} />
+        <FormQuestion payload={request.payload} sending={sending} onAnswer={(answers) => void send({ answers })} onDismiss={dismiss} />
       ) : request.kind === 'question' ? (
-        <QuestionForm questions={request.payload?.questions ?? []} sending={sending} onAnswer={(answers) => void send({ answers })} />
+        <QuestionForm
+          questions={request.payload?.questions ?? []}
+          fromPi={!!request.payload?.dialog}
+          sending={sending}
+          onAnswer={(answers) => void send({ answers })}
+          onDismiss={dismiss}
+        />
       ) : (
         <PermissionForm request={request} sending={sending} onAnswer={(answer) => void send(answer)} />
       )}
@@ -127,7 +136,17 @@ function McpApproval({ payload, sending, onAnswer }: { payload: RequestPayload; 
 // FormQuestion is a typed form an MCP server asked for, rendered field by
 // field: a choice for an enum, a checkbox for a boolean, a number or text
 // input otherwise. every answer travels as text; the adapter types it.
-function FormQuestion({ payload, sending, onAnswer }: { payload: RequestPayload; sending: boolean; onAnswer: (answers: Record<string, string>) => void }) {
+function FormQuestion({
+  payload,
+  sending,
+  onAnswer,
+  onDismiss,
+}: {
+  payload: RequestPayload
+  sending: boolean
+  onAnswer: (answers: Record<string, string>) => void
+  onDismiss?: () => void
+}) {
   const fields = payload.fields ?? []
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
@@ -157,13 +176,17 @@ function FormQuestion({ payload, sending, onAnswer }: { payload: RequestPayload;
 
   return (
     <form onSubmit={onSubmit}>
-      <h2>Question{payload.mcp_server && <> from <code>{payload.mcp_server}</code></>}</h2>
+      <h2>
+        Question{payload.mcp_server && <> from <code>{payload.mcp_server}</code></>}
+        {payload.dialog && ' from a pi extension'}
+      </h2>
       {payload.message && <p>{payload.message}</p>}
       {fields.map((field) => (
         <FormFieldInput key={field.name} field={field} value={values[field.name] ?? ''} onChange={(value) => set(field.name, value)} />
       ))}
       <div className="actions">
         <IconButton type="submit" icon="reply" label="Answer" word="Answer" disabled={sending || !complete} />
+        {onDismiss && <DismissButton sending={sending} onDismiss={onDismiss} />}
       </div>
     </form>
   )
@@ -198,6 +221,14 @@ function FormFieldInput({ field, value, onChange }: { field: FormField; value: s
       </label>
     )
   }
+  if (field.multiline) {
+    return (
+      <label className="form-field">
+        <span>{label}</span>
+        <textarea rows={5} value={value} onChange={(event) => onChange(event.target.value)} />
+      </label>
+    )
+  }
   return (
     <label className="form-field">
       <span>{label}</span>
@@ -211,7 +242,35 @@ function FormFieldInput({ field, value, onChange }: { field: FormField; value: s
   )
 }
 
-function QuestionForm({ questions, sending, onAnswer }: { questions: Question[]; sending: boolean; onAnswer: (answers: Record<string, string>) => void }) {
+// DismissButton sends a pi dialog's own cancel: the extension gets no answer,
+// as when Escape is pressed in pi's terminal.
+function DismissButton({ sending, onDismiss }: { sending: boolean; onDismiss: () => void }) {
+  return (
+    <IconButton
+      icon="close"
+      label="Dismiss: send pi's cancel, as Escape does in pi's terminal"
+      word="Dismiss"
+      disabled={sending}
+      onClick={onDismiss}
+    />
+  )
+}
+
+// QuestionForm is a question with choices. a pi dialog takes only the
+// choices it offers, so it has no answer of one's own.
+function QuestionForm({
+  questions,
+  fromPi = false,
+  sending,
+  onAnswer,
+  onDismiss,
+}: {
+  questions: Question[]
+  fromPi?: boolean
+  sending: boolean
+  onAnswer: (answers: Record<string, string>) => void
+  onDismiss?: () => void
+}) {
   const [chosen, setChosen] = useState<Record<string, string[]>>({})
   const [other, setOther] = useState<Record<string, string>>({})
 
@@ -248,7 +307,7 @@ function QuestionForm({ questions, sending, onAnswer }: { questions: Question[];
 
   return (
     <form onSubmit={onSubmit}>
-      <h2>Question</h2>
+      <h2>Question{fromPi && ' from a pi extension'}</h2>
       {questions.map((question) => (
         <fieldset key={question.question}>
           <legend>
@@ -268,15 +327,18 @@ function QuestionForm({ questions, sending, onAnswer }: { questions: Question[];
               </span>
             </label>
           ))}
-          <input
-            placeholder="Or write your own answer"
-            value={other[question.question] ?? ''}
-            onChange={(event) => setOther((current) => ({ ...current, [question.question]: event.target.value }))}
-          />
+          {!fromPi && (
+            <input
+              placeholder="Or write your own answer"
+              value={other[question.question] ?? ''}
+              onChange={(event) => setOther((current) => ({ ...current, [question.question]: event.target.value }))}
+            />
+          )}
         </fieldset>
       ))}
       <div className="actions">
         <IconButton type="submit" icon="reply" label="Answer" word="Answer" disabled={sending || !complete} />
+        {onDismiss && <DismissButton sending={sending} onDismiss={onDismiss} />}
       </div>
     </form>
   )

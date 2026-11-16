@@ -45,7 +45,7 @@ test: frontend-test shim
 # the environment still wins). only those set are passed on; a round trip
 # whose fixture is unset is skipped.
 -include e2e.local.mk
-E2E_VARS := MEGA_E2E_CLAUDE_FIXTURE MEGA_E2E_CODEX_FIXTURE MEGA_E2E_NODE MEGA_E2E_CLAUDE MEGA_E2E_CODEX MEGA_E2E_CLAUDE_MODEL MEGA_E2E_CODEX_MODEL
+E2E_VARS := MEGA_E2E_CLAUDE_FIXTURE MEGA_E2E_CODEX_FIXTURE MEGA_E2E_PI_FIXTURE MEGA_E2E_NODE MEGA_E2E_CLAUDE MEGA_E2E_CODEX MEGA_E2E_PI MEGA_E2E_CLAUDE_MODEL MEGA_E2E_CODEX_MODEL
 E2E_ENV = $(foreach v,$(E2E_VARS),$(if $($(v)),$(v)='$($(v))'))
 
 e2e: shim

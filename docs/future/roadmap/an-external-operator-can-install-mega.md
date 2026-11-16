@@ -18,20 +18,23 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - **pi is slipstreamed in.** The spec deferred it; Michael pulled it forward.
 - **The work is sequential.** One story at a time, in the order below. Running two implementers at once on one repository is coordination that falls on Michael, and helping with that is something mega has yet to grow into.
 
-## stories, as of 2026-11-15
+## stories, as of 2026-11-16
 
 **Built, in evaluating**
 
 - `clean-machine-rehearsal`, the agent's pass, and the first-run batch it produced: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`.
 - `harness-version-tolerance`: Claude Code is found on the `PATH`, each harness has a tested range, and a lone Codex binary is named.
+- `harness-configuration-backups`: configuration snapshots under mega's data directory, with `mega snapshots` to list and compare them.
+
+**Building**
+
+- `pi-adapter`: the third harness. The installed pi moved from 1.1.0 to 1.5.2 since it was probed, so it starts by probing again.
 
 **Next, in order**
 
-1. `harness-configuration-backups`: small, and what makes a harness update safe to look back from.
-2. `pi-adapter`: the third harness.
-3. The conversation polish a live demo shows: `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps`, `path-search-beyond-the-checkout` and `agent-hand-off-turns`.
-4. `readme-for-newcomers`.
-5. `the-demo`: a workspace made for showing, with no freeze before it.
+1. The conversation polish a live demo shows: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps`, `path-search-beyond-the-checkout` and `agent-hand-off-turns`.
+2. `readme-for-newcomers`.
+3. `the-demo`: a workspace made for showing, with no freeze before it.
 
 **After the demo**
 

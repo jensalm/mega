@@ -59,3 +59,7 @@ Three observations that bear on this card:
 - **A running conversation keeps the build it started on.** So after an update, old and new builds run side by side until each conversation is released. That is the mixed state a managed update would avoid.
 - **Two builds on one configuration were quietly undoing each other.** Later the same day the spike found that Claude Code 2.1.318 and 2.1.319 lower `migrationVersion` in `~/.claude.json` from 15 to 14 whenever they start, and the newer builds raise it again. Michael's mega ran 2.1.318 all week beside a terminal on newer builds, so that marker was being moved back and forth, and whatever migration 15 does was presumably being run again each time. Nothing visibly broke. It is the plainest evidence so far that builds should not be mixed on one configuration, and that an update wants to be one event for every session.
 - **Codex was gentler.** Four builds from 0.163.0 to 0.169.0 shared one store and none migrated or rewrote anything; the oldest read what the newest wrote.
+
+## where this stands, 2026-11-16
+
+Both things this depends on are built: `harness-version-tolerance` on 2026-11-15 and `harness-configuration-backups` the same day. A version snapshot is already taken whenever mega meets a harness version it has not seen, which is the "snapshot first" step of an update, done after the fact.

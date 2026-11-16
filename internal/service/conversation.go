@@ -618,6 +618,15 @@ func validateAnswer(req *model.Request, answer *harness.Answer) error {
 			return newError(CodeInvalid, "a permission answer needs a decision of 'allow', 'deny', or 'allow_session' where offered")
 		}
 	case model.RequestQuestion:
+		if answer.Decision == harness.DecisionDismiss {
+			// pi's own cancel, where the harness offers it: the operator's
+			// gesture, as Escape is in pi's terminal. mega never sends it.
+			if payload, _ := req.Payload.(map[string]any); payload["dismiss"] != true {
+				return newError(CodeInvalid, "this question cannot be dismissed; answer it")
+			}
+			answer.Message, answer.Answers = "", nil
+			return nil
+		}
 		if len(answer.Answers) == 0 {
 			return newError(CodeInvalid, "a question answer needs at least one answer")
 		}

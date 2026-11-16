@@ -9,8 +9,8 @@
 // Codex, and it is the walk the clean-machine rehearsal of 2026-11-13 made.
 // nothing it does can reach a real harness, since none can be found. Claude
 // Code's default, the bare name claude, is on no PATH, and the scratch HOME
-// has no build in the installer's versions folder; Codex's default, a bare
-// name, is on no PATH.
+// has no build in the installer's versions folder; Codex's and pi's defaults,
+// bare names, are on no PATH.
 //
 // what it checks:
 // - the start-up log: one line per harness, saying it cannot run and why,
@@ -21,7 +21,7 @@
 // - the register dialog: the focus in its checkout field, refusing a
 //   relative path and a path that does not exist with what is wrong, then
 //   registering a git checkout and opening its page;
-// - the project page, before any dialog: both harnesses listed as missing,
+// - the project page, before any dialog: all three harnesses listed as missing,
 //   Claude's reason naming where it looked, what to do and the config file mega
 //   read; the environment resolved in the background; a trust notice that
 //   does not tell anyone to run a Claude that is not installed; and the New
@@ -173,9 +173,9 @@ check(P && P.checkout === demo, 'the project is registered at its checkout')
 // from a resolution registering started in the background.
 const missingList = page.locator('section.environment ul.env-missing')
 const missingNames = async () => ((await workspace()).projects[0]?.environment?.missing ?? []).map((m) => m.harness).sort().join(',')
-const knownEarly = await soon(async () => (await missingNames()) === 'claude,codex' && (await missingList.count()) > 0, 15000)
+const knownEarly = await soon(async () => (await missingNames()) === 'claude,codex,pi' && (await missingList.count()) > 0, 15000)
 shown('what the project lists as missing, before any dialog', await missingNames())
-check(knownEarly, 'the project page lists both harnesses as missing before any dialog is opened')
+check(knownEarly, 'the project page lists every harness as missing before any dialog is opened')
 const claudeMissing = ((await workspace()).projects[0]?.environment?.missing ?? []).find((m) => m.harness === 'claude')?.reason ?? ''
 shown('the project on Claude Code', claudeMissing)
 check(
@@ -197,7 +197,7 @@ check(newWord !== '', `the New conversation control carries a word while the wor
 await noInternal(page, 'the project page')
 await shot('project')
 
-// the new-conversation dialog: the focus in the prompt, both harnesses
+// the new-conversation dialog: the focus in the prompt, every harness
 // marked, no model list to wait for, and Launch disabled and in view.
 await newConversation.click()
 const launch = page.locator('dialog[open]')
@@ -206,10 +206,10 @@ const launchFocus = await soon(async () => (await page.evaluate(() => document.a
 shown('focus on opening', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.tagName))
 check(launchFocus, 'the new-conversation dialog opens with the focus in the opening prompt')
 const harnessSelect = launch.locator('select').first()
-const bothMarked = await soon(async () => (await launch.locator('p.harness-missing').count()) === 2, 10000)
+const bothMarked = await soon(async () => (await launch.locator('p.harness-missing').count()) === 3, 10000)
 const markedTexts = await launch.locator('p.harness-missing').allTextContents()
 for (const m of markedTexts) shown('the dialog on a missing harness', m.replace(/\s+/g, ' ').trim())
-check(bothMarked && markedTexts.some((m) => m.includes(claudePath)), 'the dialog marks Claude Code as unable to run, naming where it looked, as it does Codex')
+check(bothMarked && markedTexts.some((m) => m.includes(claudePath)) && markedTexts.some((m) => m.includes("'pi' was not found")), 'the dialog marks Claude Code as unable to run, naming where it looked, as it does Codex and pi')
 check((await harnessSelect.locator('option[value="codex"]').isDisabled()) && (await text(harnessSelect.locator('option[value="codex"]'))) === 'Codex (cannot run)', 'Codex is offered disabled, marked cannot run')
 check((await harnessSelect.locator('option[value="claude"]').isDisabled()) && (await text(harnessSelect.locator('option[value="claude"]'))).endsWith('(cannot run)'), 'Claude Code is offered disabled, marked cannot run')
 const modelSelect = launch.getByRole('combobox', { name: 'Model' })
@@ -250,7 +250,7 @@ await page.reload()
 await until('the project page again', async () => (await page.locator('article.detail h1').count()) > 0)
 const after = (await workspace()).projects[0]
 check(after.id === P.id && after.checkout === demo, 'the project is still registered after a restart')
-const knownAgain = await soon(async () => (await missingNames()) === 'claude,codex', 15000)
+const knownAgain = await soon(async () => (await missingNames()) === 'claude,codex,pi', 15000)
 shown('what the project lists as missing after the restart, before anything is opened', await missingNames())
 check(knownAgain, 'after a restart the project lists what is missing again, with nothing opened')
 const again = harnessLines(startupLog().slice(before))

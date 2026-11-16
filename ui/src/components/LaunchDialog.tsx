@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { startConversation } from '../api'
-import { harnesses } from '../harnesses'
+import { harnessOf, harnesses } from '../harnesses'
 import { effortsFor, useModels } from '../models'
 import { permissionModes } from '../permissions'
 import type { Conversation } from '../types'
@@ -58,7 +58,7 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
     try {
       onLaunched(
         await startConversation(projectId, harness, name, prompt, {
-          permissionMode: harness === 'claude' ? permissionMode : '',
+          permissionMode: harnessOf(harness)?.permissionModes ? permissionMode : '',
           model,
           effort,
         }),
@@ -110,7 +110,12 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
             )}
           </p>
         ))}
-        {harness === 'claude' && (
+        {harnessOf(harness)?.notice && !cannotRun && (
+          <p className="harness-notice" role="note">
+            {harnessOf(harness)?.notice}
+          </p>
+        )}
+        {harnessOf(harness)?.permissionModes && (
           <label>
             Permission mode
             <select value={permissionMode} onChange={(event) => setPicked({ ...own, mode: event.target.value })}>
@@ -128,6 +133,7 @@ export function LaunchDialog({ projectId, unavailable, onClose, onLaunched }: La
           effort={effort}
           disabled={models === null}
           unavailable={modelsError !== null}
+          loneEffort={harnessOf(harness)?.loneEffort}
           onChange={(nextModel, nextEffort) => setPicked({ ...own, model: nextModel, effort: nextEffort })}
         />
         {models === null && !modelsError && !cannotRun && <p className="muted">Asking the harness for its models…</p>}

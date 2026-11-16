@@ -46,3 +46,9 @@ One conversation, complete and self-describing: its registry entry, its event lo
 ## spike
 
 Per harness, what the smallest native artifact is that resumes a session: for Claude the session file, for Codex whether the rollout file is enough or the databases are needed, for pi the session file and its branches. What must be rewritten for another path. Whether a session resumes under a newer and an older harness build than wrote it. Recorded in the capability report.
+
+## where this stands, 2026-11-16
+
+Layer 1 is built. Its store is worth knowing about for layer 2: each file's content is kept once under its hash and a snapshot is a folder of links plus a manifest, so an unchanged file costs nothing. A conversation bundle wants the same property, for the same reason.
+
+A note for when anything leaves the machine, from the pi adapter on 2026-11-16: snapshots already hold one known secret, the API key inside pi's `models.json`, copied as configuration by Michael's decision. Excluding credential files is not the same as holding no credentials.

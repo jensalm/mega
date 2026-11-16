@@ -44,6 +44,10 @@ const (
 	// StatusModelChanged records a model or effort the harness reported as
 	// changed, carried in Facts.Model and Facts.Effort.
 	StatusModelChanged = "model_changed"
+	// StatusWaiting is an interrupt the harness cannot act on yet: pi's
+	// abort waits until a pending dialog is answered or dismissed. Text
+	// names the dialog.
+	StatusWaiting = "waiting"
 	// StatusChoiceFilled records the one fill of a conversation created
 	// before every conversation held a concrete model, effort and mode:
 	// Facts carries what was filled in, and Text where it came from.

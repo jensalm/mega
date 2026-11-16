@@ -92,6 +92,10 @@ export interface RequestPayload {
   // a typed form an MCP server asked for: its message and fields.
   message?: string
   fields?: FormField[]
+  // a pi dialog: which kind (select, confirm, input, editor), and that the
+  // operator may dismiss it, which sends pi's own cancel.
+  dialog?: string
+  dismiss?: boolean
 }
 
 export interface FormField {
@@ -102,6 +106,8 @@ export interface FormField {
   required: boolean
   options?: { value: string; label: string }[]
   default?: unknown
+  // multiline: a pi editor dialog's text, edited over several lines.
+  multiline?: boolean
 }
 
 export interface Question {

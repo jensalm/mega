@@ -7,7 +7,7 @@ import { waitingLabel, type Waiting } from '../waiting'
 import { EventList } from './EventList'
 import { IconButton } from './Icon'
 import { InputPanel } from './InputPanel'
-import { harnessLabel } from '../harnesses'
+import { harnessLabel, harnessOf } from '../harnesses'
 
 interface ConversationViewProps {
   conversation: Conversation
@@ -135,6 +135,11 @@ export function ConversationView(props: ConversationViewProps) {
           The service restarted without seeing this conversation&apos;s runtime exit. It may have kept
           working on its own, so its execution is uncertain. Make sure nothing else holds the session,
           then resume, from the More menu below, to read its native history before continuing.
+        </p>
+      )}
+      {harnessOf(conversation.harness)?.notice && (
+        <p className="harness-notice" role="note">
+          {harnessOf(conversation.harness)?.notice}
         </p>
       )}
       {project.untrusted && !project.checkout_missing && conversation.harness === 'claude' && (

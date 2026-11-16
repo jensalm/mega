@@ -1,0 +1,1 @@
+["Using the bash tool, run exactly `timeout 45 tail -f /dev/null` and then reply INT-ACTIVE-1. Nothing else.", "Reply with exactly AFTER-INTERRUPT-dd44 and nothing else."]

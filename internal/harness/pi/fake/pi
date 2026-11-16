@@ -1,0 +1,391 @@
+#!/usr/bin/env node
+// a stand-in for `pi --mode rpc`, for tests and browser checks that need no
+// model turns. point a scratch service's pi.binary at this file. it speaks
+// the subset of pi's JSONL RPC the pi adapter uses, with the records pi 1.5.2
+// sends (capability report, 2026-11-16), writes session files as pi does
+// (header, then message, model_change and thinking_level_change entries
+// linked by parentId, once the first prompt arrives), and never runs pi.
+// a prompt's text drives it:
+//   ask          a bash call for `sleep 1`, gated by an extension's select,
+//                "Approve bash command: sleep 1" (Allow, Block): allowed, it
+//                runs and the reply is "ran"; blocked or dismissed, it does
+//                not, and the reply is "blocked"
+//   choose       a select, "Which color do you prefer?" (Red, Blue); the
+//                reply is the choice, or "dismissed"
+//   confirm      a confirm, "Proceed?"; the reply is "confirmed", "declined"
+//                or "dismissed"
+//   input        an input, "Your name?"; the reply is "you typed: TEXT"
+//   editor       an editor, "Edit the note", prefilled; the reply is
+//                "edited: TEXT"
+//   timed        a select with a 1.5 s timeout, which settles on its own as
+//                pi's does, sending nothing; the reply is "timed out"
+//   signal       a select its extension passed an abort signal to, so an
+//                abort cancels it, as pi's does, with no answer sent
+//   hold         a bash call that runs until it is aborted
+//   fail         a response that fails, persisted as pi persists one
+//   notify       a notification, then a reply of "ok"
+//   twins        two replies, "first" and "second", with the same millisecond
+//                timestamp, as pi may write two messages of one role
+//   echo TEXT    a reply of TEXT
+//   anything     a reply of "ok"
+// as pi's do, a pending dialog holds an abort until it is answered or
+// dismissed, and holds the process through its input closing and a first
+// SIGTERM; a second SIGTERM ends it at once (exit 143).
+//
+// models: fake/large takes thinking levels off to high, fake/small takes
+// none. a session starts with --model and --thinking, else what settings.json
+// in the agent directory (PI_CODING_AGENT_DIR, else ~/.pi/agent) names as
+// defaultProvider, defaultModel and defaultThinkingLevel, else fake/large at
+// medium. --version prints 1.5.2.
+import { randomUUID, randomBytes } from 'node:crypto'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+const VERSION = '1.5.2'
+const argv = process.argv.slice(2)
+const flag = (name) => {
+  const i = argv.indexOf(name)
+  return i < 0 ? undefined : argv[i + 1]
+}
+if (argv[0] === '--version' || argv[0] === '-v') {
+  process.stdout.write(VERSION + '\n')
+  process.exit(0)
+}
+if (flag('--mode') !== 'rpc') {
+  process.stderr.write('fake pi: only --mode rpc is supported\n')
+  process.exit(2)
+}
+
+const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent')
+const sessionsDir = process.env.PI_CODING_AGENT_SESSION_DIR || join(agentDir, 'sessions')
+const readJSON = (path) => {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+const settings = readJSON(join(agentDir, 'settings.json'))
+
+const catalog = [
+  { id: 'large', name: 'Fake Large', provider: 'fake', api: 'fake', reasoning: true, levels: ['off', 'minimal', 'low', 'medium', 'high'] },
+  { id: 'small', name: 'Fake Small', provider: 'fake', api: 'fake', reasoning: false, levels: ['off'] },
+]
+const modelObject = (m) => ({ id: m.id, name: m.name, api: m.api, provider: m.provider, reasoning: m.reasoning })
+const findModel = (name) => catalog.find((m) => `${m.provider}/${m.id}` === name)
+let current = findModel(flag('--model') ?? `${settings.defaultProvider ?? 'fake'}/${settings.defaultModel ?? 'large'}`) ?? catalog[0]
+const clamp = (level) => (current.levels.includes(level) ? level : current.reasoning ? 'medium' : 'off')
+let thinking = clamp(flag('--thinking') ?? settings.defaultThinkingLevel ?? 'medium')
+
+const out = (record) => process.stdout.write(JSON.stringify(record) + '\n')
+const respond = (id, command, data, error) =>
+  out(error ? { id, type: 'response', command, success: false, error } : { id, type: 'response', command, success: true, ...(data === undefined ? {} : { data }) })
+
+// the session: a new one by --session-id, an existing one by --session's file,
+// or none with --no-session.
+const cwd = process.cwd()
+const folder = '--' + realpathSync(cwd).replace(/^\//, '').replace(/[/\\:]/g, '-') + '--'
+let sessionId = null
+let sessionFile = null
+let leaf = null
+let written = false
+// every entry the session holds, for get_entries.
+const entries = []
+if (argv.includes('--no-session')) {
+  sessionId = randomUUID()
+} else if (flag('--session')) {
+  sessionFile = flag('--session')
+  const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  sessionId = lines[0].id
+  entries.push(...lines.slice(1))
+  leaf = entries.length ? entries[entries.length - 1].id : null
+  written = true
+} else {
+  sessionId = flag('--session-id') ?? randomUUID()
+  if (existsSync(join(sessionsDir, folder))) {
+    const match = readdirSync(join(sessionsDir, folder)).find((f) => f.endsWith(`_${sessionId}.jsonl`))
+    if (match) {
+      sessionFile = join(sessionsDir, folder, match)
+      written = true
+    }
+  }
+  if (!sessionFile) {
+    process.stderr.write(`Warning: No project session found with id '${sessionId}'; creating a new session with that id.\n`)
+    sessionFile = join(sessionsDir, folder, `${new Date().toISOString().replace(/[:.]/g, '-')}_${sessionId}.jsonl`)
+  }
+}
+const record = (entry) => {
+  entries.push(entry)
+  if (!argv.includes('--no-session')) appendFileSync(sessionFile, JSON.stringify(entry) + '\n')
+}
+const persist = (entry) => {
+  if (!written && !argv.includes('--no-session')) {
+    mkdirSync(join(sessionsDir, folder), { recursive: true })
+    appendFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: sessionId, timestamp: new Date().toISOString(), cwd }) + '\n')
+  }
+  if (!written) {
+    written = true
+    for (const e of [
+      { type: 'model_change', provider: current.provider, modelId: current.id },
+      { type: 'thinking_level_change', thinkingLevel: thinking },
+    ]) {
+      const id = randomBytes(4).toString('hex')
+      record({ ...e, id, parentId: leaf, timestamp: new Date().toISOString() })
+      leaf = id
+    }
+  }
+  const id = randomBytes(4).toString('hex')
+  record({ ...entry, id, parentId: leaf, timestamp: new Date().toISOString() })
+  leaf = id
+}
+
+// message timestamps are milliseconds, unique within the session.
+let lastStamp = 0
+const stamp = () => (lastStamp = Math.max(Date.now(), lastStamp + 1))
+const message = (msg) => {
+  out({ type: 'message_start', message: msg })
+  if (msg.role === 'assistant') {
+    msg.content.forEach((block, contentIndex) => {
+      if (block.type === 'text') out({ type: 'message_update', usage: {}, assistantMessageEvent: { type: 'text_delta', contentIndex, delta: block.text } })
+    })
+  }
+  out({ type: 'message_end', message: msg })
+  persist({ type: 'message', message: msg })
+}
+const assistant = (content, extra = {}) => ({ role: 'assistant', content, api: current.api, provider: current.provider, model: current.id, usage: {}, stopReason: 'stop', timestamp: stamp(), ...extra })
+const reply = (text) => message(assistant([{ type: 'text', text }]))
+
+// dialogs: one pending at a time. a pending dialog holds an abort, and the
+// process through its input closing and a first SIGTERM.
+let pending = null // { id, resolve, signal }
+let heldAbort = null
+const ask = (request, signal = false) =>
+  new Promise((resolve) => {
+    const id = randomUUID()
+    pending = { id, resolve, signal }
+    out({ type: 'extension_ui_request', id, ...request })
+    if (request.timeout) {
+      setTimeout(() => {
+        if (pending?.id === id) {
+          pending = null
+          resolve(undefined)
+        }
+      }, request.timeout)
+    }
+  })
+
+let streaming = false
+let aborting = false
+let abortRun = null
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+const tool = async (name, args, gate) => {
+  const toolCallId = 'call_' + randomBytes(6).toString('hex')
+  message(assistant([{ type: 'toolCall', id: toolCallId, name, arguments: args }], { stopReason: 'toolUse' }))
+  out({ type: 'tool_execution_start', toolCallId, toolName: name, args })
+  const allowed = gate ? await gate() : true
+  if (aborting) {
+    out({ type: 'tool_execution_end', toolCallId, toolName: name, result: { content: [{ type: 'text', text: 'aborted' }] }, isError: true })
+    message({ role: 'toolResult', toolCallId, toolName: name, content: [{ type: 'text', text: 'aborted' }], isError: true, timestamp: stamp() })
+    return null
+  }
+  const text = allowed ? (name === 'bash' && args.command === 'hold' ? 'held' : 'slept') : 'blocked by the extension'
+  if (allowed && args.command === 'hold') {
+    await new Promise((r) => (abortRun = r))
+  }
+  out({ type: 'tool_execution_end', toolCallId, toolName: name, result: { content: [{ type: 'text', text }] }, isError: !allowed || aborting })
+  message({ role: 'toolResult', toolCallId, toolName: name, content: [{ type: 'text', text: aborting ? 'aborted' : text }], isError: !allowed || aborting, timestamp: stamp() })
+  return allowed && !aborting
+}
+
+const run = async (text) => {
+  streaming = true
+  aborting = false
+  out({ type: 'agent_start' })
+  out({ type: 'turn_start' })
+  message({ role: 'system', content: '', sections: { preamble: 'fake' }, timestamp: stamp() })
+  message({ role: 'user', content: text, timestamp: stamp() })
+  const [verb, ...rest] = text.trim().split(/\s+/)
+  switch (verb) {
+    case 'ask': {
+      const ran = await tool('bash', { command: 'sleep 1' }, async () => (await ask({ method: 'select', title: 'Approve bash command: sleep 1', options: ['Allow', 'Block'] })) === 'Allow')
+      if (ran !== null) reply(ran ? 'ran' : 'blocked')
+      break
+    }
+    case 'choose': {
+      const choice = await ask({ method: 'select', title: 'Which color do you prefer?', options: ['Red', 'Blue'] })
+      if (!aborting) reply(choice ?? 'dismissed')
+      break
+    }
+    case 'confirm': {
+      const ok = await ask({ method: 'confirm', title: 'Proceed?', message: 'The fake asks before going on.' })
+      if (!aborting) reply(ok === undefined ? 'dismissed' : ok ? 'confirmed' : 'declined')
+      break
+    }
+    case 'input': {
+      const value = await ask({ method: 'input', title: 'Your name?', placeholder: 'a name' })
+      if (!aborting) reply(value === undefined ? 'dismissed' : `you typed: ${value}`)
+      break
+    }
+    case 'editor': {
+      const value = await ask({ method: 'editor', title: 'Edit the note', prefill: 'line one\nline two' })
+      if (!aborting) reply(value === undefined ? 'dismissed' : `edited: ${value}`)
+      break
+    }
+    case 'timed': {
+      const value = await ask({ method: 'select', title: 'Answer within 1.5 s', options: ['Now'], timeout: 1500 })
+      if (!aborting) reply(value === undefined ? 'timed out' : value)
+      break
+    }
+    case 'signal': {
+      const value = await ask({ method: 'select', title: 'Cancelled by an abort', options: ['Go'] }, true)
+      if (!aborting) reply(value ?? 'dismissed')
+      break
+    }
+    case 'hold':
+      if ((await tool('bash', { command: 'hold' })) !== null && !aborting) reply('held')
+      break
+    case 'fail':
+      message(assistant([], { stopReason: 'error', errorMessage: 'fake failure' }))
+      break
+    case 'notify':
+      out({ type: 'extension_ui_request', id: randomUUID(), method: 'notify', message: 'a fake notification', notifyType: 'info' })
+      reply('ok')
+      break
+    case 'twins': {
+      const at = stamp()
+      message(assistant([{ type: 'text', text: 'first' }], { timestamp: at }))
+      message(assistant([{ type: 'text', text: 'second' }], { timestamp: at }))
+      break
+    }
+    case 'echo':
+      reply(rest.join(' ') || 'ok')
+      break
+    default:
+      reply('ok')
+  }
+  if (aborting) message(assistant([], { stopReason: 'aborted' }))
+  out({ type: 'turn_end' })
+  out({ type: 'agent_end', messages: [], willRetry: false })
+  out({ type: 'agent_settled', aborted: aborting })
+  streaming = false
+  if (heldAbort) {
+    respond(heldAbort, 'abort')
+    heldAbort = null
+  }
+  aborting = false
+  if (closing) process.exit(0)
+}
+
+const handle = (cmd) => {
+  const { id, type } = cmd
+  switch (type) {
+    case 'get_state':
+      return respond(id, type, { model: modelObject(current), thinkingLevel: thinking, isStreaming: streaming, sessionFile, sessionId, messageCount: 0 })
+    case 'get_available_models':
+      return respond(id, type, { models: catalog.map(modelObject) })
+    case 'get_available_thinking_levels':
+      return respond(id, type, { levels: current.levels })
+    case 'set_model': {
+      const m = findModel(`${cmd.provider}/${cmd.modelId}`)
+      if (!m) return respond(id, type, undefined, `Model not found: ${cmd.provider}/${cmd.modelId}`)
+      current = m
+      thinking = clamp(thinking)
+      if (written) persist({ type: 'model_change', provider: m.provider, modelId: m.id })
+      return respond(id, type, modelObject(m))
+    }
+    case 'set_thinking_level':
+      thinking = clamp(cmd.level)
+      out({ type: 'thinking_level_changed', level: thinking })
+      return respond(id, type)
+    case 'get_entries': {
+      let from = 0
+      if (cmd.since) {
+        const at = entries.findIndex((e) => e.id === cmd.since)
+        if (at < 0) return respond(id, type, undefined, `no entry '${cmd.since}'`)
+        from = at + 1
+      }
+      return respond(id, type, { entries: entries.slice(from), leafId: leaf })
+    }
+    case 'get_commands':
+      return respond(id, type, { commands: [{ name: 'fake-cmd', source: 'extension' }] })
+    case 'prompt':
+      if (cmd.message.startsWith('/')) {
+        out({ type: 'extension_ui_request', id: randomUUID(), method: 'notify', message: `handled ${cmd.message}` })
+        return respond(id, type, { disposition: 'handled' })
+      }
+      if (streaming) {
+        if (!cmd.streamingBehavior) return respond(id, type, undefined, 'Agent is already processing')
+        respond(id, type, { disposition: 'queued' })
+        const queued = cmd.message
+        const wait = setInterval(() => {
+          if (!streaming) {
+            clearInterval(wait)
+            run(queued)
+          }
+        }, 20)
+        return
+      }
+      respond(id, type, { disposition: 'started' })
+      run(cmd.message)
+      return
+    case 'abort':
+      if (!streaming) return respond(id, type)
+      aborting = true
+      if (abortRun) {
+        abortRun()
+        abortRun = null
+      }
+      // a pending dialog holds the abort until it is answered or dismissed,
+      // unless its extension passed the abort signal, which cancels it.
+      heldAbort = id
+      if (pending?.signal) {
+        const { resolve } = pending
+        pending = null
+        resolve(undefined)
+      }
+      return
+    case 'extension_ui_response': {
+      if (!pending || pending.id !== id) return
+      const { resolve } = pending
+      pending = null
+      resolve(cmd.cancelled ? undefined : 'confirmed' in cmd ? cmd.confirmed : cmd.value)
+      return
+    }
+    default:
+      return respond(id, type, undefined, `unknown command '${type}'`)
+  }
+}
+
+// as pi does, the process stays until it decides to exit, even with its
+// input closed and nothing else to wait on: a pending dialog holds it.
+setInterval(() => {}, 1 << 30)
+let buf = ''
+let closing = false
+process.stdin.on('data', (d) => {
+  buf += d
+  let i
+  while ((i = buf.indexOf('\n')) >= 0) {
+    const line = buf.slice(0, i).replace(/\r$/, '')
+    buf = buf.slice(i + 1)
+    if (!line.trim()) continue
+    try {
+      handle(JSON.parse(line))
+    } catch (e) {
+      out({ type: 'response', command: 'parse', success: false, error: `Failed to parse command: ${e.message}` })
+    }
+  }
+})
+// an orderly shutdown waits for the run, and a pending dialog holds it.
+process.stdin.on('end', () => {
+  closing = true
+  if (!streaming) process.exit(0)
+})
+let signals = 0
+process.on('SIGTERM', () => {
+  signals++
+  closing = true
+  if (signals >= 2) process.exit(143)
+  if (!streaming) process.exit(0)
+})

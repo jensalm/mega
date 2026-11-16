@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
 import { interruptConversation, releaseConversation, removeConversation, resumeConversation, sendPrompt, setModel, setPermissionMode, startRuntime, updateConversation } from '../api'
-import { harnessLabel, harnesses } from '../harnesses'
+import { harnessLabel, harnessOf, harnesses } from '../harnesses'
 import { place } from '../latest'
 import type { ConversationLog } from '../log'
 import type { Conversation, Project } from '../types'
@@ -52,7 +52,6 @@ const clampHeight = (height: number) => Math.min(Math.max(height, minHeight), ma
 // the words the header used for a runtime started in an older environment.
 const staleEnvironment = 'started in an older environment: the project’s has changed since, and the next start picks it up'
 
-const terminalCommands: Record<string, string> = { claude: 'claude --resume', codex: 'codex resume' }
 
 interface InputPanelProps {
   conversation: Conversation
@@ -307,10 +306,12 @@ export function InputPanel(props: InputPanelProps) {
   // never while unsupervised, which Resume settles first, and never on its
   // own: only this gesture starts a runtime without a prompt.
   const canStart = state === 'none' && !!conversation.native_id
+  const harness = harnessOf(conversation.harness)
   const terminal =
-    conversation.native_id && terminalCommands[conversation.harness]
-      ? `cd ${project.checkout} && ${terminalCommands[conversation.harness]} ${conversation.native_id}`
-      : null
+    conversation.native_id && harness?.terminal ? `cd ${project.checkout} && ${harness.terminal} ${conversation.native_id}` : null
+  // a pi dialog holds pi open: closing its input does not stop it, so a
+  // release ends its process, and the command the dialog gates never runs.
+  const piDialogPending = conversation.harness === 'pi' && pending.length > 0
   // the environment is on the bar only when it needs attention: the runtime
   // started in an older environment than the project's now, or the project's
   // environment refuses new work. the fingerprint and the names stay in the
@@ -413,7 +414,7 @@ export function InputPanel(props: InputPanelProps) {
             )}
           </div>
           <div className="bar-end">
-            {conversation.harness === 'claude' && state !== 'unsupervised' && (
+            {harness?.permissionModes && state !== 'unsupervised' && (
               <ModeControl
                 mode={conversation.permission_mode_choice ?? ''}
                 disabled={busy || stale || settling || (state === 'running' && !conversation.permission_mode)}
@@ -441,10 +442,10 @@ export function InputPanel(props: InputPanelProps) {
               }}
             >
               <IconButton icon="more_vert" label="More" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)} />
-              {mcpTrouble(conversation) && <span className="more-mark" role="img" aria-label={mcpTroubleText} title={mcpTroubleText} />}
+              {harness?.listsMcp && mcpTrouble(conversation) && <span className="more-mark" role="img" aria-label={mcpTroubleText} title={mcpTroubleText} />}
               {menu && (
                 <div className="menu" role="menu">
-                  <MenuItem icon="extension" word={mcpSummaryText(conversation)} onClick={() => choose('mcp')} />
+                  {harness?.listsMcp && <MenuItem icon="extension" word={mcpSummaryText(conversation)} onClick={() => choose('mcp')} />}
                   <MenuItem icon="logout" word="Release" disabled={busy || state !== 'running'} onClick={() => choose('release')} />
                   {canResume && (
                     <MenuItem
@@ -490,6 +491,12 @@ export function InputPanel(props: InputPanelProps) {
             Release stops the runtime and frees the session, so you can continue in a terminal.
             {(active || pending.length > 0) && ' The turn in flight is interrupted first.'}
           </p>
+          {piDialogPending && (
+            <p className="notice release-pi-dialog">
+              A pi dialog is waiting for your answer. pi cannot be stopped politely while it waits, so releasing ends its process, and the
+              command the dialog gates does not run. The dialog is recorded as never answered.
+            </p>
+          )}
           {background.length > 0 && (
             <div className="release-background">
               <p>
@@ -517,7 +524,14 @@ export function InputPanel(props: InputPanelProps) {
           ) : (
             <p className="muted">This conversation has no session yet to continue elsewhere.</p>
           )}
-          <p>Close the terminal before you resume or prompt here again; an idle terminal still holds the session.</p>
+          {conversation.harness === 'pi' ? (
+            <p>
+              Close the terminal before you resume or prompt here again. pi has no lock, so a terminal still open on the session and mega
+              would both write to its file, and mega cannot tell that one is open.
+            </p>
+          ) : (
+            <p>Close the terminal before you resume or prompt here again; an idle terminal still holds the session.</p>
+          )}
           <div className="actions">
             <IconButton
               icon="logout"

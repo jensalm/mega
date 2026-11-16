@@ -1303,6 +1303,35 @@ func TestAllowSessionOnlyWhereOffered(t *testing.T) {
 	}
 }
 
+// a question is dismissed only where the harness offers it (a pi dialog),
+// and only by the operator's answer; the dismissal reaches the harness with
+// no answers.
+func TestDismissOnlyWhereOffered(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	plain := rt.Ask(model.RequestQuestion, map[string]any{"tool": "question", "questions": []any{map[string]any{"question": "Which?"}}})
+	wantCode(t, r.svc.Answer(conv.ID, plain, harness.Answer{Decision: harness.DecisionDismiss}), CodeInvalid)
+	if pending := r.view(conv.ID).Pending; len(pending) != 1 || pending[0].ID != plain {
+		t.Fatalf("a refused dismissal took the request: %+v", pending)
+	}
+	if err := r.svc.Answer(conv.ID, plain, harness.Answer{Answers: map[string]string{"Which?": "this"}}); err != nil {
+		t.Fatal(err)
+	}
+	offered := rt.Ask(model.RequestQuestion, map[string]any{"tool": "question", "dismiss": true, "questions": []any{map[string]any{"question": "Proceed?"}}})
+	if err := r.svc.Answer(conv.ID, offered, harness.Answer{Decision: harness.DecisionDismiss, Answers: map[string]string{"Proceed?": "Yes"}}); err != nil {
+		t.Fatal(err)
+	}
+	deliveries := rt.Deliveries()
+	if last := deliveries[len(deliveries)-1]; last.Answer.Decision != harness.DecisionDismiss || last.Answer.Answers != nil {
+		t.Errorf("delivered %+v", last)
+	}
+	if pending := r.view(conv.ID).Pending; len(pending) != 0 {
+		t.Errorf("still pending: %+v", pending)
+	}
+}
+
 // a meta user message (a subagent's hand-back) arrives only through an import,
 // as a native event with its own identity; importing it again adds nothing.
 func TestMetaMessageImportedTwiceIsRecordedOnce(t *testing.T) {

@@ -63,6 +63,7 @@ type session struct {
 type answerBody struct {
 	RequestID string
 	Decision  string
+	Answers   map[string]string `dd:",+omitempty"`
 }
 
 type errorReply struct {
@@ -76,11 +77,17 @@ type errorReply struct {
 // answered with, or empty for an accepted answer.
 func (s *session) answer(requestID, decision string) string {
 	s.t.Helper()
+	return s.post(&answerBody{RequestID: requestID, Decision: decision})
+}
+
+// post answers a request with body, as answer does.
+func (s *session) post(answer *answerBody) string {
+	s.t.Helper()
 	if s.api == nil {
 		s.api = httptest.NewServer(server.New(s.svc, server.About{Version: "e2e", Developer: true}).Handler())
 		s.t.Cleanup(s.api.Close)
 	}
-	body, err := dd.UnbindJSON(&answerBody{RequestID: requestID, Decision: decision})
+	body, err := dd.UnbindJSON(answer)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -95,7 +102,7 @@ func (s *session) answer(requestID, decision string) string {
 	data, _ := io.ReadAll(resp.Body)
 	reply := &errorReply{}
 	if err := dd.BindJSON(reply, data); err != nil || reply.Code == "" {
-		s.t.Fatalf("answering %s: %d %s", requestID, resp.StatusCode, data)
+		s.t.Fatalf("answering %s: %d %s", answer.RequestID, resp.StatusCode, data)
 	}
 	return reply.Code
 }

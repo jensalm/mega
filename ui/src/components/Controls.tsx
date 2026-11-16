@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { harnessOf } from '../harnesses'
 import { useModels } from '../models'
 import { permissionModes, shortMode } from '../permissions'
 import type { Conversation } from '../types'
@@ -54,7 +55,15 @@ export function ModelControl({
   const changed = draft.model !== stored.model || draft.effort !== stored.effort
   return (
     <span className="bar-control model-control">
-      <ModelPicker short models={models} model={draft.model} effort={draft.effort} disabled={disabled} onChange={(model, effort) => setDraft({ model, effort })} />
+      <ModelPicker
+        short
+        models={models}
+        model={draft.model}
+        effort={draft.effort}
+        disabled={disabled}
+        loneEffort={harnessOf(conversation.harness)?.loneEffort}
+        onChange={(model, effort) => setDraft({ model, effort })}
+      />
       {changed && (
         <>
           <IconButton icon="check" label="Apply the model and effort" word="Apply" disabled={disabled || draft.model === ''} onClick={() => void onApply(draft.model, draft.effort)} />

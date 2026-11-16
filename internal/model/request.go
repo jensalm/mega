@@ -11,6 +11,13 @@ const (
 	OutcomeAnswered = "answered"
 	OutcomeAborted  = "aborted"
 	OutcomeLost     = "lost"
+	// OutcomeExpired is a request the harness settled on its own when the
+	// time its asker gave ran out: a pi dialog with a timeout.
+	OutcomeExpired = "expired"
+	// OutcomeUnanswered is a request still pending when its runtime was
+	// ended: a pi dialog, which holds pi open until it is answered, so a
+	// release ends pi's process with it never answered.
+	OutcomeUnanswered = "unanswered"
 )
 
 // Request is a question or approval from a harness. ID is minted by the service
