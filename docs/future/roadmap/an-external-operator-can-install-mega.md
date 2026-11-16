@@ -26,18 +26,19 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - `harness-version-tolerance`: Claude Code is found on the `PATH`, each harness has a tested range, and a lone Codex binary is named.
 - `harness-configuration-backups`: configuration snapshots under mega's data directory, with `mega snapshots` to list and compare them.
 
-**Building**
-
-- `pi-adapter`: the third harness. The installed pi moved from 1.1.0 to 1.5.2 since it was probed, so it starts by probing again.
+- `pi-adapter`: the third harness, built against pi 1.5.2 and the local model.
 
 **Next, in order**
 
-1. The conversation polish a live demo shows: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps`, `path-search-beyond-the-checkout` and `agent-hand-off-turns`.
+1. The conversation polish a live demo shows: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps` and `path-search-beyond-the-checkout`.
 2. `readme-for-newcomers`.
 3. `the-demo`: a workspace made for showing, with no freeze before it.
 
+Michael, 2026-11-16: with everything up to `the-demo` handled, mega is in good shape for the demo.
+
 **After the demo**
 
+- `agent-hand-off-turns` and `remote-access-through-zrok`.
 - `clean-machine-rehearsal`, Michael's own pass under WSL2, which is also the Windows half of `mega-on-macos-and-windows`.
 - `mega-on-macos-and-windows`, the macOS half, when a volunteer has a Mac.
 - `mega-on-twentytwo`: the first tagged release, delivered by `push`.

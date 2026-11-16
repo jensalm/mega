@@ -274,6 +274,9 @@ export interface Workspace {
   // whether each harness can run in the operator's shell environment, as
   // mega's start-up check found it; absent until that check has run.
   harnesses?: HarnessStatus[]
+  // the zone the service runs in, such as America/New_York, which the page
+  // says every time in (clock.ts); absent when the service cannot name it.
+  time_zone?: string
 }
 
 // HarnessStatus is one harness: where its programs were found (where names

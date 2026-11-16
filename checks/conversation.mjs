@@ -25,8 +25,12 @@
 // operator's own prompts, "outside mega" on one from outside, "From outside
 // mega" on its reply. and each turn's line: hidden at rest, shown on hover
 // and on focus with nothing moving, staying in the notice colour when the
-// fake reports another model than the one asked for, and none on turns
-// recorded before mega kept it. and a pi conversation: pi's own words about
+// fake reports another model than the one asked for; after what it ran with,
+// when its prompt was sent and how long it took, the turn in flight when it
+// started, and a turn recorded before mega kept what it ran with its time
+// alone, with its date from another day; each prompt's time as its title,
+// "Imported" on one from outside; every time in the service's zone while
+// the page reports UTC. and a pi conversation: pi's own words about
 // how it asks under its header, its prompt, tool call and reply as the
 // others', the prompt's bookkeeping hidden, and its turn line with no mode.
 // and the runtime-started line: unmarked, with
@@ -46,7 +50,10 @@ import { join } from 'node:path'
 import { appendImported, appendNative, appendTurns } from './lib/gen.mjs'
 import { suite } from './lib/mega.mjs'
 
-const t = await suite('conversation')
+// the service runs in one time zone and the pages in another, UTC, as a
+// hardened browser reports; every time the page says is the service's.
+const serviceZone = 'Asia/Kolkata'
+const t = await suite('conversation', { tz: serviceZone })
 const { url, port, check, until, api, convOf, workspace } = t
 
 // two conversations, launched and released, then made long while the service
@@ -69,7 +76,36 @@ appendImported(logOf(C))
 t.say(`generated ${genA.seq} events in ${genA.turns} turns, and ${genB.seq} in ${genB.turns}`)
 await t.start()
 
-const page = await t.page({ width: 1440, height: 900 })
+const page = await t.page({ width: 1440, height: 900, timezoneId: 'UTC' })
+// inZone formats a time as the page does, in a zone: the service's unless
+// another is named.
+const inZone = (at, options, zone = serviceZone) =>
+  page.evaluate(([at, options, zone]) => new Intl.DateTimeFormat([], { ...options, timeZone: zone }).format(new Date(at)), [at, options, zone])
+const minute = { hour: '2-digit', minute: '2-digit' }
+const toSecond = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' }
+// lasted is how long a turn took, as the activity line says it.
+const lasted = (ms) => {
+  const s = Math.floor(ms / 1000)
+  if (s < 1) return 'under 1s'
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+// turnTimes is when each ended turn of a conversation's newest ten was sent,
+// its prompt's time, and when it ended.
+const turnTimes = async (id) => {
+  const evs = (await api('GET', `/api/conversations/${id}/events?turns=10`)).body.events
+  const out = []
+  let sent
+  for (const e of evs) {
+    if (e.kind === 'user' && !sent) sent = e.at
+    if (e.kind === 'turn_end') {
+      if (sent) out.push({ sent, ended: e.at })
+      sent = undefined
+    }
+  }
+  return out
+}
 const reads = []
 page.on('request', (r) => {
   if (r.url().includes('/events')) reads.push(r.url().replace(url, ''))
@@ -104,7 +140,19 @@ check((await earlierText()).startsWith(`${tailA.earlier.turns} earlier turns`), 
 check((await page.locator('.events .message.user').count()) === 10, 'ten turns shown')
 await until('A read through the tail', async () => (await convOf(A)).read_seq === tailA.through)
 check(true, `the reading position follows the newest event given: ${tailA.through}`)
-check((await page.locator('.events .turn-end').count()) >= 10 && (await page.locator('.events .turn-line').count()) === 0, 'turns recorded before mega kept what each ran with show no line')
+// those turns have no record of what they ran with, so their lines have
+// their time alone; generated a week ago, each has its date.
+const genTimes = await turnTimes(A)
+const genLast = genTimes.at(-1)
+const genLine = (await page.locator('.events .turn-end:not(.pending) .turn-line').last().textContent()) ?? ''
+const genWant = `Sent ${await inZone(genLast.sent, { month: 'short', day: 'numeric' })} ${await inZone(genLast.sent, minute)} · took ${lasted(Date.parse(genLast.ended) - Date.parse(genLast.sent))}`
+check(
+  (await page.locator('.events .turn-end').count()) >= 10 &&
+    (await page.locator('.events .turn-line').count()) === (await page.locator('.events .turn-end:not(.pending)').count()) &&
+    genLine === genWant &&
+    (await inZone(genLast.sent, minute, 'UTC')) !== (await inZone(genLast.sent, minute)),
+  `turns with no record of what they ran with still show their time, from another day with its date, in the service's zone: "${genLine}"`,
+)
 await t.shot(page, 'tail')
 
 // the column: 960 pixels, in the middle of its pane, and everything in the
@@ -243,6 +291,8 @@ const outside = prompts.filter({ hasText: 'a prompt typed in a terminal' })
 const reply = page.locator('.events .message.assistant', { hasText: 'a reply given in a terminal' })
 check((await own.locator('.who').count()) === 0 && (await prompts.locator('.who', { hasText: /^you/i }).count()) === 0, "the operator's own prompts carry no label")
 check((await outside.locator('.who').textContent()) === 'outside mega' && (await reply.locator('.who').textContent()) === 'From outside mega', 'a prompt from outside mega reads "outside mega", and its reply "From outside mega"')
+const outsideTitle = (await outside.getAttribute('title')) ?? ''
+check(outsideTitle.startsWith('Imported '), `its title says when mega imported it, not when it was sent: "${outsideTitle}"`)
 await t.shot(page, 'outside')
 
 // each turn's line: what it ran with, hidden at rest, shown while the
@@ -281,7 +331,20 @@ const rest = async () => {
 await rest()
 await until('the line hidden at rest', async () => (await opacity(firstLine)) === '0')
 const lineText = await firstLine.textContent()
-check(lineText === 'Ran Fake Opus · medium · ask', `a turn carries one line, hidden at rest: "${lineText}"`)
+const [firstTimes] = await turnTimes(L)
+const firstWant = `Ran Fake Opus · medium · ask · sent ${await inZone(firstTimes.sent, minute)} · took ${lasted(Date.parse(firstTimes.ended) - Date.parse(firstTimes.sent))}`
+check(lineText === firstWant, `a turn carries one line, hidden at rest: what it ran with, when its prompt was sent and how long it took: "${lineText}"`)
+check(
+  (await inZone(firstTimes.sent, minute, 'UTC')) !== (await inZone(firstTimes.sent, minute)) && (await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)) === 'UTC',
+  'the time is the service’s, not the page’s own UTC',
+)
+const lineTitle = await firstLine.getAttribute('title')
+check(
+  (lineTitle ?? '').startsWith('Asked for ') && (lineTitle ?? '').endsWith(`. Sent ${await inZone(firstTimes.sent, toSecond)}; ended ${await inZone(firstTimes.ended, toSecond)}`),
+  `its title has both times to the second, with the zone: "${lineTitle}"`,
+)
+const promptTitle = await firstTurn.locator('.message.user').getAttribute('title')
+check(promptTitle === `Sent ${await inZone(firstTimes.sent, toSecond)}`, `the operator's prompt carries its time as its title: "${promptTitle}"`)
 const atRest = await layout()
 await turnShot(firstTurn, 'turn-rest')
 await firstTurn.locator('.message.assistant').hover()
@@ -321,7 +384,7 @@ check(
   differsStyle.opacity === '1' && differsStyle.bg === differsStyle.wantBg && differsStyle.border === differsStyle.wantBorder,
   `a turn that ran with another model keeps its line at rest, in the notice colour: ${JSON.stringify(differsStyle)}`,
 )
-check(differsText === 'Ran Fake Sonnet, asked Default · medium · ask', `and names both: "${differsText}"`)
+check(differsText.startsWith('Ran Fake Sonnet, asked Default · medium · ask · sent '), `and names both: "${differsText}"`)
 check((await opacity(firstLine)) === '0', 'while a turn that ran as asked keeps its line hidden')
 await turnShot(page.locator('.events .turn-block').filter({ has: page.locator('.turn-line.differs') }), 'turn-mismatch')
 // the turn in flight shows its line on hover once it has run, in the space
@@ -331,11 +394,15 @@ await reply2.fill('drip 6 400')
 await reply2.press('Control+Enter')
 await rest()
 const pending = page.locator('.events .turn-end.pending .turn-line')
-await until('the turn in flight has run', async () => (await pending.count()) === 1, 30000)
+await until('the turn in flight has run', async () => (await pending.count()) === 1 && ((await pending.textContent()) ?? '').startsWith('Ran'), 30000)
 const flightBefore = await layout()
 await page.locator('.events .turn-block').last().locator('.message.user').hover()
 await until('the in-flight line on hover', async () => (await opacity(pending)) === '1')
-check((await pending.textContent()) === 'Ran Fake Opus · medium · ask' && (await layout()) === flightBefore, `the turn in flight shows what it runs with on hover, and nothing moves: "${await pending.textContent()}"`)
+const flightSent = (await api('GET', `/api/conversations/${L}/events?turns=1`)).body.events.filter((e) => e.kind === 'user').at(-1).at
+check(
+  (await pending.textContent()) === `Ran Fake Opus · medium · ask · sent ${await inZone(flightSent, minute)}` && (await layout()) === flightBefore,
+  `the turn in flight shows what it runs with and when it started on hover, and nothing moves: "${await pending.textContent()}"`,
+)
 await t.idle(L)
 await rest()
 await page.evaluate((id) => {
@@ -601,7 +668,7 @@ const piTools = await page.locator('.events details.tool summary').allTextConten
 check(piTools.some((tool) => tool.includes('bash sleep 1')), `the tool call is a row in the history: ${JSON.stringify(piTools)}`)
 check((await page.locator('.events .message.user', { hasText: /^ask$/ }).count()) === 1 && (await page.locator('.events', { hasText: 'user/recorded by pi' }).count()) === 0, 'the prompt shows once, and the record of pi\'s identity for it is hidden with the native events')
 const piLine = await page.locator('.events .turn-end:not(.pending) .turn-line').last().textContent()
-check(piLine === 'Ran Fake Large · medium', `each turn's line says what it ran with, and no mode: "${piLine}"`)
+check(/^Ran Fake Large · medium · sent \S+( [AP]M)? · took /.test(piLine ?? ''), `each turn's line says what it ran with, and no mode: "${piLine}"`)
 await t.shot(page, 'pi-conversation')
 
 // dark: the centred conversation, with the panel open and collapsed.

@@ -6,11 +6,39 @@ import { IconButton } from './Icon'
 interface RequestCardProps {
   conversationId: string
   request: PendingRequest
+  // keyed: this is the approval the reply box's keys answer (allowKeys), so
+  // its Allow buttons name them.
+  keyed?: boolean
+}
+
+// allowKeys are the keys that answer the oldest docked approval from an
+// empty reply box or the page itself, as its buttons do: Allow, and "Allow
+// this tool for the session" where the harness offers it. a question, a pi
+// dialog among them, has no key.
+const allowKeys = { allow: 'Ctrl+Enter', allow_session: 'Ctrl+Shift+Enter' }
+const ariaKeys = { allow: 'Control+Enter', allow_session: 'Control+Shift+Enter' }
+
+// AllowButton is an Allow button; keyed, its title names its key. the key
+// presses this same button (InputPanel), so the answer goes the one way.
+function AllowButton({ decision, keyed, sending, onAnswer }: { decision: 'allow' | 'allow_session'; keyed: boolean; sending: boolean; onAnswer: (answer: Answer) => void }) {
+  const label = decision === 'allow' ? 'Allow' : 'Allow this tool for the session'
+  return (
+    <IconButton
+      icon={decision === 'allow' ? 'check' : 'done_all'}
+      label={label}
+      title={keyed ? `${label} (${allowKeys[decision]})` : label}
+      aria-keyshortcuts={keyed ? ariaKeys[decision] : undefined}
+      word={label}
+      data-answer={decision}
+      disabled={sending}
+      onClick={() => onAnswer({ decision })}
+    />
+  )
 }
 
 // RequestCard is answerable only because the service's pending set lists the
 // request. the first answer from any browser wins; a later one is refused.
-export function RequestCard({ conversationId, request }: RequestCardProps) {
+export function RequestCard({ conversationId, request, keyed = false }: RequestCardProps) {
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
 
@@ -29,7 +57,7 @@ export function RequestCard({ conversationId, request }: RequestCardProps) {
   // terminal, sent only when the operator presses it.
   const dismiss = request.payload?.dismiss ? () => void send({ decision: 'dismiss' }) : undefined
   return (
-    <section className="request-card" aria-label={request.kind === 'question' ? 'Question' : 'Approval'}>
+    <section className="request-card" data-request={request.id} aria-label={request.kind === 'question' ? 'Question' : 'Approval'}>
       {request.kind === 'question' && request.payload?.fields ? (
         <FormQuestion payload={request.payload} sending={sending} onAnswer={(answers) => void send({ answers })} onDismiss={dismiss} />
       ) : request.kind === 'question' ? (
@@ -41,7 +69,7 @@ export function RequestCard({ conversationId, request }: RequestCardProps) {
           onDismiss={dismiss}
         />
       ) : (
-        <PermissionForm request={request} sending={sending} onAnswer={(answer) => void send(answer)} />
+        <PermissionForm request={request} keyed={keyed} sending={sending} onAnswer={(answer) => void send(answer)} />
       )}
       {error && <p className="error">{error}</p>}
     </section>
@@ -60,11 +88,11 @@ function describeInput(input: Record<string, unknown> | undefined): string {
   return JSON.stringify(input, null, 2)
 }
 
-function PermissionForm({ request, sending, onAnswer }: { request: PendingRequest; sending: boolean; onAnswer: (answer: Answer) => void }) {
+function PermissionForm({ request, keyed, sending, onAnswer }: { request: PendingRequest; keyed: boolean; sending: boolean; onAnswer: (answer: Answer) => void }) {
   const [message, setMessage] = useState('')
   const payload = request.payload ?? {}
   if (payload.mcp_server) {
-    return <McpApproval payload={payload} sending={sending} onAnswer={onAnswer} />
+    return <McpApproval payload={payload} keyed={keyed} sending={sending} onAnswer={onAnswer} />
   }
   const detail = payload.title ?? payload.description ?? payload.decision_reason
   return (
@@ -82,7 +110,7 @@ function PermissionForm({ request, sending, onAnswer }: { request: PendingReques
       )}
       <div className="inline-form">
         <input placeholder="Reason, sent with a denial" value={message} onChange={(event) => setMessage(event.target.value)} />
-        <IconButton icon="check" label="Allow" word="Allow" disabled={sending} onClick={() => onAnswer({ decision: 'allow' })} />
+        <AllowButton decision="allow" keyed={keyed} sending={sending} onAnswer={onAnswer} />
         <IconButton icon="block" label="Deny" word="Deny" disabled={sending} onClick={() => onAnswer({ decision: 'deny', message })} />
       </div>
     </>
@@ -93,7 +121,7 @@ function PermissionForm({ request, sending, onAnswer }: { request: PendingReques
 // does, and the parameters it would be called with. codex carries no reason
 // with a denial, so none is asked for. "for this session" appears only where
 // the harness offered it, and covers this tool only.
-function McpApproval({ payload, sending, onAnswer }: { payload: RequestPayload; sending: boolean; onAnswer: (answer: Answer) => void }) {
+function McpApproval({ payload, keyed, sending, onAnswer }: { payload: RequestPayload; keyed: boolean; sending: boolean; onAnswer: (answer: Answer) => void }) {
   const parameters = payload.parameters ?? []
   return (
     <>
@@ -117,16 +145,8 @@ function McpApproval({ payload, sending, onAnswer }: { payload: RequestPayload; 
         payload.input && Object.keys(payload.input).length > 0 && <pre>{JSON.stringify(payload.input, null, 2)}</pre>
       )}
       <div className="actions">
-        <IconButton icon="check" label="Allow" word="Allow" disabled={sending} onClick={() => onAnswer({ decision: 'allow' })} />
-        {payload.allow_session && (
-          <IconButton
-            icon="done_all"
-            label="Allow this tool for the session"
-            word="Allow this tool for the session"
-            disabled={sending}
-            onClick={() => onAnswer({ decision: 'allow_session' })}
-          />
-        )}
+        <AllowButton decision="allow" keyed={keyed} sending={sending} onAnswer={onAnswer} />
+        {payload.allow_session && <AllowButton decision="allow_session" keyed={keyed} sending={sending} onAnswer={onAnswer} />}
         <IconButton icon="block" label="Deny" word="Deny" disabled={sending} onClick={() => onAnswer({ decision: 'deny' })} />
       </div>
     </>

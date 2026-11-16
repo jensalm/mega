@@ -43,6 +43,9 @@ type workspaceView struct {
 	// Harnesses is whether each harness can run in the operator's shell
 	// environment, as the start-up check found it; absent until it has run.
 	Harnesses []*harnessStatusView `dd:",+omitempty"`
+	// TimeZone is the zone the service runs in (timeZone), which the page
+	// formats every time in; absent when it cannot be named.
+	TimeZone string `dd:",+omitempty"`
 }
 
 // harnessStatusView is one harness, found where or missing and why, with its
@@ -101,6 +104,7 @@ func (s *Server) getWorkspace(w http.ResponseWriter, r *http.Request) {
 		Projects:      make([]*projectView, 0, len(workspace.Projects)),
 		Conversations: make([]*conversationView, 0, len(workspace.Conversations)),
 		NeedsYou:      workspace.NeedsYou,
+		TimeZone:      s.zone,
 		Shutdown: &shutdownView{
 			Armed:    workspace.Gate.Armed,
 			ArmedAt:  workspace.Gate.ArmedAt,

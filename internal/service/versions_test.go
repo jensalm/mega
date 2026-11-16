@@ -2,9 +2,11 @@ package service
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/harnesstest"
@@ -92,5 +94,97 @@ func TestTheStartUpCheckReadsVersions(t *testing.T) {
 	}
 	if h := svc.Harnesses(); len(h) != 2 || h[0].Version != "2.1.330" {
 		t.Errorf("Harnesses() = %+v", h)
+	}
+}
+
+// a harness updated behind the same path is read again without a restart,
+// and the workspace announces it: a link moved to a new build, as Claude
+// Code's updater does, and a program replaced in place with its modification
+// time kept, as an npm update does.
+func TestAnUpdateBehindTheSamePathIsReadAgain(t *testing.T) {
+	dir := t.TempDir()
+	builds := filepath.Join(dir, "versions")
+	if err := os.MkdirAll(builds, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"2.1.320", "2.1.330"} {
+		if err := os.WriteFile(filepath.Join(builds, v), []byte("build "+v), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(dir, "claude")
+	if err := os.Symlink(filepath.Join(builds, "2.1.320"), link); err != nil {
+		t.Fatal(err)
+	}
+	program := filepath.Join(dir, "codex")
+	if err := os.WriteFile(program, []byte("codex one"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kept := time.Date(1985, 10, 26, 8, 15, 0, 0, time.UTC)
+	if err := os.Chtimes(program, kept, kept); err != nil {
+		t.Fatal(err)
+	}
+	claude := harnesstest.New(model.HarnessClaude)
+	claude.SetProgram(link)
+	claude.SetVersion("2.1.320", nil)
+	codex := harnesstest.New(model.HarnessCodex)
+	codex.SetProgram(program)
+	codex.SetVersion("0.166.0", nil)
+	svc := newService(t, filepath.Join(t.TempDir(), "registry.yaml"), allTrusted, claude, codex)
+	versions := func() (string, string) {
+		got := svc.Harnesses()
+		if len(got) != 2 {
+			t.Fatalf("harnesses = %+v", got)
+		}
+		return got[0].Version, got[1].Version
+	}
+	if c, x := versions(); c != "2.1.320" || x != "0.166.0" {
+		t.Fatalf("at start: claude %q, codex %q", c, x)
+	}
+	// nothing changed: the read is kept, however often it is asked for.
+	claude.SetVersion("2.1.999", nil)
+	if c, _ := versions(); c != "2.1.320" {
+		t.Fatalf("a read with nothing changed: claude %q", c)
+	}
+	sub := svc.Subscribe()
+	defer sub.Close()
+
+	claude.SetVersion("2.1.330", nil)
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(builds, "2.1.330"), link); err != nil {
+		t.Fatal(err)
+	}
+	codex.SetVersion("0.167.0", nil)
+	next := program + ".new"
+	if err := os.WriteFile(next, []byte("codex two"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(next, kept, kept); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(next, program); err != nil {
+		t.Fatal(err)
+	}
+	// the file watch looks within envWatchEvery and announces the new read,
+	// with no workspace read to prompt it.
+	deadline := time.After(3 * envWatchEvery)
+	for {
+		select {
+		case <-sub.Updates():
+		case <-deadline:
+			c, x := versions()
+			t.Fatalf("after the update: claude %q, codex %q", c, x)
+		}
+		svc.mu.Lock()
+		c, x := svc.harnessVersions[model.HarnessClaude].version, svc.harnessVersions[model.HarnessCodex].version
+		svc.mu.Unlock()
+		if c == "2.1.330" && x == "0.167.0" {
+			break
+		}
+	}
+	if c, x := versions(); c != "2.1.330" || x != "0.167.0" {
+		t.Errorf("after the update: claude %q, codex %q", c, x)
 	}
 }

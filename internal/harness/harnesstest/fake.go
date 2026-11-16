@@ -41,9 +41,13 @@ type Harness struct {
 	duringLaunch func(*Runtime)
 	launched     int
 	missingMu    sync.Mutex
-	missing      error    // what Check reports, under missingMu
-	historyErr   error    // what History fails with, if set
-	reads        []string // native ids History was asked for, in order
+	missing      error // what Check reports, under missingMu
+	// program is the file the fake says it runs (SetProgram), empty for
+	// none, under missingMu: Locate and Path are asked under the service's
+	// lock, as Check is, so they never wait on a launch holding mu.
+	program    string
+	historyErr error    // what History fails with, if set
+	reads      []string // native ids History was asked for, in order
 	// places are where History, Discover, Models and Settings were asked to
 	// run, in order: each checkout with the environment it was given.
 	places []harness.Place
@@ -135,6 +139,31 @@ func (h *Harness) SetVersion(version string, err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.version, h.versionErr = version, err
+}
+
+// SetProgram scripts the file the fake says it runs, for Locate and Path,
+// as an adapter names the program it found.
+func (h *Harness) SetProgram(path string) {
+	h.missingMu.Lock()
+	defer h.missingMu.Unlock()
+	h.program = path
+}
+
+// Locate names the scripted program (SetProgram), empty for none.
+func (h *Harness) Locate(_ []string) string {
+	h.missingMu.Lock()
+	defer h.missingMu.Unlock()
+	if h.program == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s '%s'", h.name, h.program)
+}
+
+// Path is the scripted program (SetProgram), empty for none.
+func (h *Harness) Path(_ []string) string {
+	h.missingMu.Lock()
+	defer h.missingMu.Unlock()
+	return h.program
 }
 
 // SetConfiguration scripts where the fake's configuration is, as an

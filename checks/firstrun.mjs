@@ -44,13 +44,16 @@
 //   range plainly, as the normal state it is, and in `mega version` and
 //   /api/version too; then one older, marked in the notice colour with the
 //   stronger sentence, and a warning in the log;
+// - an update behind the same path, with mega running: Claude Code's link
+//   moved to a new build, Codex's and pi's programs replaced in place, and
+//   the first page and the open version panel following with no restart;
 // - no page errors and nothing fetched off 127.0.0.1.
 //
 // it saves each page as shots/{empty,empty-dark,register,register-refused,
 // project,launch-missing,restarted,versions-newer,versions-older}.png. each step's text is printed, so the
 // run's output is a record of the words a newcomer reads.
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
@@ -394,6 +397,65 @@ check(
 )
 await t.shot(page, 'versions-older')
 await o.stop()
+
+// an update behind the same path, with mega running: Claude Code's updater
+// moving the link ~/.local/bin/claude names to a new build, and an npm
+// update replacing Codex's and pi's programs in place, a new file under the
+// same name with the modification time npm's tarballs carry. the first page
+// and the version panel, already open, follow without a restart or a reload.
+const npmTime = new Date('1985-10-26T08:15:00Z')
+// replace writes a program's new file beside it and moves it over the old
+// one, as an installer does.
+const replace = (path, write) => {
+  write(`${path}.new`)
+  chmodSync(`${path}.new`, 0o755)
+  utimesSync(`${path}.new`, npmTime, npmTime)
+  renameSync(`${path}.new`, path)
+}
+const relink = (target, link) => {
+  rmSync(`${link}.new`, { force: true })
+  symlinkSync(target, `${link}.new`)
+  renameSync(`${link}.new`, link)
+}
+for (const v of ['2.1.330', '2.1.331']) copyFileSync(join(claudePath, older), join(claudePath, v))
+for (const v of ['2.1.330', '2.1.331']) chmodSync(join(claudePath, v), 0o755)
+relink(join(claudePath, '2.1.330'), join(t.dir, 'bin/claude'))
+const codexPkg = join(t.dir, 'codex-package')
+mkdirSync(codexPkg)
+for (const f of ['codex', 'codex-code-mode-host']) replace(join(codexPkg, f), (to) => copyFileSync(join(t.repo, 'internal/harness/codex/fake', f), to))
+const codexManifest = (version) => writeFileSync(join(codexPkg, 'codex-package.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(t.repo, 'internal/harness/codex/fake/codex-package.json'), 'utf8')), version }))
+codexManifest('0.166.0')
+relink(join(codexPkg, 'codex'), join(t.dir, 'bin/codex'))
+const piPkg = join(t.dir, 'pi-package')
+mkdirSync(piPkg)
+const piSays = (version) => (to) => writeFileSync(to, `#!/usr/bin/env node\n// a stand-in for pi: it says its version only.\nprocess.stdout.write('${version}\\n')\n`)
+replace(join(piPkg, 'pi'), piSays('1.5.2'))
+relink(join(piPkg, 'pi'), join(t.dir, 'bin/pi'))
+const freshPi = page.locator('main .first-run [data-harness="pi"]')
+const u = freshMega('fresh-update', t.port + 4)
+await page.goto(u.url)
+const beforeUpdate = await soon(async () => (await freshPi.count()) > 0 && (await text(freshClaude)).includes('2.1.330') && (await text(freshCodex)).includes('0.166.0') && (await text(freshPi)).includes('1.5.2'), 20000)
+shown('the first page before the update', beforeUpdate ? `${await text(freshClaude)} / ${await text(freshCodex)} / ${await text(freshPi)}` : '(nothing)')
+check(beforeUpdate && (await text(freshClaude)).includes(`at '${join(t.dir, 'bin/claude')}'`), 'before the update, the first page says each harness’s version, Claude Code at the link on the PATH')
+await page.locator('.side-foot .version-label').click()
+const versionPanel = page.locator('dialog[open]')
+await versionPanel.waitFor()
+const panelSays = async (name) => ((await versionPanel.locator(`dd[data-harness="${name}"]`).textContent()) ?? '').trim()
+check((await panelSays('claude')).startsWith('Version 2.1.330;') && (await panelSays('pi')).startsWith('Version 1.5.2;'), 'the version panel, opened, says the same versions')
+relink(join(claudePath, '2.1.331'), join(t.dir, 'bin/claude'))
+codexManifest('0.167.0')
+replace(join(codexPkg, 'codex'), (to) => copyFileSync(join(t.repo, 'internal/harness/codex/fake/codex'), to))
+replace(join(piPkg, 'pi'), piSays('1.5.3'))
+const followed = await soon(async () => (await panelSays('claude')).startsWith('Version 2.1.331;') && (await panelSays('codex')).startsWith('Version 0.167.0;') && (await panelSays('pi')).startsWith('Version 1.5.3;'), 20000)
+shown('the version panel after the update', `${await panelSays('claude')} / ${await panelSays('codex')} / ${await panelSays('pi')}`)
+check(followed, 'the open version panel follows the update of all three, with no restart and no reload')
+await page.keyboard.press('Escape')
+const pageFollowed = await soon(async () => (await text(freshClaude)).includes('2.1.331') && (await text(freshCodex)).includes('0.167.0') && (await text(freshPi)).includes('1.5.3'), 5000)
+shown('the first page after the update', `${await text(freshClaude)} / ${await text(freshCodex)} / ${await text(freshPi)}`)
+check(pageFollowed && !(await text(freshPi)).includes('older'), 'the first page follows too, each harness at its new version')
+await u.stop()
+rmSync(join(t.dir, 'bin/claude'))
+rmSync(join(t.dir, 'bin/pi'))
 
 // nothing on the walk said "internal error", and nothing answered 500.
 check(internalShown.length === 0, `no page said "internal error"${internalShown.length ? `: ${internalShown.join(', ')}` : ''}`)

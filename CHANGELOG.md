@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+FEATURE: **Ctrl+Enter allows the oldest waiting approval.** (2026-11-16) With the reply box empty, Ctrl+Enter answers the oldest docked approval with Allow, and Ctrl+Shift+Enter with "Allow this tool for the session" where the harness offers that, as a Codex MCP approval does. Elsewhere Ctrl+Shift+Enter does nothing. The key presses the card's own button, so the answer is yours and nothing about permissions changes.
+- **Sending wins:** with a draft in the box, Ctrl+Enter sends, as before.
+- **Only approvals:** a question, and so every pi dialog, has no key.
+- **Only from the reply box or the page itself,** not from another field or with a dialog open.
+- **Only a deliberate press:** a held key that repeats is ignored, and so is a request that appeared less than half a second before the press, so a key meant for something else cannot approve it. One press answers one request.
+- **The Allow a key would press** names it in its title. Deny has no key.
+
+FEATURE: **Each turn says when it was sent and how long it took.** (2026-11-16) The turn's line, shown when you point at a turn, now ends with when its prompt was sent and how long the turn took: "Ran Fable 5.2 · high · ask · sent 14:02 · took 1m 12s". A turn from another day has its date, and the turn in flight says when it started. A turn with no record of what it ran with still shows its time, and one imported from outside mega says when mega imported it. Your own prompt shows when it was sent as its title.
+
+FIX: **Times on the page are in your time zone, even where the browser says otherwise.** (2026-11-16) A hardened browser such as LibreWolf may tell a page it is in UTC, which put the shutdown banner's clock hours off. The service now says which zone it runs in, and the page formats every time with it: the turn times, the shutdown clock, the configuration snapshots' and the discovered sessions' times, and an environment's.
+
+FIX: **The version shown follows an update without a restart.** (2026-11-16) After Claude Code's updater moved its link to a new build, or an npm update replaced Codex or pi in place, the first page and the version panel kept the version from before until mega restarted. mega now notices that the program is another file and reads its version again within seconds, and an open version panel follows too.
+
 FEATURE: **pi is the third harness.** (2026-11-16) Conversations on pi (`@earendil-works/pi-coding-agent`, tested with 1.5.2) are launched, prompted, answered, interrupted, released, resumed by their exact session, discovered and adopted, as Claude Code and Codex conversations are. pi runs as it does in its own terminal, which differs from the other two in ways the page says plainly.
 - **pi asks for nothing unless an extension asks.** It has no permission model and runs its tools without asking. The launch dialog and the conversation say so, and that it runs its own MCP servers, which mega cannot list.
 - **A pi conversation lacks what pi lacks.** It has no permission mode control and no MCP menu item, and no effort control where the model takes one thinking level or none.

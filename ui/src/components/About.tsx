@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState } from 'react'
 import { getAbout } from '../api'
+import { dateTime } from '../zone'
 import { newerLabel } from '../build'
 import { asSentence, harnesses } from '../harnesses'
-import type { About } from '../types'
+import type { About, HarnessStatus } from '../types'
 import { Dialog } from './Dialog'
 
 // AboutPanel is what 'mega version' prints, from the service's build
@@ -11,9 +12,22 @@ import { Dialog } from './Dialog'
 // whether this page runs the interface the service now serves, and where the
 // configuration snapshots are and when the newest was taken. it reads the
 // service again as it opens, since a snapshot may have been taken since the
-// page connected.
-export function AboutPanel({ about: connected, newer, onClose }: { about: About; newer: boolean; onClose: () => void }) {
+// page connected. the harnesses come from the workspace when it has them,
+// which the service announces again when a version read goes stale and is
+// read anew, so the panel follows an update while it is open.
+export function AboutPanel({
+  about: connected,
+  harnesses: live,
+  newer,
+  onClose,
+}: {
+  about: About
+  harnesses: HarnessStatus[] | undefined
+  newer: boolean
+  onClose: () => void
+}) {
   const [about, setAbout] = useState(connected)
+  const statuses = live ?? about.harnesses
   useEffect(() => {
     getAbout().then(setAbout, () => undefined)
   }, [])
@@ -60,7 +74,7 @@ export function AboutPanel({ about: connected, newer, onClose }: { about: About;
         <dt>Claude Agent SDK</dt>
         <dd>{about.claude_sdk}</dd>
         {harnesses.map((h) => {
-          const status = about.harnesses?.find((s) => s.name === h.value)
+          const status = statuses?.find((s) => s.name === h.value)
           return (
             <Fragment key={h.value}>
               <dt>{h.label}</dt>
@@ -83,7 +97,7 @@ export function AboutPanel({ about: connected, newer, onClose }: { about: About;
           {!snapshots && 'None are taken (snapshots.keep is 0).'}
           {snapshots?.newest && (
             <>
-              Newest {new Date(snapshots.newest.taken).toLocaleString()}, at {snapshots.newest.reason === 'version' ? 'a version change' : 'start-up'}; {snapshots.count}{' '}
+              Newest {dateTime(new Date(snapshots.newest.taken))}, at {snapshots.newest.reason === 'version' ? 'a version change' : 'start-up'}; {snapshots.count}{' '}
               kept, in <code>{snapshots.dir}</code>
             </>
           )}

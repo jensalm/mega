@@ -49,6 +49,9 @@ const maxHeight = () => Math.round(window.innerHeight * 0.6)
 
 const clampHeight = (height: number) => Math.min(Math.max(height, minHeight), maxHeight())
 
+// settleMs is how long a docked request waits before a key can answer it.
+const settleMs = 500
+
 // the words the header used for a runtime started in an older environment.
 const staleEnvironment = 'started in an older environment: the project’s has changed since, and the next start picks it up'
 
@@ -131,6 +134,10 @@ export function InputPanel(props: InputPanelProps) {
 
   const { state, turn_active: active, pending } = conversation
   const background = conversation.background ?? []
+  const docked = [...pending].sort((a, b) => (Date.parse(a.at ?? '') || 0) - (Date.parse(b.at ?? '') || 0))
+  // the approval the keys answer: the oldest docked, never a question, so
+  // never a pi dialog either.
+  const keyed = docked.find((request) => request.kind === 'permission' && !request.payload?.dialog)
   const hasRuntime = state === 'running' || state === 'stopping'
   const blocked = state === 'unsupervised' || state === 'starting' || state === 'stopping' || state === 'resuming' || active
   const activity = describeActivity(conversation, log, stale)
@@ -259,6 +266,66 @@ export function InputPanel(props: InputPanelProps) {
     }
   }
 
+  // when each docked request first appeared on this page, so a key pressed
+  // for something else cannot answer one that docked under it.
+  const dockedAt = useRef(new Map<string, number>())
+  useLayoutEffect(() => {
+    const seen = dockedAt.current
+    const now = performance.now()
+    const ids = new Set(pending.map((request) => request.id))
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        seen.set(id, now)
+      }
+    }
+    for (const id of seen.keys()) {
+      if (!ids.has(id)) {
+        seen.delete(id)
+      }
+    }
+  }, [pending])
+
+  // allowByKey answers the keyed approval as its own button does, by pressing
+  // it: Ctrl+Enter its Allow, Ctrl+Shift+Enter its "Allow this tool for the
+  // session", which a request that does not offer it has not, so the key does
+  // nothing there. only a deliberate press from an empty reply box or the
+  // page itself, with no dialog open: never a repeat, never on a request
+  // docked less than settleMs before, and one request per press, since a
+  // card being answered has its buttons disabled.
+  const allowByKey = (event: globalThis.KeyboardEvent) => {
+    if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed) {
+      return
+    }
+    if (document.querySelector('dialog[open]')) {
+      return
+    }
+    const at = dockedAt.current.get(keyed.id)
+    // the press's own time, on the same clock as performance.now().
+    if (at === undefined || event.timeStamp - at < settleMs) {
+      return
+    }
+    const decision = event.shiftKey ? 'allow_session' : 'allow'
+    clusterRef.current?.querySelector<HTMLButtonElement>(`[data-request="${CSS.escape(keyed.id)}"] button[data-answer="${decision}"]`)?.click()
+  }
+  // the page itself: focus on nothing in particular. anywhere else, another
+  // field, a button, a menu, the keys are left alone.
+  const allowRef = useRef(allowByKey)
+  useEffect(() => {
+    allowRef.current = allowByKey
+  })
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      const focus = document.activeElement
+      if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || (focus !== null && focus !== document.body && focus !== document.documentElement)) {
+        return
+      }
+      event.preventDefault()
+      allowRef.current(event)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const onSend = async (event?: FormEvent) => {
     event?.preventDefault()
     const text = draft.trim()
@@ -317,7 +384,6 @@ export function InputPanel(props: InputPanelProps) {
   // environment refuses new work. the fingerprint and the names stay in the
   // header, where they are identity.
   const environmentNote = conversation.environment_stale ? staleEnvironment : environmentReason(project)
-  const docked = [...pending].sort((a, b) => (Date.parse(a.at ?? '') || 0) - (Date.parse(b.at ?? '') || 0))
   // a dialog opened from the menu hands focus back to the More button when it
   // closes, so focus stays in the cluster.
   const choose = (next: Open) => {
@@ -336,7 +402,7 @@ export function InputPanel(props: InputPanelProps) {
       {docked.length > 0 && (
         <div className="docked">
           {docked.map((request) => (
-            <RequestCard key={request.id} conversationId={conversation.id} request={request} />
+            <RequestCard key={request.id} conversationId={conversation.id} request={request} keyed={request.id === keyed?.id} />
           ))}
         </div>
       )}
@@ -372,10 +438,15 @@ export function InputPanel(props: InputPanelProps) {
           onScroll={search.track}
           onBlur={search.close}
           onKeyDown={(event) => {
-            // Ctrl+Enter always sends, list or no list.
+            // Ctrl+Enter always sends a draft, list or no list; from an
+            // empty box it answers the oldest docked approval (allowByKey).
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
               event.preventDefault()
-              void onSend()
+              if (draft === '') {
+                allowByKey(event.nativeEvent)
+              } else {
+                void onSend()
+              }
               return
             }
             if (search.onKeyDown(event)) {

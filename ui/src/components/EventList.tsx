@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { longElapsed } from '../clock'
+import { fullTime, parse, shortTime } from '../zone'
 import { shortModel, useModels } from '../models'
 import { shortMode } from '../permissions'
 import type { ConversationEvent, Models, PendingRequest, TurnRecord } from '../types'
@@ -32,6 +34,15 @@ const outcomeLabels: Record<string, string> = {
   unanswered: 'never answered: the runtime was ended while it waited, and what it gated did not run',
 }
 
+// Began is when a turn began: its prompt's time, or its first event's when
+// it has none. a prompt from outside mega was imported, and its time is when
+// mega imported it, not when it was sent.
+interface Began {
+  at: Date
+  prompt: boolean
+  imported: boolean
+}
+
 // EventList renders recorded history. requests appear here only as history;
 // whether one is answerable comes from the service's pending set, never from
 // the log.
@@ -63,6 +74,26 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
     }
     nextMode = event
   }
+  // when each turn began, by the seq of its end, and when the turn in flight
+  // did. a runtime line between turns is not the turn's own.
+  const began = new Map<number, Began>()
+  let open: Began | undefined
+  for (const event of events) {
+    if (event.kind === 'turn_end') {
+      if (open) {
+        began.set(event.seq, open)
+      }
+      open = undefined
+      continue
+    }
+    if (event.kind === 'runtime') {
+      continue
+    }
+    const at = parse(event.at)
+    if (at && (!open || (!open.prompt && event.kind === 'user'))) {
+      open = { at, prompt: event.kind === 'user', imported: event.origin === 'native' }
+    }
+  }
   const toolUses = new Set(events.filter((e) => e.kind === 'tool_use' && e.tool_use_id).map((e) => e.tool_use_id))
   const pendingIds = new Set(pending.map((request) => request.id))
   // only a tool in the turn the service reports in flight can still be running;
@@ -78,7 +109,7 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
     switch (event.kind) {
       case 'user':
         return (
-          <div key={event.seq} data-seq={event.seq} className="message user">
+          <div key={event.seq} data-seq={event.seq} className="message user" title={promptTitle(event)}>
             <BlockCopy source={event.text ?? ''} />
             {/* the operator's own prompts carry no label: the block's tint says
                 whose they are. one sent from outside mega says so. */}
@@ -234,7 +265,7 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
                 Turn ended: {event.status}
               </p>
             )}
-            {event.turn && <TurnLine record={event.turn} models={models} />}
+            <TurnLine record={event.turn} models={models} began={began.get(event.seq)} ended={parse(event.at)} />
           </div>
         )
       case 'native':
@@ -322,7 +353,7 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
     blocks.push(
       <div key="turn-end-pending" className="turn-end pending">
         <hr className="turn" />
-        {inFlight && <TurnLine record={inFlight} models={models} />}
+        <TurnLine record={inFlight} models={models} began={open} />
       </div>,
     )
   }
@@ -330,31 +361,61 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
   return <div className="events">{turns}</div>
 }
 
+// promptTitle is a prompt block's title: when it was sent, or, from outside
+// mega, when mega imported it, in the service's zone.
+function promptTitle(event: ConversationEvent): string | undefined {
+  const at = parse(event.at)
+  if (!at) {
+    return undefined
+  }
+  return `${event.origin === 'native' ? 'Imported' : 'Sent'} ${fullTime(at)}`
+}
+
 // TurnLine is one compact line saying what a turn ran with: the model, the
 // effort and (claude) the mode, as the harness reported them; claude never
-// reports effort, so its effort is the one sent. it shows only while the turn
-// is under the pointer or holds focus, unless the turn ran with other than it
+// reports effort, so its effort is the one sent. after it, when the prompt
+// was sent and how long the turn took, or for the turn in flight when it
+// started; a turn with no record of what it ran with has its time alone. a
+// time is to the minute, with its date when not today, in the service's
+// zone; the title has both to the second. it shows only while the turn is
+// under the pointer or holds focus, unless the turn ran with other than it
 // asked for: then it stays, in the notice colour, and names both.
-function TurnLine({ record, models }: { record: TurnRecord; models: Models | null }) {
-  const differs = record.differs ?? []
+function TurnLine({ record, models, began, ended }: { record?: TurnRecord; models: Models | null; began?: Began; ended?: Date }) {
+  const differs = record?.differs ?? []
   const field = (name: string, ran: string | undefined, asked: string | undefined, show: (value: string | undefined) => string) => {
     if (!ran) {
       return ''
     }
     return differs.includes(name) ? `${show(ran)}, asked ${show(asked)}` : show(ran)
   }
-  const parts = [
-    field('model', record.ran.model, record.asked.model, (value) => shortModel(models, value)),
-    field('effort', record.ran.effort, record.asked.effort, (value) => value ?? ''),
-    field('mode', record.ran.mode, record.asked.mode, shortMode),
-  ].filter(Boolean)
-  if (parts.length === 0) {
+  const parts = record
+    ? [
+        field('model', record.ran.model, record.asked.model, (value) => shortModel(models, value)),
+        field('effort', record.ran.effort, record.asked.effort, (value) => value ?? ''),
+        field('mode', record.ran.mode, record.asked.mode, shortMode),
+      ].filter(Boolean)
+    : []
+  // an imported turn's times are when mega imported it, so it has no length.
+  // the length is said as the activity line says it, and a turn under a
+  // second as under 1s.
+  const ms = began && ended && !began.imported ? Math.max(0, ended.getTime() - began.at.getTime()) : null
+  const length = ms === null ? '' : ms < 1000 ? 'under 1s' : longElapsed(ms)
+  const how = began ? (began.imported ? 'imported' : began.prompt ? 'sent' : 'started') : ''
+  const time = began ? `${how} ${shortTime(began.at)}${length && ` · took ${length}`}` : ''
+  if (parts.length === 0 && !time) {
     return null
   }
   const exact = (settings: TurnRecord['asked']) => [settings.model, settings.effort, settings.mode].filter(Boolean).join(' · ')
+  const title = [
+    record && parts.length > 0 && `Asked for ${exact(record.asked)}; ran ${exact(record.ran)}`,
+    began && `${how[0].toUpperCase()}${how.slice(1)} ${fullTime(began.at)}${length && ended ? `; ended ${fullTime(ended)}` : ''}`,
+  ]
+    .filter(Boolean)
+    .join('. ')
+  const text = parts.length > 0 ? `Ran ${parts.join(' · ')}${time && ` · ${time}`}` : `${time[0].toUpperCase()}${time.slice(1)}`
   return (
-    <span className={`turn-line${differs.length > 0 ? ' differs' : ''}`} title={`Asked for ${exact(record.asked)}; ran ${exact(record.ran)}`}>
-      Ran {parts.join(' · ')}
+    <span className={`turn-line${differs.length > 0 ? ' differs' : ''}`} title={title}>
+      {text}
     </span>
   )
 }

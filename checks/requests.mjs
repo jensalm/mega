@@ -19,11 +19,17 @@
 // the session, answered; Dismiss sending pi's cancel; an input and an editor
 // dialog; a dialog that expires; an interrupt that waits on a dialog until it
 // is dismissed; and a release with a dialog pending, whose dialog warns that
-// pi is ended, leaving the dialog never answered. it saves the pi dialog and
-// the release warning as shots/pi-{dialog,release-warning}.png. it approves only where the approval itself is under test, and
-// only once it has checked, as a step it cannot go past, that the request is
-// exactly the one the fake raised; where the decision is incidental, it
-// denies.
+// pi is ended, leaving the dialog never answered. the allow keys: Ctrl+Enter
+// answering the oldest approval from the empty box and from the page, one
+// per press, with the key in the Allow's title; nothing from another field,
+// with a draft, on a repeat, on a request that just docked, with a dialog
+// open, on a question or on a pi dialog; Ctrl+Shift+Enter allowing for the
+// session where codex offers it, and nothing where Claude does not. it saves
+// the pi dialog, the release warning and the keyed approval as
+// shots/{pi-dialog,pi-release-warning,approval-key}.png. it approves only
+// where the approval itself is under test, and only once it has checked, as
+// a step it cannot go past, that the request is exactly the one the fake
+// raised; where the decision is incidental, it denies.
 import { suite } from './lib/mega.mjs'
 
 const t = await suite('requests')
@@ -113,12 +119,104 @@ for (let i = 0; i < 2; i++) {
 await t.idle(C)
 check(true, 'both answered, and the turn ends')
 
+// the allow keys: Ctrl+Enter answers the oldest docked approval as its Allow
+// does, and Ctrl+Shift+Enter its allow for the session where the harness
+// offers one; only from an empty reply box or the page itself, with no
+// dialog open, only a deliberate press, and one request per press. a press
+// that should do nothing is given time to do something before the check.
+const settle = () => page.waitForTimeout(800)
+const keys = (shift = false) => page.keyboard.press(shift ? 'Control+Shift+Enter' : 'Control+Enter')
+const toPage = () => page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined))
+const onPage = () => page.evaluate(() => document.activeElement === document.body)
+const answered = (decision) => reply(page, `Answered: ${decision}`).count()
+const titleOf = (i, name) => docked.nth(i).getByRole('button', { name, exact: true }).getAttribute('title')
+await prompt(C, 'ask2')
+await until('two cards for the keys', async () => (await docked.count()) === 2)
+check(
+  (await titleOf(0, 'Allow')) === 'Allow (Ctrl+Enter)' && (await titleOf(1, 'Allow')) === 'Allow' && (await titleOf(0, 'Deny')) === 'Deny',
+  'the oldest approval’s Allow names its key in its title; the next one’s waits its turn, and Deny has no key',
+)
+// a picture of the card with the title its Allow carries, which the browser
+// draws outside the page: the check writes it under the card, and takes it
+// away again.
+await docked.nth(0).evaluate((card) => {
+  const said = document.createElement('p')
+  said.className = 'check-caption'
+  said.style.cssText = 'font: 12px monospace; margin: 6px 0 0; padding: 4px 6px; border: 1px dashed currentColor;'
+  said.textContent = `Allow's title, drawn here by the check: "${card.querySelector('button[data-answer="allow"]').title}"`
+  card.append(said)
+})
+await docked.nth(0).screenshot({ path: `${t.dir}/shots/approval-key.png` })
+await page.locator('.check-caption').evaluate((said) => said.remove())
+let allows = await answered('allow')
+// another field: the denial's reason box.
+await docked.nth(0).getByPlaceholder('Reason, sent with a denial').focus()
+await keys()
+await settle()
+check((await docked.count()) === 2 && (await pending(C)).length === 2, 'Ctrl+Enter in another field answers nothing')
+// a repeating key, from the empty box.
+await box.fill('')
+await box.focus()
+await box.evaluate((b) => b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', ctrlKey: true, repeat: true, bubbles: true, cancelable: true })))
+await settle()
+check((await docked.count()) === 2 && (await answered('allow')) === allows, 'a repeating Ctrl+Enter answers nothing')
+// a draft: sending wins, and a turn waiting on its approvals sends nothing.
+await box.fill('a draft that is not an answer')
+await keys()
+await settle()
+check((await docked.count()) === 2 && (await box.inputValue()) === 'a draft that is not an answer' && (await answered('allow')) === allows, 'with a draft in the box, Ctrl+Enter answers nothing and the draft stays')
+await box.fill('')
+// what the presses answer: the fake's two Bash calls, oldest first.
+const keyed = await pending(C)
+must(
+  keyed.length === 2 && keyed.every((r) => r.kind === 'permission' && r.payload.tool === 'Bash') && keyed.map((r) => r.payload.input?.command).sort().join(',') === 'echo first,echo second',
+  'the two pending requests are the fake’s Bash calls, echo first and echo second',
+)
+await keys()
+await until('the oldest answered by its key', async () => (await docked.count()) === 1 && (await answered('allow')) === allows + 1)
+check((await docked.first().locator('pre').textContent()) === 'echo second', 'Ctrl+Enter from the empty box answers the oldest approval, Allow, as its button does')
+await settle()
+check((await docked.count()) === 1 && (await titleOf(0, 'Allow')) === 'Allow (Ctrl+Enter)', 'one press answers one request: the next waits for its own press, and now names the key')
+await toPage()
+check(await onPage(), 'focus is on the page itself')
+await keys()
+await until('the next answered from the page', async () => (await docked.count()) === 0 && (await answered('allow')) === allows + 2)
+check(true, 'Ctrl+Enter from the page itself answers the next')
+await t.idle(C)
+// a request that docked under the press, and the session-wide key where it
+// is not offered: Claude's approvals have no allow for the session.
+await toPage()
+await prompt(C, 'ask')
+await docked.waitFor()
+await keys()
+await settle()
+check((await docked.count()) === 1 && (await pending(C)).length === 1, 'a request docked less than half a second before the press is not answered')
+await keys(true)
+await settle()
+check((await docked.count()) === 1 && (await pending(C)).length === 1, 'Ctrl+Shift+Enter does nothing where the harness offers no allow for the session')
+await page.locator('.side-foot .version-label').click()
+await page.locator('dialog[open]').waitFor()
+await keys()
+await settle()
+await page.keyboard.press('Escape')
+check((await docked.count()) === 1 && (await pending(C)).length === 1, 'nor does Ctrl+Enter while a dialog is open')
+const denies = await answered('deny')
+await docked.first().getByRole('button', { name: 'Deny', exact: true }).click()
+await until('the keyed test denied', async () => (await docked.count()) === 0 && (await answered('deny')) === denies + 1)
+await t.idle(C)
+
 // a question card answers only once a choice is made.
 await prompt(C, 'askq')
 await docked.waitFor()
 const q = docked.first()
 const answer = q.getByRole('button', { name: 'Answer', exact: true })
 check((await q.getAttribute('aria-label')) === 'Question' && (await q.locator('legend').textContent()).includes('Which color do you prefer?') && (await answer.isDisabled()), 'the question card offers its choices, Answer waiting for one')
+await settle()
+await toPage()
+await keys()
+await keys(true)
+await settle()
+check((await docked.count()) === 1 && (await pending(C)).length === 1, 'neither key answers a question')
 await q.getByLabel('Blue').check()
 await until('Answer enabled', async () => answer.isEnabled())
 await answer.click()
@@ -169,6 +267,19 @@ await mcp.getByRole('button', { name: 'Allow this tool for the session' }).click
 await until('the MCP card to clear', async () => (await docked.count()) === 0)
 await until('the tool to run, for the session', async () => (await reply(page, 'echo: hello-from-the-check (approved for the session)').count()) === 1)
 check(true, 'allowed for the session, the tool runs')
+await t.idle(X)
+// Ctrl+Shift+Enter where codex offers the session: what it answers is the
+// fake's echo tool with this parameter, checked first.
+await prompt(X, 'mcp keyed-for-the-session')
+await docked.waitFor()
+const sessionKeyed = await pending(X)
+must(sessionKeyed.length === 1 && sessionKeyed[0].payload.mcp_server === 'fixture' && sessionKeyed[0].payload.mcp_tool === 'echo' && JSON.stringify(sessionKeyed[0].payload.parameters).includes('keyed-for-the-session'), 'the one pending request is the fake\'s fixture/echo call with this parameter')
+check((await titleOf(0, 'Allow this tool for the session')) === 'Allow this tool for the session (Ctrl+Shift+Enter)', 'its allow for the session names its key')
+await settle()
+await toPage()
+await keys(true)
+await until('allowed for the session by its key', async () => (await reply(page, 'echo: keyed-for-the-session (approved for the session)').count()) === 1 && (await docked.count()) === 0)
+check(true, 'Ctrl+Shift+Enter allows the tool for the session where codex offers it')
 await t.idle(X)
 await prompt(X, 'mcp declined-by-the-check')
 await docked.waitFor()
@@ -230,6 +341,13 @@ check(
   "it offers Dismiss, takes only pi's own choices, and has no allow for the session",
 )
 await piCard.screenshot({ path: `${t.dir}/shots/pi-dialog.png` })
+// a pi dialog is a question: neither key answers it.
+await settle()
+await toPage()
+await keys()
+await keys(true)
+await settle()
+check((await docked.count()) === 1 && (await pending(Pi)).length === 1, 'neither key answers a pi dialog')
 // the only Allow to a pi gate: the one the fake raised, checked above.
 await piCard.getByLabel('Allow').check()
 await piCard.getByRole('button', { name: 'Answer', exact: true }).click()

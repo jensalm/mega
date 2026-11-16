@@ -1,6 +1,6 @@
 ---
 title: pi adapter
-state: building
+state: evaluating
 created: 2026-11-06
 tags: [feature]
 ---
@@ -71,5 +71,5 @@ The four round trips pass on pi 1.5.2 with `qwen3.8-27b` on `eleven`, in 36 seco
 
 All three steps are done and reviewed to clean on terminus's seventh pass, with the round trips passing on pi 1.5.2 and the local model. Two things remain open after the build:
 
-- **The terminal round trip has not been rerun at 1.5.2.** Opening a managed session in pi's own terminal, adding a turn, closing it and resuming in mega was observed at 1.1.0 and needs Michael at the keyboard. The release dialog advises exactly that route, so it is worth one run.
+- **The terminal round trip at 1.5.2.** Michael ran it on 2026-11-16 and reported that it "seemed to work just fine": a managed session opened in pi's own terminal, continued there, and resumed in mega. Not instrumented, so it is his observation and not a recorded probe run.
 - **pi starts the operator's MCP servers at every launch,** as Claude Code and Codex each start their own. Lookups of the model list and settings run pi with `--no-mcp` and start none.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -30,11 +31,13 @@ type Server struct {
 	about     About
 	heartbeat time.Duration
 	upgrader  websocket.Upgrader
+	// zone is the time zone the service runs in (timeZone), read once.
+	zone string
 }
 
 // New returns a server over svc, answering for its build with about.
 func New(svc *service.Service, about About) *Server {
-	return &Server{svc: svc, about: about, heartbeat: defaultHeartbeat}
+	return &Server{svc: svc, about: about, heartbeat: defaultHeartbeat, zone: timeZone(os.LookupEnv, time.Now())}
 }
 
 // Handler returns the complete HTTP surface: API and stream under /api/, the

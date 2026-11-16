@@ -23,7 +23,7 @@ Where things go:
 
 ## What each suite covers
 
-- **`conversation.mjs`** (72 steps): the conversation view, on long conversations and in its layout. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
+- **`conversation.mjs`** (76 steps): the conversation view, on long conversations and in its layout. Its service runs in `Asia/Kolkata` (`TZ`) and its page in UTC, as a hardened browser reports, so every time it checks is the service's. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
   - opening reads only the tail: ten turns, at the newest reply, saying how much is earlier;
   - Show earlier and Show all, each holding the view;
   - the native events toggle refetching what is shown;
@@ -35,11 +35,13 @@ Where things go:
   - the connecting view naming a failing workspace read;
   - the 960px column centred in its pane, with the panel open and collapsed to the rail, light and dark; the header, history, input panel, show-earlier bar, newer-activity control and shutdown banner sharing it; the project page and the connecting view centred the same way;
   - no label on the operator's own prompts, "outside mega" on a prompt from outside, and "From outside mega" on its reply;
-  - each turn's line saying what it ran with:
-    - none on turns recorded before mega kept it;
+  - each turn's line saying what it ran with, when its prompt was sent and how long it took:
+    - on turns recorded before mega kept what they ran with, their time alone, from another day with its date;
+    - the time in the service's zone, not the page's UTC, and both times to the second, with the zone, in its title;
+    - the operator's prompt carrying its time as its title, and a prompt from outside mega "Imported";
     - hidden at rest, shown while the pointer is over the turn and while focus is inside it, with nothing moving either way;
     - kept visible at rest, in the notice colour, naming both, on a turn the fake reports another model for (the fake shim's `fallback` verb);
-    - on the turn in flight, shown on hover once it has run, with nothing moving;
+    - on the turn in flight, shown on hover once it has run, with when it started, and nothing moving;
   - the "Runtime started" line, with the fake shim reporting the version its `claude-version` file names: unmarked and with no added words for a version inside the tested range and for one newer, the normal state; marked for one older, in the notice colour, naming the range after the version, its title saying what the Agent SDK expects; and none of them refused;
   - MCP servers, for the fake Claude and the fake Codex:
     - nothing of them in the header;
@@ -56,7 +58,7 @@ Where things go:
     - its turn line with no permission mode. Its extension's gate is blocked, since allowing it is not what the suite is about.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, and the start lines as `shots/start-{tested,newer,older}.png`.
-- **`firstrun.mjs`** (53 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
+- **`firstrun.mjs`** (57 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
   - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
   - the register dialog opening with the focus in its checkout field, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
@@ -68,7 +70,8 @@ Where things go:
   - `--listen`: another mega, on its own scratch data, on the port the flag names, and one refused for `0.0.0.0`, as the config value is;
   - both harnesses installed, as stand-ins that only say their versions: a native Claude Code build, built from `internal/harness/claude/fakebuild` into the versions folder, and the fake Codex package at 0.166.0 on the `PATH`, inside its range. A mega on fresh data shows them:
     - **with Claude Code 2.1.330, newer than its range:** the start-up log, at info, says it runs from the newest build installed with no `claude` on the `PATH`. The first page says each harness in one short plain sentence: its build, where it is and the range, with no node or shim and no notice colour. `/api/version` names the ranges and what each found is, a newer one with no sentence, and `mega version` says the same plainly;
-    - **with 2.1.300, older:** the start-up log warns, and the first page marks Claude Code in the notice colour with the stronger sentence.
+    - **with 2.1.300, older:** the start-up log warns, and the first page marks Claude Code in the notice colour with the stronger sentence;
+    - **an update behind the same path, with mega running:** Claude Code found through `bin/claude`, a link the check moves to a new build, and Codex and pi as packages whose programs the check replaces in place with the modification time npm's tarballs carry. The open version panel follows all three within seconds, with no restart and no reload, and so does the first page.
 
   It prints the words each step showed, so its output is a record of what a newcomer reads. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-missing,restarted,versions-newer,versions-older}.png`.
 - **`environment.mjs`** (32 steps): a project's environment on its page. It checks the following:
@@ -115,7 +118,7 @@ Where things go:
   - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see.
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`.
-- **`requests.mjs`** (39 steps): requests. It checks the following:
+- **`requests.mjs`** (56 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -126,6 +129,11 @@ Where things go:
   - an MCP approval from the fake Codex, allowed for the session or denied;
   - a typed form needing its required field;
   - Interrupt aborting a pending card, with a late answer refused;
+  - the allow keys:
+    - Ctrl+Enter answering the oldest approval from the empty reply box, then the next from the page itself, one per press, the Allow that answers naming its key in its title and Deny none;
+    - nothing from another field, with a draft in the box, on a repeating key, on a request docked under the press, or with a dialog open;
+    - neither key on a question or on a pi dialog;
+    - Ctrl+Shift+Enter allowing a Codex MCP tool for the session, and doing nothing on a Claude approval, which offers no such allow;
   - pi, on the fake pi:
     - its extension's gate docked as a "Question from a pi extension", with Dismiss and no answer of one's own or allow for the session, and answered;
     - Dismiss reaching pi as its cancel;
@@ -134,8 +142,8 @@ Where things go:
     - an interrupt waiting on a dialog, saying so, until the dialog is dismissed;
     - a release with a dialog pending, whose dialog warns that pi is ended and the gated command does not run, leaving the dialog's row "never answered".
 
-  It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`.
-- **`shutdown.mjs`** (23 steps): the shutdown gate. It checks the following:
+  It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`, and the approval the keys answer, with its Allow's title written under it by the check, since the browser draws a title outside the page, as `shots/approval-key.png`.
+- **`shutdown.mjs`** (23 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
   - arming from the footer, with the banner naming what it waits for by count and by name, and the request marked as the operator's;
   - a second page seeing it;
   - new work refused with the reason, on the page and by the API;
@@ -144,7 +152,7 @@ Where things go:
   - cancelling lifting it on both pages;
   - at idle, Shut down offered, the title saying so and one notification;
   - Shut down ending the service with status 0;
-  - the page that asked saying when, while the other shows only what it last knew;
+  - the page that asked saying when, in the service's zone, while the other shows only what it last knew;
   - both pages recovering when the service returns.
 
 - **`side.mjs`** (48 steps): the side panel and the rail. It checks the following:
@@ -184,19 +192,19 @@ t.check(true, 'the reply is shown')
 await t.done()
 ```
 
-`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. It returns the following:
+`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. It returns the following:
 
 - `check(ok, what)` records a step. `must(ok, what)` records one the suite cannot go past: a suite checks with it, before any Allow, that the request is exactly the one the fake raised, so nothing unexpected is approved. `until(what, pred, ms)` waits on a condition, checking every 50 ms, and fails saying what it waited for.
 - `api(method, path, body)`, `workspace()`, `projectOf(id)` and `convOf(id)` read and call the service.
 - `checkout(name, { git })` makes a scratch checkout. `register(name, path)` adds it as a project, with an override activation that points Claude at the suite's scratch settings, since mega's own environment does not reach the processes it starts. Pass `{ override: false }` for a project whose environment is under test.
 - `launch(projectId, harness, prompt, extra)` starts a conversation, and `idle(id)` waits until its turn ends.
-- `page({ width, height, colorScheme, init })` opens a page in its own context. `shot(page, name)` saves a screenshot under `shots/`.
+- `page({ width, height, colorScheme, init, timezoneId })` opens a page in its own context, in the zone `timezoneId` names when given. `shot(page, name)` saves a screenshot under `shots/`.
 - `stop()` asks the service to stop and waits for it; `start()` starts it again on the same data. `stopped()` waits for a service a page shut down, and reports how it exited.
 - `done()` adds the page-wide steps, closes everything, prints the summary the runner reads, and exits.
 
 The rules:
 
-- Wait on conditions, never on delays. A step that cannot be made stable is reported, not left flaky.
+- Wait on conditions, never on delays. The one exception is a step that shows a key did nothing: nothing can be waited for, so it gives the page longer than the press needed to act (`settle` in `requests.mjs`) and then checks nothing changed. A step that cannot be made stable is reported, not left flaky.
 - Approve only where the approval is under test, after a `must` on what is pending; where the decision is incidental, deny.
 - Drive the fakes by the text of each prompt. The fake shim's verbs are in its header, and the fake Codex's in its own; a verb a suite needs is added there.
 - Only data goes in scratch. A suite never writes outside its scratch directory, apart from what the service writes there for it.

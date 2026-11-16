@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { adoptSession, discoverSessions, type DiscoveredSession } from '../api'
+import { dateTime } from '../zone'
 import { harnesses } from '../harnesses'
 import type { Conversation } from '../types'
 import { IconButton } from './Icon'
@@ -101,7 +102,7 @@ export function AdoptDialog({ projectId, onClose, onAdopted }: AdoptDialogProps)
                   <span className="preview">{session.preview || <em>no first prompt</em>}</span>
                   <span className="muted session-meta">
                     {' '}
-                    {session.updated_at ? new Date(session.updated_at).toLocaleString() : ''} · <code>{session.native_id}</code>
+                    {session.updated_at ? dateTime(new Date(session.updated_at)) : ''} · <code>{session.native_id}</code>
                   </span>
                 </span>
               </label>

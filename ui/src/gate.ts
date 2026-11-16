@@ -59,5 +59,5 @@ export function gateSummary(gate: ShutdownGate): string {
   return `Waiting to shut down: ${gate.blockers.map((b) => `${b.name} (${blockerKinds(b).join(', ')})`).join('; ')}`
 }
 
-// clockTime is a time of day as the page shows it.
-export const clockTime = (at: Date) => at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+// clockTime is a time of day as the page shows it, in the service's zone.
+export { clockTime } from './zone'

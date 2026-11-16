@@ -13,10 +13,13 @@
 // at idle, Shut down offered, the title saying so and one notification; Shut
 // down ending the service with status 0; the page that asked saying when, the
 // other showing only what it last knew; and both recovering when the service
-// returns, the gate lifted.
+// returns, the gate lifted. the service runs in one time zone and the pages
+// in another, UTC, as a hardened browser reports; the time the asking page
+// gives is the service's.
 import { suite } from './lib/mega.mjs'
 
-const t = await suite('shutdown')
+const serviceZone = 'Asia/Kolkata'
+const t = await suite('shutdown', { tz: serviceZone })
 const { url, check, until, api, convOf, workspace } = t
 
 const P = await t.register('gate', t.checkout('gate'))
@@ -46,8 +49,8 @@ const notes = () => {
   }
   window.Notification = Recorded
 }
-const page = await t.page({ init: notes })
-const other = await t.page({ init: notes })
+const page = await t.page({ init: notes, timezoneId: 'UTC' })
+const other = await t.page({ init: notes, timezoneId: 'UTC' })
 await page.goto(`${url}/#/p/${P.id}`)
 await other.goto(`${url}/#/c/${W}`)
 for (const p of [page, other]) await p.locator('.side-foot .stream-connected').waitFor()
@@ -111,11 +114,18 @@ const sent = await page.evaluate(() => window.__notes)
 check(sent.length === 1 && sent[0].body === 'Every agent is idle. Shut down from the banner when you are ready.', `one notification: ${JSON.stringify(sent)}`)
 
 // Shut down ends the service cleanly.
+const askedFrom = Date.now()
 await shutDown.click()
 const ended = await t.stopped()
 check(ended && ended.code === 0, `Shut down ends the service with status 0: ${JSON.stringify(ended)}`)
 await until('the asking page says when', async () => /^mega was shut down from this page at \d/.test((await page.locator('section.gate-banner.shut-down strong').textContent().catch(() => '')) ?? ''))
-check(true, `the page that asked says when: "${await page.locator('section.gate-banner.shut-down strong').textContent()}"`)
+const askedTo = Date.now()
+const saidAt = ((await page.locator('section.gate-banner.shut-down strong').textContent()) ?? '').replace('mega was shut down from this page at ', '')
+// the time of day, to the second, in a zone, as the page formats it.
+const clockIn = (ms, zone) => page.evaluate(([ms, zone]) => new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: zone }).format(new Date(ms)), [ms, zone])
+const could = []
+for (let ms = askedFrom - 1000; ms <= askedTo + 1000; ms += 500) could.push(await clockIn(ms, serviceZone))
+check(could.includes(saidAt) && !could.includes(await clockIn(askedFrom, 'UTC')), `the page that asked says when, in the service's zone, not the page's UTC: "${saidAt}"`)
 await until('its footer', async () => (await page.locator('.side-foot .stream').textContent()) === 'Shut down from here, retrying')
 check(true, 'and its footer says it keeps trying')
 await until('the other page loses it', async () => (await other.locator('.side-foot .stream').textContent()) !== 'Live')

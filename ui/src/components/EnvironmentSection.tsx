@@ -9,10 +9,11 @@ import {
   type ApprovedVersion,
   type Resolved,
 } from '../api'
+import { dateTime } from '../zone'
 import type { Project, ProjectEnvironment } from '../types'
 import { IconButton } from './Icon'
 
-const when = (at?: string) => (at ? new Date(at).toLocaleString() : 'unknown')
+const when = (at?: string) => (at ? dateTime(new Date(at)) : 'unknown')
 
 // EnvironmentSection is the project's shell environment on its page: the
 // repository's .mega/environment.yaml and whether it is approved, both

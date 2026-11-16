@@ -2,7 +2,7 @@ import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'reac
 import { clampWidth, readCollapsed, readWidth, saveCollapsed, saveWidth } from '../prefs'
 import type { Selection } from '../selection'
 import type { Knowledge, StreamState } from '../stream'
-import type { About, Conversation, Project, ShutdownGate } from '../types'
+import type { About, Conversation, HarnessStatus, Project, ShutdownGate } from '../types'
 import type { Waiting } from '../waiting'
 import { AboutPanel } from './About'
 import { Rail } from './Rail'
@@ -30,6 +30,9 @@ interface SidePanelProps {
   // interface than this page's.
   about: About | null
   newer: boolean
+  // the harnesses as the workspace last said them, which follows an update
+  // without the panel reading the service again.
+  harnesses: HarnessStatus[] | undefined
 }
 
 // panelShortcut shows and hides the side panel, as its controls' titles say.
@@ -51,7 +54,7 @@ export function SidePanel(props: SidePanelProps) {
   const [width, setWidth] = useState(readWidth)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [showingAbout, setShowingAbout] = useState(false)
-  const aboutPanel = showingAbout && props.about && <AboutPanel about={props.about} newer={props.newer} onClose={() => setShowingAbout(false)} />
+  const aboutPanel = showingAbout && props.about && <AboutPanel about={props.about} harnesses={props.harnesses} newer={props.newer} onClose={() => setShowingAbout(false)} />
 
   const collapse = (next: boolean) => {
     setCollapsed(next)

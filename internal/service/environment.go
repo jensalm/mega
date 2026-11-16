@@ -600,13 +600,17 @@ func (s *Service) ApprovedVersion(projectID string) (ApprovedVersion, error) {
 	return out, nil
 }
 
-// envWatchEvery is how often the projects' environment files are looked at.
+// envWatchEvery is how often the projects' environment files, and the
+// harnesses' programs, are looked at.
 const envWatchEvery = 2 * time.Second
 
 // watchEnvFiles announces a change whenever a project's .mega/environment.yaml
 // appears, changes or goes, so the project page and the conversation headers
 // follow an edit made in a terminal or by an agent without waiting for some
-// other change. it reads names and content hashes only.
+// other change. it reads names and content hashes only. each look also
+// looks at the harnesses' programs, so a version that went stale behind the
+// same path is read again and the first page and the version panel follow an
+// update without a restart.
 func (s *Service) watchEnvFiles(every time.Duration, stop <-chan struct{}) {
 	seen := map[string]string{}
 	ticker := time.NewTicker(every)
@@ -633,6 +637,11 @@ func (s *Service) watchEnvFiles(every time.Duration, stop <-chan struct{}) {
 			}
 		}
 		seen = now
+		s.mu.Lock()
+		// a look at the harnesses' programs, which starts a read of any
+		// version gone stale (harnessStatusLocked); the read announces it.
+		s.harnessStatusLocked()
+		s.mu.Unlock()
 		if changed {
 			s.mu.Lock()
 			if !s.closed {

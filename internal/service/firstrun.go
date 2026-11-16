@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/michaelquigley/df/dl"
 
@@ -45,11 +48,36 @@ type HarnessStatus struct {
 	Note     string
 }
 
-// versionRead is a harness's version as last read, and where its programs
-// were then: a read is kept until the harness is found somewhere else.
+// versionRead is a harness's version as last read, where its programs were
+// then, and the identity of its own program's file (programIdentity): a read
+// is kept until the harness is found somewhere else or its program is
+// another file, as after an update behind the same path.
 type versionRead struct {
-	where   string
-	version string
+	where    string
+	identity string
+	version  string
+}
+
+// programIdentity names the file path resolves to, as it is now: its
+// resolved path, device, inode, size, and modification and change times. an
+// updater that moves a link to a new build changes the resolved path; one
+// that replaces the program in place, as an npm update does, writes a new
+// file, a new inode and change time, even where it keeps the modification
+// time npm's tarballs carry. empty when path cannot be read.
+func programIdentity(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return ""
+	}
+	id := fmt.Sprintf("%s:%d:%d", resolved, info.Size(), info.ModTime().UnixNano())
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		id += fmt.Sprintf(":%d:%d:%d.%d", st.Dev, st.Ino, st.Ctim.Sec, st.Ctim.Nsec)
+	}
+	return id
 }
 
 // resolveAllLocked starts, in the background, a resolution of every project
@@ -133,16 +161,17 @@ func (s *Service) checkHarnesses() {
 func (s *Service) readVersions() {
 	s.mu.Lock()
 	find := s.harnessFind
-	found := map[string]string{}
+	found := map[string]versionRead{}
 	for _, status := range s.harnessStatusLocked() {
 		if status.Found {
-			found[status.Name] = status.Where
+			// the identity is taken before the read, so a change during it
+			// is seen as one on the next look.
+			found[status.Name] = versionRead{where: status.Where, identity: programIdentity(status.Path)}
 		}
 	}
 	s.mu.Unlock()
 	reads := map[string]versionRead{}
-	for name, where := range found {
-		read := versionRead{where: where}
+	for name, read := range found {
 		if v, ok := s.harnesses[name].(harness.Versioner); ok {
 			version, err := v.Version(context.Background(), find)
 			if err != nil {
@@ -184,8 +213,11 @@ func (s *Service) harnessStatusLocked() []HarnessStatus {
 	out := make([]HarnessStatus, 0, len(names))
 	stale := false
 	defer func() {
-		// a harness found somewhere new since its version was read (an
-		// install, an update of the link) is read again, in the background.
+		// a harness found somewhere new since its version was read, or whose
+		// program is another file now (an install, an update moving the link
+		// or replacing the program in place), is read again, in the
+		// background. the file watch looks every envWatchEvery, so the page
+		// hears of an update with nothing else changing.
 		if stale && !s.versionsReading && !s.closed {
 			s.versionsReading = true
 			s.background.Add(1)
@@ -210,7 +242,7 @@ func (s *Service) harnessStatusLocked() []HarnessStatus {
 				status.Path = locator.Path(s.harnessFind)
 			}
 			status.Tested = harness.Tested[name].String()
-			if read, ok := s.harnessVersions[name]; ok && read.where == status.Where {
+			if read, ok := s.harnessVersions[name]; ok && read.where == status.Where && read.identity == programIdentity(status.Path) {
 				status.Version = read.version
 				status.Standing, status.Note = harness.Stand(name, read.version)
 			} else {

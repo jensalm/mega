@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { setZone } from './zone'
 import { ApiError, armShutdown, cancelShutdown, getAbout, getHistory, getWorkspace, historyPath, readConversation, shutDown, type HistoryRead } from './api'
 import { isNewer } from './build'
 import { freezeClock, useWallNow } from './clock'
@@ -108,6 +109,7 @@ export function App() {
             workspaceWait.current = null
             haveWorkspace.current = true
             setWorkspaceWaiting(null)
+            setZone(fetched.time_zone)
             setWorkspace(fetched)
             setLoadError(null)
             if (fetched.shutdown && !fetched.shutdown.armed) {
@@ -505,6 +507,7 @@ export function App() {
         onCancelShutdown={() => void gateAction(cancelShutdown)}
         about={about}
         newer={isNewer(serviceBuild)}
+        harnesses={workspace?.harnesses}
       />
       <main className="main">
         <ShutdownBanner

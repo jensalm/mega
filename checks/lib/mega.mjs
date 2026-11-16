@@ -70,7 +70,9 @@ export async function until(what, pred, ms = 20000) {
 // checkout's own, as `make` stamps it. nothing a bare suite starts can reach a
 // real harness, since none can be found.
 const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-export async function suite(name, { bare = false } = {}) {
+// { tz } runs the service in that time zone, with TZ, so a suite can give
+// its pages another and check that times are said in the service's.
+export async function suite(name, { bare = false, tz } = {}) {
   const port = Number(process.env.MEGA_CHECK_PORT || 18470)
   if (port === 8470) {
     cannotRun('port 8470 is the operator’s mega; checks use another (MEGA_CHECK_PORT)')
@@ -189,6 +191,7 @@ export async function suite(name, { bare = false } = {}) {
         XDG_STATE_HOME: join(dir, 'xdg/state'),
         XDG_CONFIG_HOME: join(dir, 'xdg/config'),
         XDG_DATA_HOME: join(dir, 'xdg/data'),
+        ...(tz ? { TZ: tz } : {}),
       },
     })
     exited = new Promise((r) => svc.once('exit', (code, signal) => r({ code, signal })))
@@ -273,8 +276,10 @@ export async function suite(name, { bare = false } = {}) {
   const offsite = []
   const consoleErrors = []
   const pages = []
-  const page = async ({ width = 1280, height = 900, colorScheme = 'light', init, initArg } = {}) => {
-    const ctx = await browser.newContext({ viewport: { width, height }, colorScheme })
+  // timezoneId gives the page a zone of its own, as a hardened browser that
+  // tells a page it is in UTC does.
+  const page = async ({ width = 1280, height = 900, colorScheme = 'light', init, initArg, timezoneId } = {}) => {
+    const ctx = await browser.newContext({ viewport: { width, height }, colorScheme, ...(timezoneId ? { timezoneId } : {}) })
     if (init) await ctx.addInitScript(init, initArg)
     const p = await ctx.newPage()
     pages.push(p)
