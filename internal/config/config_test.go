@@ -216,3 +216,35 @@ func TestDefaultDataRefusedUntilTheWorkspaceIsMoved(t *testing.T) {
 		t.Errorf("nothing to move: %v", err)
 	}
 }
+
+// the snapshot bounds default to ten ordinary and twenty taken at a version
+// change, are set in the config file, and are counts.
+func TestSnapshotBounds(t *testing.T) {
+	root := isolate(t)
+	cfg, err := Load("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Snapshots.Keep != 10 || cfg.Snapshots.KeepAtVersion != 20 {
+		t.Errorf("defaults: %+v", cfg.Snapshots)
+	}
+	file := filepath.Join(root, "mega.yaml")
+	for body, want := range map[string]Snapshots{
+		"snapshots:\n  keep: 3\n  keep_at_version: 4\n": {Keep: 3, KeepAtVersion: 4},
+		"snapshots:\n  keep: 0\n":                       {Keep: 0, KeepAtVersion: 20},
+	} {
+		if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(file, "", "")
+		if err != nil || cfg.Snapshots != want {
+			t.Errorf("%q: %+v, %v", body, cfg, err)
+		}
+	}
+	if err := os.WriteFile(file, []byte("snapshots:\n  keep: -1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(file, "", ""); err == nil || !strings.Contains(err.Error(), "snapshots") {
+		t.Errorf("a negative bound: %v", err)
+	}
+}

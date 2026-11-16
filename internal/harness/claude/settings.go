@@ -176,3 +176,34 @@ func lookup(env []string, name string) (string, bool) {
 	}
 	return "", false
 }
+
+// Configuration is where the operator's claude code configuration is, in env
+// (CLAUDE_CONFIG_DIR, else ~/.claude), and which of it a configuration
+// snapshot copies: user settings, memory, keybindings, the skills, agents,
+// commands and output styles the operator keeps, the plugin lists, and the
+// global ~/.claude.json, which claude keeps in CLAUDE_CONFIG_DIR when that is
+// set. never the credentials, history, projects (transcripts), sessions,
+// caches or anything else claude keeps there. the skills claude syncs from
+// the operator's account (skills/synced) are claude's to restore, and are
+// left out (Michael, 2026-11-15).
+func (h *Harness) Configuration(env []string) []harness.ConfigRoot {
+	dir := filepath.Join(harness.Home(env), ".claude")
+	globalDir := harness.Home(env)
+	if custom, ok := harness.Lookup(env, "CLAUDE_CONFIG_DIR"); ok && custom != "" {
+		dir, globalDir = custom, custom
+	}
+	return []harness.ConfigRoot{
+		{
+			Harness: model.HarnessClaude,
+			Label:   "config",
+			Dir:     dir,
+			Include: []string{
+				"settings.json", "CLAUDE.md", "keybindings.json",
+				"skills/", "agents/", "commands/", "output-styles/",
+				"plugins/installed_plugins.json", "plugins/known_marketplaces.json", "plugins/blocklist.json",
+			},
+			Exclude: []string{"skills/synced"},
+		},
+		{Harness: model.HarnessClaude, Label: "global", Dir: globalDir, Include: []string{".claude.json"}},
+	}
+}

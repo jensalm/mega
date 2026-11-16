@@ -127,3 +127,29 @@ func (h *Harness) Version(ctx context.Context, find []string) (string, error) {
 	}
 	return harness.ReadVersion(ctx, append(argv, "--version"), find, "codex-cli")
 }
+
+// Configuration is where the operator's codex configuration is, in env
+// (CODEX_HOME, else ~/.codex), and which of it a configuration snapshot
+// copies: the config files (config.toml, and the *.config.toml files beside
+// it),
+// AGENTS.md, rules, the skills and custom prompts the operator keeps, the
+// update check's version.json, and the migration markers. never auth.json,
+// history, sessions, the databases, logs, caches or anything else codex
+// keeps there. codex's own bundled skills (skills/.system) are codex's to
+// restore, and are left out (Michael, 2026-11-15).
+func (h *Harness) Configuration(env []string) []harness.ConfigRoot {
+	dir := filepath.Join(harness.Home(env), ".codex")
+	if custom, ok := harness.Lookup(env, "CODEX_HOME"); ok && custom != "" {
+		dir = custom
+	}
+	return []harness.ConfigRoot{{
+		Harness: model.HarnessCodex,
+		Label:   "home",
+		Dir:     dir,
+		Include: []string{
+			"config.toml", "*.config.toml", "AGENTS.md", "rules/", "skills/", "prompts/",
+			"version.json", ".sandbox_migration", ".personality_migration",
+		},
+		Exclude: []string{"skills/.system"},
+	}}
+}

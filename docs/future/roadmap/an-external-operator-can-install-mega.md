@@ -1,6 +1,6 @@
 ---
 title: an external operator can install mega
-state: evaluating
+state: researching
 created: 2026-11-13
 tags: [epic]
 ---
@@ -18,18 +18,27 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - **pi is slipstreamed in.** The spec deferred it; Michael pulled it forward.
 - **The work is sequential.** One story at a time, in the order below. Running two implementers at once on one repository is coordination that falls on Michael, and helping with that is something mega has yet to grow into.
 
-## stories, in order
+## stories, as of 2026-11-15
 
-1. `clean-machine-rehearsal`: follow the README on a machine that has never seen mega, and write down everything that goes wrong. Its findings reorder what follows.
-   - The agent's pass ran on 2026-11-13 and produced three cards, built together as the first-run batch before anything else: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`. Michael's own pass under WSL2 comes after that batch and the version work, so it does not stop at blockers already known.
-2. `harness-version-tolerance`: what mega does with a Claude Code or Codex other than the pinned one, and what it should say.
-3. `pi-adapter`: the third harness.
-4. `the-checks-run-in-a-browser-michael-does-not-use`: the demo runs in LibreWolf and the checks run in Chromium, so this protects what follows.
-5. `hotkey-for-allow` and `action-view-improvements`: the polish a live demo shows.
-6. `mega-on-macos-and-windows`.
-7. `mega-on-twentytwo`: the first tagged release, delivered by `push`, with twentytwo as the proving ground.
-8. `readme-for-newcomers`.
-9. `the-demo`: a workspace made for showing, with no freeze before it.
+**Built, in evaluating**
+
+- `clean-machine-rehearsal`, the agent's pass, and the first-run batch it produced: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`.
+- `harness-version-tolerance`: Claude Code is found on the `PATH`, each harness has a tested range, and a lone Codex binary is named.
+
+**Next, in order**
+
+1. `harness-configuration-backups`: small, and what makes a harness update safe to look back from.
+2. `pi-adapter`: the third harness.
+3. The conversation polish a live demo shows: `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps`, `path-search-beyond-the-checkout` and `agent-hand-off-turns`.
+4. `readme-for-newcomers`.
+5. `the-demo`: a workspace made for showing, with no freeze before it.
+
+**After the demo**
+
+- `clean-machine-rehearsal`, Michael's own pass under WSL2, which is also the Windows half of `mega-on-macos-and-windows`.
+- `mega-on-macos-and-windows`, the macOS half, when a volunteer has a Mac.
+- `mega-on-twentytwo`: the first tagged release, delivered by `push`.
+- `the-checks-run-in-a-browser-michael-does-not-use`.
 
 Not on the path, and ordered after: `project-mcp-servers-and-hooks-run-without-approval`, which matters more once other people's repositories are opened, and `claude-shim-distribution`.
 

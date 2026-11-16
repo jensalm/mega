@@ -1,6 +1,6 @@
 ---
 title: harness configuration backups
-state: researching
+state: building
 created: 2026-11-14
 tags: [feature]
 ---

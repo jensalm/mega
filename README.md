@@ -57,6 +57,9 @@ claude:
   executable: claude         # a bare name is looked up on PATH; a path is used as it is
 codex:
   binary: codex
+snapshots:                   # copies of each harness's configuration, below
+  keep: 10                   # ordinary snapshots kept; 0 takes none
+  keep_at_version: 20        # snapshots taken when a harness version changed
 ```
 
 `mega --data DIR` runs against another workspace, `mega --config FILE` reads another config, and `mega --listen 127.0.0.1:PORT` serves on another port. Like `listen` in the config, the flag must be a loopback address.
@@ -118,6 +121,12 @@ mega records which environment each runtime started in by names and a fingerprin
 - **Loopback only.** The listener must be a loopback address. Requests are refused unless their `Host` is loopback and any `Origin` matches it, which keeps out web pages in your own browser as well as the network.
 - **No login.** Anyone who can reach the port on your machine can drive your agents, which is why it never listens anywhere else.
 - **Agents run with your permissions.** Each harness runs as you, in your checkout, with your settings and your permission rules. mega never relaxes a harness's permissions, never sets a trust flag on your behalf, and never approves anything for you: every approval it is asked for waits for your answer.
+- **Your harness configuration is copied, and never written.** mega keeps snapshots of each harness's configuration under its data directory, in `snapshots/`, readable only by you.
+  - **What is copied:** an include list per harness, of settings, instructions, rules, skills and agents you keep, plugin lists, the version and migration markers, and `~/.claude.json`.
+  - **What never is:** a credential or token file, a transcript, a session store, a history, a database or a cache, nor a file the list does not name. A link is kept as a link and never followed.
+  - **When:** a snapshot is taken in the background at start-up when the configuration changed, and when a harness reports a new version.
+  - **Restoring is yours.** `mega snapshots` lists them, and `mega snapshots diff NAME` names the files that differ from your live configuration and prints the copy commands. It runs none of them.
+  - **Treat them as private.** Configuration can hold secrets, such as an `env` block in a settings file, so the snapshots deserve the same care as the originals.
 - **A conversation's model, effort and permission mode are its own.** A new conversation copies them once from the harness's settings, and mega passes them on every launch; only you change them after that. A bypass mode in your settings is never copied: the conversation starts in the mode that asks. The control bar shows what you request, and each turn's line shows what the harness ran with.
 
 ## More

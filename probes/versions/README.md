@@ -32,7 +32,7 @@ probes/versions/codex.sh /path/to/codex-0.170.0-package/bin/codex 18520 --discov
 
 ## What a run does
 
-**Both runners** build mega into the scratch root, `$MEGA_PROBE_DIR` (by default `${TMPDIR:-/tmp}/mega-versions-probe`). Each run gets its own directory there. Mega runs with scratch data and XDG directories, but with Michael's own `HOME` and login.
+**Both runners** turn configuration snapshots off in the scratch config (`snapshots.keep: 0`), since the scratch mega runs on Michael's own `HOME`. They build mega into the scratch root, `$MEGA_PROBE_DIR` (by default `${TMPDIR:-/tmp}/mega-versions-probe`). Each run gets its own directory there. Mega runs with scratch data and XDG directories, but with Michael's own `HOME` and login.
 
 **Before and after each run,** the runners record what a run could change and stop with exit 2 if it changed:
 - **For Claude Code:** the builds in `~/.local/share/claude/versions/`, by name, size and time, and where `claude` on `PATH` points.

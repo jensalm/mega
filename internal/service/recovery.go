@@ -117,9 +117,15 @@ func (s *Service) Shutdown(ctx context.Context) {
 // Close ends every subscription and closes the event logs. runtimes still
 // alive after Shutdown are left to finish on their own.
 func (s *Service) Close() {
+	// a configuration snapshot under way finishes first, and none starts
+	// after: nothing is written in the data directory once the service has
+	// let it go.
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	s.snapshotting.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.closed = true
 	for sub := range s.subs {
 		s.drop(sub)
 	}

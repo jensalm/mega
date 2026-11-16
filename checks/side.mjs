@@ -18,7 +18,8 @@
 // anywhere, and no bare n; folds, by default from the star, by choice kept in
 // the browser, and by navigation recording nothing, with the old folded list
 // carried over; the build's label and panel, with each harness's tested
-// range and the version found, and a page older than the
+// range and the version found, and when the newest configuration snapshot
+// was taken and where, and a page older than the
 // service saying so without reloading; and every control named.
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
@@ -304,6 +305,18 @@ check(
   claudeSaid.startsWith(`Version unknown; tested ${about.tested?.claude}.`) && claudeSaid.includes('could not be read') && (await panel.locator('dd[data-harness="claude"] .notice-text').count()) === 1,
   'and Claude Code’s, whose version could not be read, saying so',
 )
+// and where the configuration snapshots are and when the newest was taken,
+// by name and time: the scratch HOME's made-up Claude settings were taken
+// at start-up.
+const snapshotsSaid = ((await panel.locator('dd[data-snapshots]').textContent()) ?? '').trim()
+t.say(`  the panel on the snapshots: "${snapshotsSaid}"`)
+const snapshotsDir = join(t.dir, 'data', 'snapshots')
+const freshAbout = (await api('GET', '/api/version')).body
+check(
+  freshAbout.snapshots?.dir === snapshotsDir && freshAbout.snapshots?.count >= 1 && freshAbout.snapshots?.newest?.reason === 'start-up' && snapshotsSaid.startsWith('Newest ') && snapshotsSaid.includes('at start-up') && snapshotsSaid.endsWith(`kept, in ${snapshotsDir}`),
+  'its panel says when the newest configuration snapshot was taken and where the snapshots are',
+)
+check(!snapshotsSaid.includes('effortLevel'), 'and shows nothing of what a snapshot holds')
 await panel.getByRole('button', { name: 'Close' }).click()
 await until('the panel closed', async () => (await panel.count()) === 0)
 await page.getByRole('button', { name: /^Collapse the side panel/ }).click()

@@ -1,6 +1,6 @@
 ---
 title: an interrupted turn imports "no response requested"
-state: researching
+state: evaluating
 created: 2026-11-14
 tags: [defect]
 ---

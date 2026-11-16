@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/michaelquigley/mega/internal/harness"
 )
@@ -47,6 +48,24 @@ type versionView struct {
 	Tested map[string]string
 	// Harnesses is what the start-up check found; absent until it has run.
 	Harnesses []*harnessStatusView `dd:",+omitempty"`
+	// Snapshots is where the configuration snapshots are and when the newest
+	// was taken, by name and time only; absent when none are kept.
+	Snapshots *snapshotsView `dd:",+omitempty"`
+}
+
+// snapshotsView is the configuration snapshot store: where it is, how many
+// snapshots it keeps, and the newest's name, time and reason. never what a
+// snapshot holds.
+type snapshotsView struct {
+	Dir    string
+	Count  int
+	Newest *snapshotView `dd:",+omitempty"`
+}
+
+type snapshotView struct {
+	Name   string
+	Taken  time.Time
+	Reason string
 }
 
 // getVersion answers from the build information the server was given, with
@@ -58,6 +77,12 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, h := range s.svc.Harnesses() {
 		view.Harnesses = append(view.Harnesses, newHarnessStatusView(h))
+	}
+	if sum := s.svc.Snapshots(); sum != nil {
+		view.Snapshots = &snapshotsView{Dir: sum.Dir, Count: sum.Count}
+		if sum.Newest != nil {
+			view.Snapshots.Newest = &snapshotView{Name: sum.Newest.Name, Taken: sum.Newest.Taken, Reason: sum.Newest.Reason}
+		}
 	}
 	writeJSON(w, r, http.StatusOK, view)
 }

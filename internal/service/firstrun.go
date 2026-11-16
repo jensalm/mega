@@ -104,6 +104,9 @@ func (s *Service) checkHarnesses() {
 	s.versionsReading = true
 	s.mu.Unlock()
 	s.readVersions()
+	// a snapshot of the configuration, in this same background work, when
+	// it differs from the newest one or a version is new.
+	defer s.snapshotConfiguration(false, nil)
 	s.mu.Lock()
 	report := s.harnessStatusLocked()
 	s.changed()

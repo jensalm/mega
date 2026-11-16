@@ -28,4 +28,6 @@ A conversation whose settings name no model the list holds copies the list's def
 
 ## no round trip asserts a clean turn
 
+Partly met on 2026-11-15. The version probe under `probes/versions/` checks at every step that no turn's line reports a false difference, and it has run against the real installed builds. The e2e round trips themselves still do not assert it.
+
 The e2e round trips pass, and none asserts that a real turn records no difference between what was asked and what ran. A mismatch in how a harness names a model against how its list resolves it would mark every turn. Add the assertion to the model and effort round trips for both harnesses.

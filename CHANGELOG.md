@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+FEATURE: **mega keeps snapshots of each harness's configuration.** (2026-11-15) Claude Code and Codex update themselves and rewrite their own files, and nothing kept a copy from before. Now mega does, in its data directory under `snapshots/`, readable only by you, so a settings file an update rewrote or removed can be put back.
+- **What is copied:** your settings, instructions, rules, skills, agents, commands and prompts, the plugin lists, the version and migration markers, and `~/.claude.json`. It follows `CLAUDE_CONFIG_DIR` and `CODEX_HOME` from your shell. A credential, transcript, session, history, database or cache is never copied, nor anything the list does not name. A link stays a link and is never followed.
+- **When:** in the background at start-up when the configuration changed, and when a harness reports a new version, which is when a migration may just have run.
+- **What it costs:** a file unchanged since an earlier snapshot is stored once, so a month of daily starts takes about 10 MB.
+- **How many:** 10 ordinary snapshots and 20 taken at a version change are kept, set by `snapshots.keep` and `snapshots.keep_at_version` in the config file. `keep: 0` takes none.
+- **Where to see them:** `mega version` and the version panel say when the newest was taken and where they are.
+- **Restoring is yours.** `mega snapshots` lists them, and `mega snapshots diff NAME` names the files that differ from your live configuration and prints the copy commands. mega never writes into a harness's configuration.
+
 FIX: **An interrupted turn no longer comes back with a reply of "No response requested."** (2026-11-15) After a turn is interrupted, Claude Code writes that line to its own transcript the next time the session is resumed and prompted. It never arrived live, so a later resume imported it as if the agent had said it, and after an unclean restart it could mark the conversation unread. mega now recognizes it by how Claude marks it in its transcript: a message written by no model that is not an API error. It is kept among the native events, hidden unless shown, and is never a reply and never attention. An API error, which Claude also writes with no model, is still shown as a reply, live or read back; so is any such message whose transcript mega cannot read.
 
 CHANGE: **mega follows the installed Claude Code, and says where each harness's version stands.** (2026-11-14) mega no longer expects one exact build of each harness.

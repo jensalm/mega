@@ -62,7 +62,9 @@ func printHarnesses() {
 	}
 	if err != nil {
 		fmt.Printf("  (the config could not be read, so nothing was looked for: %v)\n", err)
+		return
 	}
+	printSnapshots(cfg)
 }
 
 // found is what one harness is in mega's own environment: its version and

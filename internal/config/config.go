@@ -41,6 +41,9 @@ type Config struct {
 	Codex  Codex
 	// Environment is how each project's shell environment is resolved.
 	Environment Environment
+	// Snapshots bounds the configuration snapshots kept under the data
+	// directory.
+	Snapshots Snapshots
 
 	// File is the config file mega read, or the default it looked for, and
 	// FileRead whether there was one to read. neither is configuration: they
@@ -56,6 +59,24 @@ type Environment struct {
 	Shell   string
 	Timeout string
 }
+
+// Snapshots is how many configuration snapshots are kept: Keep ordinary
+// ones, taken at start-up when the configuration changed, and
+// KeepAtVersion taken when a harness reported a new version, which are kept
+// longer. Keep 0 takes none at all.
+type Snapshots struct {
+	Keep          int
+	KeepAtVersion int `dd:"keep_at_version"`
+}
+
+// the snapshot bounds when the config names none. claude code updates every
+// day or two, so most starts meet a new version: those snapshots get the
+// larger bound, about a month of updates, and the ordinary ones, a start
+// whose configuration changed with no new version, ten.
+const (
+	defaultSnapshotKeep          = 10
+	defaultSnapshotKeepAtVersion = 20
+)
 
 // Codex locates the codex executable, whose app-server the codex adapter runs.
 type Codex struct {
@@ -76,9 +97,10 @@ type Claude struct {
 // loopback exactly as the config value is.
 func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 	cfg := &Config{
-		Listen: defaultListen,
-		Claude: Claude{Node: "node", Shim: defaultClaudeShim, Executable: DefaultClaudeExecutable},
-		Codex:  Codex{Binary: "codex"},
+		Listen:    defaultListen,
+		Claude:    Claude{Node: "node", Shim: defaultClaudeShim, Executable: DefaultClaudeExecutable},
+		Codex:     Codex{Binary: "codex"},
+		Snapshots: Snapshots{Keep: defaultSnapshotKeep, KeepAtVersion: defaultSnapshotKeepAtVersion},
 	}
 	if configPath != "" {
 		if err := dd.MergeYAMLFile(cfg, configPath); err != nil {
@@ -144,6 +166,9 @@ func (c *Config) Where() string {
 // login, so an address reachable from the network would expose agents with
 // filesystem and command capabilities.
 func (c *Config) Validate() error {
+	if c.Snapshots.Keep < 0 || c.Snapshots.KeepAtVersion < 0 {
+		return fmt.Errorf("snapshots: keep and keep_at_version are counts, 0 or more")
+	}
 	host, _, err := net.SplitHostPort(c.Listen)
 	if err != nil {
 		return fmt.Errorf("listen '%s': %w", c.Listen, err)
@@ -155,6 +180,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("listen '%s' is not a loopback address", c.Listen)
 	}
 	return nil
+}
+
+// SnapshotsPath is where configuration snapshots are kept.
+func (c *Config) SnapshotsPath() string {
+	return filepath.Join(c.Data, "snapshots")
 }
 
 // RegistryPath is the authority file for projects and conversations.

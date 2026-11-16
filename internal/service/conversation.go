@@ -415,6 +415,7 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 		if _, note := harness.Stand(h.Name(), version); note != "" {
 			dl.Infof("launching '%s': %s", conversationID, note)
 		}
+		s.versionSeen(h.Name(), version)
 	}
 	rt, err := h.Launch(spec, &sink{s: s, l: l, inc: inc})
 	// the harness's own failure: what is recorded and shown is its summary.

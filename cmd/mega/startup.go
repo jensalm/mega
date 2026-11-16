@@ -23,6 +23,7 @@ import (
 	"github.com/michaelquigley/mega/internal/registry"
 	"github.com/michaelquigley/mega/internal/server"
 	"github.com/michaelquigley/mega/internal/service"
+	"github.com/michaelquigley/mega/internal/snapshot"
 )
 
 const (
@@ -107,6 +108,7 @@ func start(cfg *config.Config) (*instance, error) {
 			claudeHarness,
 			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}),
 		},
+		Snapshots: snapshotStore(cfg),
 	})
 	if err != nil {
 		lock.Release()
@@ -235,4 +237,13 @@ func environmentResolver(cfg config.Environment) (*environ.Resolver, error) {
 		resolver.Timeout = timeout
 	}
 	return resolver, nil
+}
+
+// snapshotStore is the configuration snapshot store under the data
+// directory, or nil when the config keeps none (snapshots.keep: 0).
+func snapshotStore(cfg *config.Config) *snapshot.Store {
+	if cfg.Snapshots.Keep == 0 {
+		return nil
+	}
+	return snapshot.NewStore(snapshot.Options{Dir: cfg.SnapshotsPath(), Keep: cfg.Snapshots.Keep, KeepAtVersion: cfg.Snapshots.KeepAtVersion})
 }

@@ -30,9 +30,12 @@ type Harness struct {
 	settings   model.TurnSettings
 	version    string
 	versionErr error
-	deferred   bool // runtimes take a model change with the next prompt, as codex does
-	modelLists int
-	exitEarly  bool
+	// configuration is where the fake keeps the operator's configuration
+	// (SetConfiguration), nil for none.
+	configuration func(env []string) []harness.ConfigRoot
+	deferred      bool // runtimes take a model change with the next prompt, as codex does
+	modelLists    int
+	exitEarly     bool
 	// duringLaunch runs with each new runtime before Launch returns, as an
 	// adapter that reports to its sink while launching does.
 	duringLaunch func(*Runtime)
@@ -132,6 +135,25 @@ func (h *Harness) SetVersion(version string, err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.version, h.versionErr = version, err
+}
+
+// SetConfiguration scripts where the fake's configuration is, as an
+// adapter's Configuration answers from the operator's shell environment.
+func (h *Harness) SetConfiguration(f func(env []string) []harness.ConfigRoot) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.configuration = f
+}
+
+// Configuration is the scripted configuration (SetConfiguration).
+func (h *Harness) Configuration(env []string) []harness.ConfigRoot {
+	h.mu.Lock()
+	f := h.configuration
+	h.mu.Unlock()
+	if f == nil {
+		return nil
+	}
+	return f(env)
 }
 
 // Version is the scripted version (SetVersion), as a harness's --version.

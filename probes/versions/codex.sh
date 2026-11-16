@@ -121,6 +121,10 @@ claude:
   executable: /bin/false
 codex:
   binary: $binary
+# no configuration snapshots: this mega runs on the operator's own HOME, and
+# a probe's scratch data is no place for a copy of his configuration.
+snapshots:
+  keep: 0
 EOF
 }
 

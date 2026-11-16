@@ -15,6 +15,7 @@ import (
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/model"
 	"github.com/michaelquigley/mega/internal/registry"
+	"github.com/michaelquigley/mega/internal/snapshot"
 )
 
 // UntrustedChecker reports whether a checkout should carry the trust notice.
@@ -28,6 +29,9 @@ type Options struct {
 	Resolver     Resolver
 	EventLogPath func(conversationID string) string
 	Harnesses    []harness.Harness
+	// Snapshots keeps copies of the harnesses' configuration (snapshot);
+	// nil takes none, as the tests and the harness round trips do.
+	Snapshots *snapshot.Store
 }
 
 // Workspace is the arrangement as the service last confirmed it.
@@ -90,6 +94,11 @@ type Service struct {
 	// versionsReading says a read is under way (readVersions).
 	harnessVersions map[string]versionRead
 	versionsReading bool
+
+	// snapshots is the configuration snapshot store, nil for none, and
+	// snapshotting counts the snapshots under way, which Close waits for.
+	snapshots    *snapshot.Store
+	snapshotting sync.WaitGroup
 }
 
 // New returns a service over reg. it recovers from the previous run before
@@ -109,6 +118,7 @@ func New(reg *registry.Registry, opts Options) (*Service, error) {
 		gate:        shutdownGate{requested: make(chan struct{})},
 
 		resolveSlots: make(chan struct{}, resolveAtOnce),
+		snapshots:    opts.Snapshots,
 	}
 	if s.isUntrusted == nil {
 		s.isUntrusted = func(string) bool { return false }

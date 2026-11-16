@@ -253,6 +253,9 @@ export interface About {
   // the service's start-up check found, with each version against it.
   tested: Record<string, string>
   harnesses?: HarnessStatus[]
+  // where the configuration snapshots are and when the newest was taken, by
+  // name and time only; absent when none are kept (snapshots.keep: 0).
+  snapshots?: { dir: string; count: number; newest?: { name: string; taken: string; reason: string } }
 }
 
 export interface Workspace {

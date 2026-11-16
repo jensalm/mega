@@ -1,4 +1,5 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import { getAbout } from '../api'
 import { newerLabel } from '../build'
 import { asSentence, harnesses } from '../harnesses'
 import type { About } from '../types'
@@ -7,8 +8,16 @@ import { Dialog } from './Dialog'
 // AboutPanel is what 'mega version' prints, from the service's build
 // information, with where it logs and the Claude Agent SDK the shim runs,
 // each harness's tested range and the version the service found, and
-// whether this page runs the interface the service now serves.
-export function AboutPanel({ about, newer, onClose }: { about: About; newer: boolean; onClose: () => void }) {
+// whether this page runs the interface the service now serves, and where the
+// configuration snapshots are and when the newest was taken. it reads the
+// service again as it opens, since a snapshot may have been taken since the
+// page connected.
+export function AboutPanel({ about: connected, newer, onClose }: { about: About; newer: boolean; onClose: () => void }) {
+  const [about, setAbout] = useState(connected)
+  useEffect(() => {
+    getAbout().then(setAbout, () => undefined)
+  }, [])
+  const snapshots = about.snapshots
   return (
     <Dialog title="This mega" onClose={onClose}>
       <dl className="about">
@@ -69,6 +78,21 @@ export function AboutPanel({ about, newer, onClose }: { about: About; newer: boo
             </Fragment>
           )
         })}
+        <dt>Configuration snapshots</dt>
+        <dd data-snapshots="">
+          {!snapshots && 'None are taken (snapshots.keep is 0).'}
+          {snapshots?.newest && (
+            <>
+              Newest {new Date(snapshots.newest.taken).toLocaleString()}, at {snapshots.newest.reason === 'version' ? 'a version change' : 'start-up'}; {snapshots.count}{' '}
+              kept, in <code>{snapshots.dir}</code>
+            </>
+          )}
+          {snapshots && !snapshots.newest && (
+            <>
+              None yet, in <code>{snapshots.dir}</code>
+            </>
+          )}
+        </dd>
         <dt>This page</dt>
         <dd>{newer ? newerLabel : 'Running the interface this mega serves.'}</dd>
       </dl>
