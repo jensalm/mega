@@ -92,7 +92,7 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (88 steps): the input panel. Its config names `~/Sandbox`, in its scratch `HOME`, beyond the checkout. It checks the following:
+- **`panel.mjs`** (89 steps): the input panel. Its config names `~/Sandbox` and `~/Screenshots`, in its scratch `HOME`, beyond the checkout. It checks the following:
   - the reply box resting at one line and opening to its height;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
   - a control in the bar keeping the box open, and a press outside closing it;
@@ -123,9 +123,9 @@ Where things go:
   - sent from above five times with the reply held, the prompt row in view above the dock before any output, each time;
   - while following, the reader's wheel during a streaming reply keeping the view where they put it, with "Newer activity below" offered;
   - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see;
-  - `@~/` opening the list of the named directory, shown with `~`, files newest first, with nothing from a dot-directory or outside it, and a directory not named never listed; the pick written per harness, `@"~/Sandbox/shots/shot one.png"` for Claude and the bare absolute path for Codex and pi.
+  - `@~/` opening the list of the named directory, shown with `~`, its own files newest first and then a newer one deeper, with nothing from a dot-directory or outside it, and a directory not named never listed; `@~/Screenshots/`, the second named directory, looked in and listing its own files; the pick written per harness, `@"~/Sandbox/shots/shot one.png"` for Claude and the bare absolute path for Codex and pi.
 
-  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` list as `shots/path-search-outside.png`.
+  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
 - **`requests.mjs`** (56 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;

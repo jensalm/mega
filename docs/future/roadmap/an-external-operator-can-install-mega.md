@@ -18,7 +18,7 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - **pi is slipstreamed in.** The spec deferred it; Michael pulled it forward.
 - **The work is sequential.** One story at a time, in the order below. Running two implementers at once on one repository is coordination that falls on Michael, and helping with that is something mega has yet to grow into.
 
-## stories, as of 2026-11-16
+## stories, as of the evening of 2026-11-16
 
 **Built, in evaluating**
 
@@ -27,10 +27,15 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - `harness-configuration-backups`: configuration snapshots under mega's data directory, with `mega snapshots` to list and compare them.
 
 - `pi-adapter`: the third harness, built against pi 1.5.2 and the local model.
+- The conversation polish: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `conversation-timestamps`, `action-view-improvements` and `path-search-beyond-the-checkout`.
+
+**Building**
+
+- `a-large-named-directory-starves-the-path-search`: a defect the last of those showed within minutes of being switched on.
 
 **Next, in order**
 
-1. The conversation polish a live demo shows: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `action-view-improvements`, `conversation-timestamps` and `path-search-beyond-the-checkout`.
+1. `which-mega-is-this`: small, and wanted now that Michael reaches several megas at once.
 2. `readme-for-newcomers`.
 3. `the-demo`: a workspace made for showing, with no freeze before it.
 

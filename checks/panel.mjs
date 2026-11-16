@@ -28,17 +28,19 @@
 // collapsed and open; the bar on one row; and the dock keeping the newest content in view as its
 // height changes while the view follows the bottom (a turn's activity line,
 // a docked request, the reply box growing), never moving a view scrolled up.
-// and @~/ searching the directory named beyond the checkout: its paths shown
-// with ~, newest first, no dot-directory and nothing outside it, and a pick
-// written per harness, a quoted mention for claude and the bare absolute
-// path for codex and pi; saved as shots/path-search-outside.png.
+// and @~/ searching the directories named beyond the checkout: its paths
+// shown with ~, newest first, no dot-directory and nothing outside it, and a
+// pick written per harness, a quoted mention for claude and the bare
+// absolute path for codex and pi; and @~/Screenshots/, the second named
+// directory, looked in directly and listing its own files; saved as
+// shots/path-search-{outside,second}.png.
 import { mkdirSync, renameSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
-// ~/Sandbox, in the suite's scratch HOME, is named beyond the checkout for
-// the @ search.
-const t = await suite('panel', { searchDirs: ['~/Sandbox'] })
+// ~/Sandbox and ~/Screenshots, in the suite's scratch HOME, are named beyond
+// the checkout for the @ search, in that order.
+const t = await suite('panel', { searchDirs: ['~/Sandbox', '~/Screenshots'] })
 const { url, check, until, api, convOf } = t
 
 const P = await t.register('panel', t.checkout('panel'))
@@ -657,7 +659,9 @@ const made = (rel, minutesAgo) => {
   utimesSync(full, when, when)
 }
 made('older notes.txt', 30)
-made('shots/shot one.png', 1)
+made('shot one.png', 2)
+// newer, but deeper: the directory's own files come first.
+made('shots/deep.png', 1)
 made('.cache/hidden.png', 0)
 mkdirSync(join(home, 'Private'), { recursive: true })
 writeFileSync(join(home, 'Private', 'secret.txt'), 'not named')
@@ -682,26 +686,46 @@ const atClaude = await pickNewest(C)
 t.say(`  @~/ for claude: ${JSON.stringify(atClaude)}`)
 check(
   atClaude.label === 'Paths in the directories named beyond the checkout' &&
-    atClaude.shown[0] === '~/Sandbox/shots/shot one.png' &&
-    atClaude.shown.includes('~/Sandbox/older notes.txt') &&
+    atClaude.shown.slice(0, 3).join(',') === '~/Sandbox/shot one.png,~/Sandbox/older notes.txt,~/Sandbox/shots/deep.png' &&
     atClaude.shown.includes('~/Sandbox/') &&
     !atClaude.shown.some((p) => p.includes('.cache') || p.includes('Private')),
-  `@~/ opens the list of ~/Sandbox, shown with ~, newest first, with no dot-directory and nothing outside it: ${JSON.stringify(atClaude.shown)}`,
+  `@~/ opens the list of ~/Sandbox, shown with ~, its own files newest first and then deeper ones, with no dot-directory and nothing outside it: ${JSON.stringify(atClaude.shown)}`,
 )
-check(atClaude.value === 'look at @"~/Sandbox/shots/shot one.png" ', `for claude, the pick is a mention as the list shows it, quoted for its space: "${atClaude.value}"`)
+check(atClaude.value === 'look at @"~/Sandbox/shot one.png" ', `for claude, the pick is a mention as the list shows it, quoted for its space: "${atClaude.value}"`)
 await box.fill('look at @~/Sa')
 await until('the list again', async () => (await list.getByRole('option').count()) > 0)
 await list.screenshot({ path: `${t.dir}/shots/path-search-outside.png` })
 await box.fill('look at @~/Private')
 await until('the search settled', async () => (await list.locator('.path-note').count()) === 1)
 check((await list.locator('.path-note').textContent()) === 'No matching paths', 'a directory not named is never listed, however it is typed')
+// the second named directory, looked in directly: its files, newest first,
+// whatever the first holds.
+for (const [name, minutesAgo] of [
+  ['first.png', 20],
+  ['second.png', 10],
+  ['third.png', 5],
+]) {
+  const full = join(home, 'Screenshots', name)
+  mkdirSync(join(home, 'Screenshots'), { recursive: true })
+  writeFileSync(full, name)
+  const when = new Date(Date.now() - minutesAgo * 60000)
+  utimesSync(full, when, when)
+}
+await box.fill('look at @~/Screenshots/')
+await until('the second directory looked in', async () => (await options()).includes('~/Screenshots/third.png'))
+const second = await options()
+check(
+  second.join(',') === '~/Screenshots/third.png,~/Screenshots/second.png,~/Screenshots/first.png',
+  `@~/Screenshots/ lists that directory's own files, newest first: ${JSON.stringify(second)}`,
+)
+await list.screenshot({ path: `${t.dir}/shots/path-search-second.png` })
 await box.fill('')
 for (const [id, name] of [
   [X, 'codex'],
   [PiConv, 'pi'],
 ]) {
   const picked = await pickNewest(id)
-  check(picked.value === `look at ${join(sandbox, 'shots/shot one.png')} `, `for ${name}, the pick is the bare absolute path: "${picked.value}"`)
+  check(picked.value === `look at ${join(sandbox, 'shot one.png')} `, `for ${name}, the pick is the bare absolute path: "${picked.value}"`)
 }
 
 await t.done()

@@ -1,6 +1,6 @@
 ---
 title: path search beyond the checkout
-state: researching
+state: evaluating
 created: 2026-11-14
 tags: [enhancement, spike]
 ---
@@ -39,3 +39,7 @@ Per-project extra directories, which can follow if the global list is not enough
 ## checks
 
 A service test for the listing: a named directory, a path outside any named directory refused, dot-directories skipped, a symlink out not followed, newest first. In the panel suite: `@~/` opening the list, picking, and the inserted text per harness.
+
+## after it was built, 2026-11-16
+
+Built and committed the same day, and switched on for Michael with `~/Sandbox` and `~/Screenshots` named. Within minutes it showed a defect: a large directory named first uses the whole listing bound, so the next one's files never appear, and typing a folder's path does not look inside it. That is the card `a-large-named-directory-starves-the-path-search`. Until it lands, name the small directories first.

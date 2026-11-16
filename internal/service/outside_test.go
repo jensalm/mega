@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,10 +13,13 @@ import (
 )
 
 // the @ search beyond the checkout lists only what is under a named
-// directory, shown with ~, newest first: a path outside every named
-// directory is never listed, whatever is typed; dot-directories are
-// skipped; a link out of the named directory is not followed or listed; and
-// with no directory named, the search is the checkout's as it always was.
+// directory, shown with ~: files before directories, a directory's own files
+// before anything deeper, newest first. typed text that names a directory
+// inside a named one is looked in directly; a path outside every named
+// directory is never listed, whatever is typed, through ".." or a link;
+// dot-directories are skipped; a link out of the named directory is not
+// followed or listed; and with no directory named, the search is the
+// checkout's as it always was.
 func TestTheSearchBeyondTheCheckout(t *testing.T) {
 	r := newRig(t)
 	home := t.TempDir()
@@ -52,34 +56,25 @@ func TestTheSearchBeyondTheCheckout(t *testing.T) {
 		t.Fatalf("with nothing named: searched %v, %v", searched, err)
 	}
 	r.svc.outside = outsideSearch{dirs: []string{sandbox}}
-	shown := func(q string) []string {
-		t.Helper()
-		found, searched, err := r.svc.OutsidePaths(r.project.ID, q)
-		if err != nil || !searched {
-			t.Fatalf("%q: searched %v, %v", q, searched, err)
-		}
-		var out []string
-		for _, p := range found {
-			if p.Full != filepath.Join(home, strings.TrimPrefix(strings.TrimSuffix(p.Shown, "/"), "~"))+map[bool]string{true: "/", false: ""}[strings.HasSuffix(p.Shown, "/")] {
-				t.Errorf("%q: %s shown for %s", q, p.Shown, p.Full)
-			}
-			out = append(out, p.Shown)
-		}
-		return out
-	}
+	shown := outsideShown(t, r, home)
 	got := shown("~/")
-	want := []string{"~/Sandbox/shots/newest.png", "~/Sandbox/middle.txt", "~/Sandbox/old.png", "~/Sandbox/", "~/Sandbox/shots/"}
+	want := []string{"~/Sandbox/middle.txt", "~/Sandbox/old.png", "~/Sandbox/shots/newest.png", "~/Sandbox/", "~/Sandbox/shots/"}
 	if !slices.Equal(got, want) {
-		t.Errorf("~/: newest first, no dot-directory, no link out:\n got %v\nwant %v", got, want)
+		t.Errorf("~/: files first, its own before deeper, newest first, no dot-directory, no link out:\n got %v\nwant %v", got, want)
 	}
-	if got := shown("~/Sa png"); !slices.Equal(got, []string{"~/Sandbox/shots/newest.png", "~/Sandbox/old.png"}) {
+	if got := shown("~/Sa png"); !slices.Equal(got, []string{"~/Sandbox/old.png", "~/Sandbox/shots/newest.png"}) {
 		t.Errorf("~/Sa png: %v", got)
+	}
+	// typed text naming a directory inside a named one is looked in.
+	if got := shown("~/Sandbox/shots/"); !slices.Equal(got, []string{"~/Sandbox/shots/newest.png"}) {
+		t.Errorf("~/Sandbox/shots/: %v", got)
 	}
 	if got := shown(sandbox + "/mid"); !slices.Equal(got, []string{"~/Sandbox/middle.txt"}) {
 		t.Errorf("an absolute query: %v", got)
 	}
-	// outside every named directory: nothing, typed with ~ or from /.
-	for _, q := range []string{"~/Private", "~/Private/secret.txt", "/etc/passwd", filepath.Join(home, "Private"), "~/Sandbox/../Private/secret"} {
+	// outside every named directory: nothing, typed with ~ or from /, or
+	// leaving through ".." or a link.
+	for _, q := range []string{"~/Private", "~/Private/", "~/Private/secret.txt", "/etc/passwd", "/etc/", filepath.Join(home, "Private") + "/", "~/Sandbox/../Private/", "~/Sandbox/../Private/secret", "~/Sandbox/dir-out/", "~/Sandbox/dir-out/secret"} {
 		if got := shown(q); len(got) != 0 {
 			t.Errorf("%q lists outside the named directories: %v", q, got)
 		}
@@ -90,6 +85,79 @@ func TestTheSearchBeyondTheCheckout(t *testing.T) {
 	}
 	if _, _, err := r.svc.OutsidePaths("no-such-project", "~/"); ErrorCode(err) != CodeNotFound {
 		t.Errorf("an unknown project: %v", err)
+	}
+}
+
+// each named directory has its own bound, so a large one cannot crowd out
+// another named after it; a large one's own files are listed before its
+// deep tree, so a file just dropped at its top is found; looking in a
+// directory directly lists its files whatever else is named; and a listing
+// that stopped at its bound says so.
+func TestALargeNamedDirectoryDoesNotStarveAnother(t *testing.T) {
+	r := newRig(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	at := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	stamp := func(rel string, minutes int) {
+		t.Helper()
+		write(t, home, rel, rel)
+		when := at.Add(time.Duration(minutes) * time.Minute)
+		if err := os.Chtimes(filepath.Join(home, rel), when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a deep tree of 60 files, past a bound of 20, newer than anything else.
+	for d := 0; d < 6; d++ {
+		for f := 0; f < 10; f++ {
+			stamp(fmt.Sprintf("Big/tree/d%d/deep-%d.txt", d, f), 100+d*10+f)
+		}
+	}
+	stamp("Big/dropped.png", 50)
+	for i, name := range []string{"one.png", "two.png", "three.png"} {
+		stamp("Small/"+name, i)
+	}
+	r.svc.outside = outsideSearch{dirs: []string{filepath.Join(home, "Big"), filepath.Join(home, "Small")}, bound: 20}
+	shown := outsideShown(t, r, home)
+
+	all := shown("~/")
+	for _, want := range []string{"~/Big/dropped.png", "~/Small/one.png", "~/Small/two.png", "~/Small/three.png"} {
+		if !slices.Contains(all, want) {
+			t.Errorf("~/ is missing %s: %v", want, all)
+		}
+	}
+	if got := shown("~/Small/"); !slices.Equal(got, []string{"~/Small/three.png", "~/Small/two.png", "~/Small/one.png"}) {
+		t.Errorf("~/Small/: %v", got)
+	}
+	if got := shown("~/Big/"); len(got) == 0 || got[0] != "~/Big/dropped.png" {
+		t.Errorf("~/Big/: its own file first: %v", got)
+	}
+	found, _, _ := r.svc.OutsidePaths(r.project.ID, "~/")
+	if !slices.Equal(found.Stopped, []string{"~/Big/"}) {
+		t.Errorf("stopped: %v", found.Stopped)
+	}
+	found, _, _ = r.svc.OutsidePaths(r.project.ID, "~/Small/")
+	if len(found.Stopped) != 0 {
+		t.Errorf("looking in ~/Small/ stopped: %v", found.Stopped)
+	}
+}
+
+// outsideShown is the named-directory search's answer to q, as the list
+// shows it, each checked against its absolute path.
+func outsideShown(t *testing.T, r *rig, home string) func(q string) []string {
+	return func(q string) []string {
+		t.Helper()
+		found, searched, err := r.svc.OutsidePaths(r.project.ID, q)
+		if err != nil || !searched {
+			t.Fatalf("%q: searched %v, %v", q, searched, err)
+		}
+		var out []string
+		for _, p := range found.Paths {
+			if want := home + strings.TrimPrefix(p.Shown, "~"); p.Full != want {
+				t.Errorf("%q: %s shown for %s", q, p.Shown, p.Full)
+			}
+			out = append(out, p.Shown)
+		}
+		return out
 	}
 }
 

@@ -6,7 +6,7 @@ import type { PathSearch } from '../mention'
 // marked. a press on an entry picks
 // it without taking focus from the box.
 export function PathList({ search, id }: { search: PathSearch; id: string }) {
-  const { mention, paths, error, selected, outside } = search
+  const { mention, paths, error, selected, outside, stopped } = search
   if (!mention || !search.ready) {
     return null
   }
@@ -37,6 +37,11 @@ export function PathList({ search, id }: { search: PathSearch; id: string }) {
             )
           })}
         </ul>
+      )}
+      {!error && stopped.length > 0 && (
+        <p className="path-note path-stopped">
+          Listed only part of {stopped.join(' and ')}, which hold{stopped.length === 1 ? 's' : ''} more than the search reads. Type a folder&rsquo;s path to look in it.
+        </p>
       )}
     </div>
   )

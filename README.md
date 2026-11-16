@@ -68,7 +68,7 @@ path_search:                 # directories @~/ or @/ searches beyond the checkou
     - ~/Sandbox
 ```
 
-`path_search.directories` names places outside any project where you keep files to point an agent at, such as screenshots. In the reply box, `@~/` or `@/` lists what is in them, newest first, and nothing outside them. A pick is written the way each harness reads it: `@~/Sandbox/shot.png` for Claude Code, the absolute path for Codex and pi. Each harness asks, or not, before reading there, as it would in its own terminal.
+`path_search.directories` names places outside any project where you keep files to point an agent at, such as screenshots. In the reply box, `@~/` or `@/` lists what is in them, a folder's own files first, newest first, and nothing outside them; `@~/Screenshots/` looks in that folder. A pick is written the way each harness reads it: `@~/Sandbox/shot.png` for Claude Code, the absolute path for Codex and pi. Each harness asks, or not, before reading there, as it would in its own terminal.
 
 `mega --data DIR` runs against another workspace, `mega --config FILE` reads another config, and `mega --listen 127.0.0.1:PORT` serves on another port. Like `listen` in the config, the flag must be a loopback address.
 

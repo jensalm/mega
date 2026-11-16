@@ -168,10 +168,13 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 // pathsView is a path search's answer: the paths as the list shows them,
 // relative to the checkout, or, for a search of the directories named beyond
 // it, with ~ for the home directory; then Full, for those only, each path's
-// absolute form in the same order, for a harness that is given it.
+// absolute form in the same order, for a harness that is given it; and
+// Stopped, each named directory whose listing stopped at its bound, so the
+// list can say a path missing from it may only be unseen.
 type pathsView struct {
-	Paths []string
-	Full  []string `dd:",+omitempty"`
+	Paths   []string
+	Full    []string `dd:",+omitempty"`
+	Stopped []string `dd:",+omitempty"`
 }
 
 // paths searches a project's checkout by name, or the directories the
@@ -185,8 +188,8 @@ func (s *Server) paths(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if searched {
-		view := &pathsView{Paths: make([]string, 0, len(outside)), Full: make([]string, 0, len(outside))}
-		for _, p := range outside {
+		view := &pathsView{Paths: make([]string, 0, len(outside.Paths)), Full: make([]string, 0, len(outside.Paths)), Stopped: outside.Stopped}
+		for _, p := range outside.Paths {
 			view.Paths = append(view.Paths, p.Shown)
 			view.Full = append(view.Full, p.Full)
 		}

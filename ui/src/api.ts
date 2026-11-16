@@ -99,10 +99,12 @@ export const getInvocation = (conversationId: string, seq: number) =>
 // paths in a project's checkout matching q, best first, at most twenty;
 // directories end in a slash. for q starting with ~/ or /, with directories
 // named beyond the checkout (config path_search), paths under them instead,
-// newest first, shown with ~, and full holds each one's absolute path. names
-// only: the service reads no file.
+// files before directories and a directory's own files first, newest first,
+// shown with ~, and full holds each one's absolute path; stopped names each
+// named directory whose listing stopped at its bound. names only: the
+// service reads no file.
 export const getPaths = (projectId: string, q: string) =>
-  request<{ paths: string[]; full?: string[] }>('GET', `/api/projects/${encodeURIComponent(projectId)}/paths?q=${encodeURIComponent(q)}`)
+  request<{ paths: string[]; full?: string[]; stopped?: string[] }>('GET', `/api/projects/${encodeURIComponent(projectId)}/paths?q=${encodeURIComponent(q)}`)
 
 // the harness's answer to a switch. only a confirmed switch moves the live mode,
 // and only once the runtime's report of it is recorded. next_prompt is a model

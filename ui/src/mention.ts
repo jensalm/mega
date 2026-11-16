@@ -100,6 +100,9 @@ export interface PathSearch {
   paths: string[]
   // outside: the paths are from directories named beyond the checkout.
   outside: boolean
+  // stopped: the named directories whose listing stopped at its bound, so a
+  // path missing from the list may only be unseen.
+  stopped: string[]
   error: string | null
   selected: number
   // track reads the box after any change of text or caret.
@@ -121,7 +124,7 @@ export function usePathSearch(
   onInsert: (text: string) => void,
 ): PathSearch {
   const [mention, setMention] = useState<Mention | null>(null)
-  const [found, setFound] = useState<{ query: string; paths: string[]; full?: string[]; error: string | null } | null>(null)
+  const [found, setFound] = useState<{ query: string; paths: string[]; full?: string[]; stopped?: string[]; error: string | null } | null>(null)
   const [selected, setSelected] = useState(0)
   // the @ that Escape closed, which stays closed until the caret leaves it.
   const dismissed = useRef<number | null>(null)
@@ -159,7 +162,7 @@ export function usePathSearch(
     let current = true
     const timer = window.setTimeout(() => {
       getPaths(projectId, query).then(
-        (answer) => current && setFound({ query, paths: answer.paths, full: answer.full, error: null }),
+        (answer) => current && setFound({ query, paths: answer.paths, full: answer.full, stopped: answer.stopped, error: null }),
         (err: unknown) => current && setFound({ query, paths: [], error: err instanceof Error ? err.message : String(err) }),
       )
     }, settle)
@@ -218,6 +221,7 @@ export function usePathSearch(
     ready: found !== null,
     paths,
     outside: !!(mention && found?.full),
+    stopped: mention && found?.stopped ? found.stopped : [],
     error: mention && found ? found.error : null,
     selected: Math.min(selected, Math.max(paths.length - 1, 0)),
     track,

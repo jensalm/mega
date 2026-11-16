@@ -1,6 +1,6 @@
 ---
 title: hotkey for "allow"
-state: researching
+state: evaluating
 created: 2026-11-13
 tags: [enhancement]
 ---

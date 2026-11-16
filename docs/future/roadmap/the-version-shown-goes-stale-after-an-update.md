@@ -1,6 +1,6 @@
 ---
 title: the version shown goes stale after an update
-state: researching
+state: evaluating
 created: 2026-11-15
 tags: [defect]
 ---
