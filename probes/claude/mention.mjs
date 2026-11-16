@@ -4,6 +4,14 @@
 //
 //   node mention.mjs --cwd DIR --log logs/x.jsonl [--exec PATH] [--plain]
 //                    [--file NAME] [--form bare|quoted|escaped]
+//                    [--path FILE --mention TEXT] [--allow-read]
+//
+// --path names a file anywhere, outside the checkout too, and --mention the
+// text written after the @ for it (such as ~/dir/file or /abs/dir/file), so
+// a mention beyond the checkout can be tried (2026-11-16). every permission
+// request is still denied, and each is recorded. --allow-read leaves Read
+// among the tools, so a plain prompt shows what claude asks before reading
+// the file itself; the request is recorded and denied.
 //
 // sends one prompt naming @fixture.txt with every file-reading tool
 // disallowed, so the model can only answer if the mention attached the file.
@@ -25,23 +33,29 @@ const cwd = resolve(opt.cwd ?? '.')
 // --file names the file to mention (fixture.txt by default); --form says how
 // the mention is written: bare (@name), quoted (@"name") or escaped
 // (@name with each space backslashed), for a name with spaces.
-const file = typeof opt.file === 'string' ? opt.file : 'fixture.txt'
-const content = readFileSync(join(cwd, file), 'utf8').trim()
+const file = typeof opt.mention === 'string' ? opt.mention : typeof opt.file === 'string' ? opt.file : 'fixture.txt'
+const content = readFileSync(typeof opt.path === 'string' ? opt.path : join(cwd, file), 'utf8').trim()
 const form = typeof opt.form === 'string' ? opt.form : 'bare'
 const mention = { bare: `@${file}`, quoted: `@"${file}"`, escaped: `@${file.replaceAll(' ', '\\ ')}` }[form]
 const log = createWriteStream(opt.log ?? `logs/mention-${Date.now()}.jsonl`)
 const t0 = Date.now()
 const rec = (kind, data) => log.write(JSON.stringify({ ms: Date.now() - t0, kind, ...data }) + '\n')
 // --plain names the file without the @, as a control.
-const prompt = `Reply with the exact contents of ${opt.plain ? file : mention} and nothing else. If you cannot see its contents, reply NOT-ATTACHED.`
+const prompt = opt['allow-read']
+  ? `Use your Read tool to read ${file}, then reply with its exact contents and nothing else. If you cannot read it, reply NOT-READ.`
+  : `Reply with the exact contents of ${opt.plain ? file : mention} and nothing else. If you cannot see its contents, reply NOT-ATTACHED.`
+const asked = []
 const q = query({
   prompt,
   options: {
     cwd,
     pathToClaudeCodeExecutable: opt.exec ?? '/home/michael/.local/share/claude/versions/2.1.318',
     permissionMode: 'default',
-    disallowedTools: ['Read', 'Bash', 'Glob', 'Grep', 'Agent', 'Task'],
-    canUseTool: async (tool, _input, o) => ({ behavior: 'deny', message: 'mention probe: no tools', toolUseID: o.toolUseID }),
+    disallowedTools: opt['allow-read'] ? ['Bash', 'Glob', 'Grep', 'Agent', 'Task'] : ['Read', 'Bash', 'Glob', 'Grep', 'Agent', 'Task'],
+    canUseTool: async (tool, input, o) => {
+      asked.push({ tool, input })
+      return { behavior: 'deny', message: 'mention probe: no tools', toolUseID: o.toolUseID }
+    },
   },
 })
 const summary = { prompt, fixture: content, tools: [], carriesContent: [], reply: null }
@@ -60,6 +74,7 @@ for await (const m of q) {
   if (m.type === 'result') summary.result = m.subtype
 }
 summary.attached = summary.reply?.includes(content) ?? false
+summary.asked = asked
 rec('summary', summary)
 log.end()
 console.log(JSON.stringify(summary, null, 2))

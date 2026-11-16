@@ -248,3 +248,32 @@ func TestSnapshotBounds(t *testing.T) {
 		t.Errorf("a negative bound: %v", err)
 	}
 }
+
+// the directories the @ search reaches beyond the checkout: none by default,
+// each named from ~ expanded, an absolute one kept, and a relative one
+// refused.
+func TestPathSearchDirectories(t *testing.T) {
+	root := isolate(t)
+	t.Setenv("HOME", "/home/someone")
+	cfg, err := Load("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.PathSearch.Directories) != 0 {
+		t.Errorf("default: %v", cfg.PathSearch.Directories)
+	}
+	file := filepath.Join(root, "mega.yaml")
+	if err := os.WriteFile(file, []byte("path_search:\n  directories:\n    - ~/Sandbox\n    - /srv/shots\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(file, "", "")
+	if err != nil || strings.Join(cfg.PathSearch.Directories, ",") != "/home/someone/Sandbox,/srv/shots" {
+		t.Errorf("named: %+v, %v", cfg.PathSearch, err)
+	}
+	if err := os.WriteFile(file, []byte("path_search:\n  directories:\n    - Sandbox\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(file, "", ""); err == nil || !strings.Contains(err.Error(), "path_search") {
+		t.Errorf("a relative directory: %v", err)
+	}
+}

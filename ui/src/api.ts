@@ -1,4 +1,4 @@
-import type { About, Conversation, ConversationMcp, History, Models, Project, Workspace } from './types'
+import type { About, Conversation, ConversationMcp, History, Invocation, Models, Project, Workspace } from './types'
 
 export class ApiError extends Error {
   readonly code: string
@@ -90,12 +90,19 @@ export const startConversation = (projectId: string, harness: string, name: stri
 export const getModels = (projectId: string, harness: string) =>
   request<Models>('GET', `/api/projects/${encodeURIComponent(projectId)}/models?harness=${encodeURIComponent(harness)}`)
 
+// getInvocation reads what the action at seq invoked, as its harness's
+// adapter reads it from the recorded event: asked for when the row is
+// expanded, never stored again.
+export const getInvocation = (conversationId: string, seq: number) =>
+  request<Invocation>('GET', `/api/conversations/${encodeURIComponent(conversationId)}/events/${seq}/invocation`)
+
 // paths in a project's checkout matching q, best first, at most twenty;
-// directories end in a slash. names only: the service reads no file.
+// directories end in a slash. for q starting with ~/ or /, with directories
+// named beyond the checkout (config path_search), paths under them instead,
+// newest first, shown with ~, and full holds each one's absolute path. names
+// only: the service reads no file.
 export const getPaths = (projectId: string, q: string) =>
-  request<{ paths: string[] }>('GET', `/api/projects/${encodeURIComponent(projectId)}/paths?q=${encodeURIComponent(q)}`).then(
-    (answer) => answer.paths,
-  )
+  request<{ paths: string[]; full?: string[] }>('GET', `/api/projects/${encodeURIComponent(projectId)}/paths?q=${encodeURIComponent(q)}`)
 
 // the harness's answer to a switch. only a confirmed switch moves the live mode,
 // and only once the runtime's report of it is recorded. next_prompt is a model

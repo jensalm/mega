@@ -344,6 +344,41 @@ func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, view)
 }
 
+// invocationView is what an action invoked, for its expanded row: a shell
+// command whole, or a tool's input as named fields. recorded is false where
+// the adapter could not read it from the action's event, and summary is
+// then all there is.
+type invocationView struct {
+	Tool     string
+	Command  string             `dd:",+omitempty"`
+	Fields   []*invocationField `dd:",+omitempty"`
+	Recorded bool
+	Summary  string `dd:",+omitempty"`
+}
+
+type invocationField struct {
+	Name  string
+	Value string
+}
+
+func (s *Server) getInvocation(w http.ResponseWriter, r *http.Request) {
+	seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
+	if err != nil || seq < 1 {
+		writeJSON(w, r, http.StatusBadRequest, &errorBody{Code: service.CodeInvalid, Message: "seq must be a positive integer"})
+		return
+	}
+	inv, err := s.svc.Invocation(r.PathValue("id"), seq)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	view := &invocationView{Tool: inv.Tool, Command: inv.Command, Recorded: inv.Recorded, Summary: inv.Summary}
+	for _, f := range inv.Fields {
+		view.Fields = append(view.Fields, &invocationField{Name: f.Name, Value: f.Value})
+	}
+	writeJSON(w, r, http.StatusOK, view)
+}
+
 func (s *Server) prompt(w http.ResponseWriter, r *http.Request) {
 	var req promptRequest
 	if !readJSON(w, r, &req) {

@@ -45,6 +45,9 @@ type Config struct {
 	// Snapshots bounds the configuration snapshots kept under the data
 	// directory.
 	Snapshots Snapshots
+	// PathSearch names directories beyond the checkout the reply box's @
+	// search reaches.
+	PathSearch PathSearch `dd:"path_search"`
 
 	// File is the config file mega read, or the default it looked for, and
 	// FileRead whether there was one to read. neither is configuration: they
@@ -68,6 +71,14 @@ type Environment struct {
 type Snapshots struct {
 	Keep          int
 	KeepAtVersion int `dd:"keep_at_version"`
+}
+
+// PathSearch is the reply box's @ search beyond the checkout: Directories
+// the operator names, such as ~/Sandbox, searched in every project when an
+// @ word starts with ~/ or /. none, the default, keeps the search to the
+// checkout. each is expanded from ~ and must then be absolute.
+type PathSearch struct {
+	Directories []string
 }
 
 // the snapshot bounds when the config names none. claude code updates every
@@ -147,7 +158,11 @@ func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 		}
 		cfg.Data = defaultData
 	}
-	for _, path := range []*string{&cfg.Data, &cfg.Claude.Shim, &cfg.Claude.Executable} {
+	paths := []*string{&cfg.Data, &cfg.Claude.Shim, &cfg.Claude.Executable}
+	for i := range cfg.PathSearch.Directories {
+		paths = append(paths, &cfg.PathSearch.Directories[i])
+	}
+	for _, path := range paths {
 		expanded, err := expandPath(*path)
 		if err != nil {
 			return nil, err
@@ -175,6 +190,11 @@ func (c *Config) Where() string {
 func (c *Config) Validate() error {
 	if c.Snapshots.Keep < 0 || c.Snapshots.KeepAtVersion < 0 {
 		return fmt.Errorf("snapshots: keep and keep_at_version are counts, 0 or more")
+	}
+	for _, dir := range c.PathSearch.Directories {
+		if !filepath.IsAbs(dir) {
+			return fmt.Errorf("path_search: '%s' is not absolute; name a directory from / or ~/", dir)
+		}
 	}
 	host, _, err := net.SplitHostPort(c.Listen)
 	if err != nil {

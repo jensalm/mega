@@ -45,3 +45,5 @@ Michael tried it the same day, before leaving: "seems to work just fine. i'm usi
 Still to record from a week of real use: which port the remote end was bound to, which says whether the guard passed because the ports matched or because the proxy keeps the browser's `Host`; how a dropped share reconnects; and anything on the page that assumed the browser was on the same machine.
 
 The hazards above are covered for this trip: Michael can also reach `fortyfive` by RDP into the desktop and by ssh, so a stopped or stale service can be restarted from away.
+
+Later the same day Michael asked about reaching several megas at once, each share bound to its own loopback port. The page is indifferent to its port: it takes the address for its requests and its stream from wherever it was loaded. Each port is its own origin to the browser, so each keeps its own preferences. The guard still requires a request's `Origin` and `Host` to agree, which they do on any port provided the share passes the browser's `Host` through. What is missing is any sign of which machine a tab belongs to; that is the card `which-mega-is-this`.

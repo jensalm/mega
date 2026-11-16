@@ -185,6 +185,17 @@ func (h *Harness) Configuration(env []string) []harness.ConfigRoot {
 	return f(env)
 }
 
+// Invocation reads a tool call the fake recorded: a payload with a
+// "command" is a shell command, any other map is its input. an event with no
+// map payload holds nothing to read, as an action recorded with no payload.
+func (h *Harness) Invocation(ev *model.Event) (harness.Invocation, bool) {
+	input, ok := ev.Raw.(map[string]any)
+	if !ok {
+		return harness.Invocation{}, false
+	}
+	return harness.ShellInvocation(ev.Tool, input, "command"), true
+}
+
 // Version is the scripted version (SetVersion), as a harness's --version.
 func (h *Harness) Version(_ context.Context, _ []string) (string, error) {
 	h.mu.Lock()

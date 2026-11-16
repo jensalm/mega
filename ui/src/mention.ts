@@ -24,6 +24,15 @@ export function mentionAt(text: string, caret: number): { start: number; query: 
   return { start, query: text.slice(start + 1, caret) }
 }
 
+// outsideText is how a path from a directory named beyond the checkout is
+// written, by what the harness reliably resolves (capability report,
+// 2026-11-16): for a harness that attaches mentioned files, the path as the
+// list shows it, with its ~, as a mention, quoted when it holds whitespace;
+// otherwise the bare absolute path, which needs no agent to expand a ~.
+export function outsideText(shown: string, full: string, keepAt: boolean): string {
+  return keepAt ? mentionText(shown, true) : full
+}
+
 // mentionText is how a picked path is written. for a harness that attaches
 // mentioned files it keeps the @, and a path with whitespace is quoted, the
 // only form claude attaches for it (capability report, 2026-11-10); otherwise
@@ -37,12 +46,14 @@ export function mentionText(path: string, keepAt: boolean): string {
 
 // insertPath puts a picked path in place of the @-word at start, through the
 // end of that word, followed by a space, written as mentionText says.
-export function insertPath(text: string, start: number, path: string, keepAt: boolean): { text: string; caret: number } {
+// full, for a path from beyond the checkout, is its absolute path, and the
+// path is written as outsideText says.
+export function insertPath(text: string, start: number, path: string, keepAt: boolean, full?: string): { text: string; caret: number } {
   let end = start
   while (end < text.length && !/\s/.test(text[end])) {
     end++
   }
-  const inserted = mentionText(path, keepAt)
+  const inserted = full ? outsideText(path, full, keepAt) : mentionText(path, keepAt)
   const rest = text.slice(end)
   const spaced = rest === '' || !/^\s/.test(rest) ? ' ' : ''
   return { text: text.slice(0, start) + inserted + spaced + rest, caret: start + inserted.length + 1 }
@@ -87,6 +98,8 @@ export interface PathSearch {
   // ready: the service has answered a search since the page loaded.
   ready: boolean
   paths: string[]
+  // outside: the paths are from directories named beyond the checkout.
+  outside: boolean
   error: string | null
   selected: number
   // track reads the box after any change of text or caret.
@@ -108,7 +121,7 @@ export function usePathSearch(
   onInsert: (text: string) => void,
 ): PathSearch {
   const [mention, setMention] = useState<Mention | null>(null)
-  const [found, setFound] = useState<{ query: string; paths: string[]; error: string | null } | null>(null)
+  const [found, setFound] = useState<{ query: string; paths: string[]; full?: string[]; error: string | null } | null>(null)
   const [selected, setSelected] = useState(0)
   // the @ that Escape closed, which stays closed until the caret leaves it.
   const dismissed = useRef<number | null>(null)
@@ -146,7 +159,7 @@ export function usePathSearch(
     let current = true
     const timer = window.setTimeout(() => {
       getPaths(projectId, query).then(
-        (paths) => current && setFound({ query, paths, error: null }),
+        (answer) => current && setFound({ query, paths: answer.paths, full: answer.full, error: null }),
         (err: unknown) => current && setFound({ query, paths: [], error: err instanceof Error ? err.message : String(err) }),
       )
     }, settle)
@@ -171,7 +184,8 @@ export function usePathSearch(
     if (!el || !mention) {
       return
     }
-    const next = insertPath(el.value, mention.start, path, keepAt)
+    const at = found?.full ? found.paths.indexOf(path) : -1
+    const next = insertPath(el.value, mention.start, path, keepAt, at >= 0 ? found?.full?.[at] : undefined)
     caretAfter.current = next.caret
     setMention(null)
     onInsert(next.text)
@@ -203,6 +217,7 @@ export function usePathSearch(
     mention,
     ready: found !== null,
     paths,
+    outside: !!(mention && found?.full),
     error: mention && found ? found.error : null,
     selected: Math.min(selected, Math.max(paths.length - 1, 0)),
     track,

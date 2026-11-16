@@ -57,4 +57,5 @@ The probe was written against pi 1.1.0 and rerun against 1.5.2 on 2026-11-16 (ca
 
 - `rerun.sh [p1 p4 r1 r2 r3 r4 p7]` reruns the core scenarios into `logs/v<version>/`, with the session ids in `session-ids.txt` there.
 - `inspect.mjs <checkout>` prints, with no model turn: the model and thinking level `get_state` reports, the model list, the thinking levels the model allows, the commands, and the MCP servers' status, which pi gives only as the text answering `/mcp`.
+- `scenarios/outside.json` (2026-11-16) asks for a file outside the checkout four times, with `~` and absolute, and with a space in its name. Its paths name the scratch folder `roundhouse-fixtures/outside-spike/`, made for the run and removed after: `node probe.mjs run --cwd <pi-rt1> --session-id $(uuidgen) --turns scenarios/outside.json --log logs/v<version>/outside.jsonl`. No dialog is expected, so none is answered.
 - `close-with-dialog.mjs . close|abort-then-close`, run in the fixture, leaves the extension's approval dialog pending and measures how pi ends when its input closes, then after one and two SIGTERMs.

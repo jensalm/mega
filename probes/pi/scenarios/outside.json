@@ -1,0 +1,6 @@
+[
+ "Reply with the exact contents of the file ~/Repos/q/research/roundhouse-fixtures/outside-spike/note.txt and nothing else. If you cannot read it, reply NOT-READ.",
+ "Reply with the exact contents of the file /home/michael/Repos/q/research/roundhouse-fixtures/outside-spike/note.txt and nothing else. If you cannot read it, reply NOT-READ.",
+ "Reply with the exact contents of the file ~/Repos/q/research/roundhouse-fixtures/outside-spike/spaced note.txt and nothing else. If you cannot read it, reply NOT-READ.",
+ "Reply with the exact contents of the file /home/michael/Repos/q/research/roundhouse-fixtures/outside-spike/spaced note.txt and nothing else. If you cannot read it, reply NOT-READ."
+]

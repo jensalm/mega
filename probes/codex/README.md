@@ -68,6 +68,10 @@ See `NOTES.md` for the first investigation and `NOTES-followup.md` for the recon
 
 `node mention.mjs --cwd DIR --log logs/x.jsonl` runs two turns in one thread, each asking for the exact contents of `fixture.txt` with commands forbidden and every approval declined. The first names it as `@fixture.txt` in the text. The second passes it as a `{type: "mention", name, path}` input item. It records the stored `userMessage`, any command, and whether the reply carries the content.
 
+## A path outside the checkout (2026-11-16)
+
+`node outside.mjs --cwd DIR --file /abs/dir/file [--spaced "/abs/dir/a b"] --log logs/x.jsonl` runs one turn per form in one thread, each asking for a file's exact contents: the path with `~` for the home directory, then absolute, and the same for `--spaced`. Every approval is declined and recorded. It records the thread's approval policy and sandbox, each command run with its status, the approvals asked, and whether the reply carries the content.
+
 ## Idle resume (2026-11-10)
 
 `node idle-resume.mjs --cwd DIR --log logs/x.jsonl [--hold SECONDS] [--thread ID]` seeds a fresh thread with one short turn on its own app-server, unless `--thread` names one. A second app-server then resumes the thread with `thread/resume` and sends no `turn/start` for `--hold` seconds (120 by default). It records every frame, the rollout file's size and mtime, and the memory of the app-server and everything below it, then closes stdin and times the exit.

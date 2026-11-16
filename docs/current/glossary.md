@@ -20,6 +20,7 @@ The words mega's documents, cards and interface use, and what each one means her
 - **Turn.** One stretch of the agent's work, from the prompt that begins it to its end. A turn comes whole: its prompt, its speech, its actions and its requests.
 - **Prompt.** What the operator sends. **Speech** is what the agent says back, the replies rendered as prose.
 - **Action.** One thing the agent did during a turn, shown as a single expandable row: a shell command, a file edit, a search, an MCP tool. It is the word for what the operator sees. An **action group** is a run of actions between two pieces of speech, indented behind a hairline.
+- **Invocation.** What an action invoked, in full: a shell command whole, or any other tool's name and input. Its row shows it when expanded, above the result; the adapter reads it from the recorded tool call, so it is never stored twice.
 - **Tool call** and **tool result.** The recorded events underneath an action: what the harness asked for and what came back. Use these words for the event log and the adapters, and "action" for the row on screen.
 - **Request.** Something the agent is waiting on the operator for: an **approval** to run something, or a **question** with choices or fields. A request is answerable only while it is pending. A pending request is **docked** above the input panel; its row in the history records that it happened.
 - **Extension dialog.** A question a pi extension asks: a choice, a yes or no, a line of text, or a few lines to edit. pi has no permission model of its own, so even a dialog that gates a command is a question, never an approval, and never offered for the session.
@@ -48,6 +49,7 @@ The words mega's documents, cards and interface use, and what each one means her
   - the **request**: the mode, model and effort, each shown closed as a short value;
   - an environment that needs attention;
   - the More menu, with the MCP servers.
+- **Named directories.** The directories the operator names in the config, `path_search.directories`, such as `~/Sandbox`, that the reply box's `@` search reaches beyond the checkout, for an `@` word starting with `~/` or `/`. Nothing outside them is ever listed.
 - **Activity line.** The line above the input panel that says what the conversation is doing and for how long.
 - **Request.** What a conversation asks its harness to run with: a model, an effort, and for Claude a permission mode. It is always concrete, copied once from the harness's settings when the conversation is created, and passed on every launch; only the operator changes it after that. The control bar shows the request; there is no inherit.
 - **Turn line.** The compact line on a turn saying what it ran with, as the harness reported it, then when its prompt was sent and how long the turn took, or for the turn in flight when it started. A turn with no record of what it ran with has its time alone. It shows while the pointer is over the turn or focus is inside it, and stays, in the notice colour, when the turn ran with something other than its request.

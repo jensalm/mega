@@ -12,6 +12,10 @@
 //   background MS  a command left running as a terminal session: its
 //                item/started, the reply, the turn's end, then its
 //                item/completed MS later, outside the turn (codex-cli 0.166.0)
+//   actions      two command executions and a file change, then "done":
+//                a command of several lines, longer than an action's
+//                one-line summary keeps; a change to two files; and a
+//                command that fails (exit code 2)
 //   mcp-sign-in  a reply of "signed in"; the docs MCP server is connected
 //                from then on, announced with mcpServer/startupStatus/updated
 //   anything     a reply of "ok"
@@ -152,6 +156,16 @@ async function runTurn(turn, text) {
       item: { type: 'mcpToolCall', id: item, server: 'fixture', tool: 'echo', status: accepted ? 'completed' : 'failed', arguments: { text: arg }, result: accepted ? { content: [{ type: 'text', text: `echo: ${arg}` }] } : null, error: accepted ? null : { message: 'user rejected MCP tool call' } },
     })
     agent(turn, accepted ? `echo: ${arg}` + (answer._meta?.persist ? ` (approved for the ${answer._meta.persist})` : '') : 'DECLINED')
+  } else if (verb === 'actions') {
+    const done = (item) => notify('item/completed', { threadId: threadID, turnId: turn, item })
+    const long = "/bin/bash -lc 'cd internal/harness/codex && go test ./... -run TestInvocationReadsTheRecordedItem -count=1 -v -coverprofile=/tmp/fake-codex-coverage.out -covermode=atomic 2>&1 | tee /tmp/fake-codex.log\necho \"the whole command, past the summary: END-OF-FAKE-COMMAND\"'"
+    done({ type: 'commandExecution', id: `exec-${id()}`, command: long, cwd: process.cwd(), status: 'completed', exitCode: 0, aggregatedOutput: 'ok  \tgithub.com/michaelquigley/mega/internal/harness/codex\t0.002s\n' })
+    done({ type: 'fileChange', id: `patch-${id()}`, status: 'completed', changes: [
+      { path: `${process.cwd()}/main.go`, kind: { type: 'update', move_path: null }, diff: '@@ -1 +1 @@\n-func old() {}\n+func new() {}\n' },
+      { path: `${process.cwd()}/notes.md`, kind: { type: 'add' }, diff: '+a new note\n' },
+    ] })
+    done({ type: 'commandExecution', id: `exec-${id()}`, command: "/bin/bash -lc 'exit 2'", cwd: process.cwd(), status: 'failed', exitCode: 2, aggregatedOutput: '' })
+    agent(turn, 'done')
   } else if (verb === 'mcp-sign-in') {
     docsSignedIn = true
     startup('docs', 'ready')

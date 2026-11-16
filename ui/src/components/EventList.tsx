@@ -1,9 +1,11 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode, type SyntheticEvent } from 'react'
+import { getInvocation } from '../api'
+import { harnessOf } from '../harnesses'
 import { longElapsed } from '../clock'
 import { fullTime, parse, shortTime } from '../zone'
 import { shortModel, useModels } from '../models'
 import { shortMode } from '../permissions'
-import type { ConversationEvent, Models, PendingRequest, TurnRecord } from '../types'
+import type { ConversationEvent, Invocation, Models, PendingRequest, TurnRecord } from '../types'
 import { Spinner } from './AttentionMark'
 import { BlockCopy, CopyButton } from './Copy'
 import { Markdown } from './Markdown'
@@ -18,6 +20,7 @@ interface EventListProps {
   // as, in the same block and place.
   delta: string
   projectId: string
+  conversationId: string
   harness: string
   // what the turn in flight asked for and ran with, once it has run.
   inFlight?: TurnRecord
@@ -46,7 +49,7 @@ interface Began {
 // EventList renders recorded history. requests appear here only as history;
 // whether one is answerable comes from the service's pending set, never from
 // the log.
-export function EventList({ events, pending, turnActive, stale, showNative, delta, projectId, harness, inFlight }: EventListProps) {
+export function EventList({ events, pending, turnActive, stale, showNative, delta, projectId, conversationId, harness, inFlight }: EventListProps) {
   const { models } = useModels(projectId, harness)
   const results = new Map<string, ConversationEvent>()
   const outcomes = new Map<string, string>()
@@ -96,6 +99,9 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
   }
   const toolUses = new Set(events.filter((e) => e.kind === 'tool_use' && e.tool_use_id).map((e) => e.tool_use_id))
   const pendingIds = new Set(pending.map((request) => request.id))
+  // a harness whose pending dialog holds every action of the turn without a
+  // result (pi): none of them has run, so none is shown as running.
+  const held = pending.length > 0 && !!harnessOf(harness)?.dialogsHoldActions
   // only a tool in the turn the service reports in flight can still be running;
   // an older one without a result simply has none recorded.
   let turnStart = -1
@@ -127,26 +133,23 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
         )
       case 'tool_use': {
         const result = event.tool_use_id ? results.get(event.tool_use_id) : undefined
-        return (
-          <details key={event.seq} data-seq={event.seq} className="tool">
-            <summary>
-              {event.text}
-              {result?.status === 'error' && <span className="tool-error"> failed</span>}
-              {!result &&
-                (turnActive && index > turnStart && !stale ? (
-                  <>
-                    {' '}
-                    <Spinner label="Running" />
-                  </>
-                ) : (
-                  <span className="muted">
-                    {turnActive && index > turnStart ? ' running when last seen' : ' no result recorded'}
-                  </span>
-                ))}
-            </summary>
-            {result?.text && <ToolOutput text={result.text} />}
-          </details>
-        )
+        const live = turnActive && index > turnStart
+        let state: ReactNode = null
+        if (result?.status === 'error') {
+          state = <span className="tool-error"> failed</span>
+        } else if (!result && live && held) {
+          state = <span className="muted"> waiting on a dialog</span>
+        } else if (!result && live && !stale) {
+          state = (
+            <>
+              {' '}
+              <Spinner label="Running" />
+            </>
+          )
+        } else if (!result) {
+          state = <span className="muted">{live ? ' running when last seen' : ' no result recorded'}</span>
+        }
+        return <ToolRow key={event.seq} event={event} result={result} state={state} conversationId={conversationId} />
       }
       case 'tool_result':
         if (event.tool_use_id && toolUses.has(event.tool_use_id)) {
@@ -421,6 +424,95 @@ function TurnLine({ record, models, began, ended }: { record?: TurnRecord; model
 }
 
 const actionKinds = new Set<ConversationEvent['kind']>(['tool_use', 'tool_result', 'native', 'request', 'request_resolved'])
+
+// ToolRow is one action. collapsed, it is its one line, with a failed
+// result marked in the error colour. expanded, it shows what it invoked, in
+// full, read from the service as it first opens, since the recorded event
+// already holds it and nothing stores it again; then what came back.
+function ToolRow({ event, result, state, conversationId }: { event: ConversationEvent; result?: ConversationEvent; state: ReactNode; conversationId: string }) {
+  const [invocation, setInvocation] = useState<Invocation | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [asked, setAsked] = useState(false)
+  const onToggle = (toggled: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!toggled.currentTarget.open || (asked && !error)) {
+      return
+    }
+    setAsked(true)
+    setError(null)
+    getInvocation(conversationId, event.seq).then(setInvocation, (failure: unknown) =>
+      setError(failure instanceof Error ? failure.message : String(failure)),
+    )
+  }
+  return (
+    <details data-seq={event.seq} className={`tool${result?.status === 'error' ? ' failed' : ''}`} onToggle={onToggle}>
+      <summary>
+        {event.text}
+        {state}
+      </summary>
+      {error ? (
+        <p className="error">Could not read what it invoked: {error}</p>
+      ) : invocation ? (
+        <InvocationView invocation={invocation} />
+      ) : (
+        asked && <p className="muted tool-part">Reading what it invoked…</p>
+      )}
+      {result?.text && (
+        <>
+          <p className="tool-part">Result</p>
+          <ToolOutput text={result.text} />
+        </>
+      )}
+    </details>
+  )
+}
+
+// invocationText is what the invocation's copy control takes: the command,
+// or the tool and each field of its input.
+function invocationText(invocation: Invocation): string {
+  if (invocation.command) {
+    return invocation.command
+  }
+  return [invocation.tool, ...(invocation.fields ?? []).map((field) => `${field.name}: ${field.value}`)].join('\n')
+}
+
+// InvocationView is what an action invoked: a shell command whole, then any
+// other input it was given; any other tool as its input, field by field.
+// each box is bounded and scrolls, as a result's does, and the copy control
+// takes all of it. an action whose event holds nothing its adapter can read
+// shows the one line it was recorded with.
+function InvocationView({ invocation }: { invocation: Invocation }) {
+  if (!invocation.recorded) {
+    return (
+      <>
+        <p className="tool-part">Invoked</p>
+        <p className="muted">Only its one line was recorded:</p>
+        <pre className="invocation-summary">{invocation.summary}</pre>
+      </>
+    )
+  }
+  const fields = invocation.fields ?? []
+  return (
+    <>
+      <p className="tool-part">{invocation.command ? 'Command' : `Invoked ${invocation.tool}`}</p>
+      <div className="tool-output invocation">
+        <CopyButton text={invocationText(invocation)} label={invocation.command ? 'Copy the command' : 'Copy the input'} />
+        {invocation.command && <pre className="command">{invocation.command}</pre>}
+        {fields.length > 0 && (
+          <dl className="invocation-fields">
+            {fields.map((field) => (
+              <div key={field.name}>
+                <dt>{field.name}</dt>
+                <dd>
+                  <pre>{field.value}</pre>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </>
+  )
+}
 
 // ToolOutput is an expanded tool result: the output, scrolling inside its
 // box, with one control that copies all of it, whatever the box shows.

@@ -24,6 +24,9 @@
 //   hold         a bash call that runs until it is aborted
 //   fail         a response that fails, persisted as pi persists one
 //   notify       a notification, then a reply of "ok"
+//   actions      three tool calls, then "done": a bash command of several
+//                lines, longer than an action's one-line summary keeps; a
+//                read; and a bash command that fails (isError)
 //   twins        two replies, "first" and "second", with the same millisecond
 //                timestamp, as pi may write two messages of one role
 //   echo TEXT    a reply of TEXT
@@ -249,6 +252,20 @@ const run = async (text) => {
     case 'fail':
       message(assistant([], { stopReason: 'error', errorMessage: 'fake failure' }))
       break
+    case 'actions': {
+      const call = (name, args, text, isError = false) => {
+        const toolCallId = 'call_' + randomBytes(6).toString('hex')
+        message(assistant([{ type: 'toolCall', id: toolCallId, name, arguments: args }], { stopReason: 'toolUse' }))
+        out({ type: 'tool_execution_start', toolCallId, toolName: name, args })
+        out({ type: 'tool_execution_end', toolCallId, toolName: name, result: { content: [{ type: 'text', text }] }, isError })
+        message({ role: 'toolResult', toolCallId, toolName: name, content: [{ type: 'text', text }], isError, timestamp: stamp() })
+      }
+      call('bash', { command: "cd internal/harness/pi && go test ./... -run TestInvocationReadsTheRecordedToolCall -count=1 -v -coverprofile=/tmp/fake-pi-coverage.out -covermode=atomic 2>&1 | tee /tmp/fake-pi.log\necho 'the whole command, past the summary: END-OF-FAKE-COMMAND'", timeout: 120 }, 'ok  \tgithub.com/michaelquigley/mega/internal/harness/pi\t0.002s')
+      call('read', { path: 'notes/fake.md', offset: 1, limit: 40 }, 'a note the fake read')
+      call('bash', { command: 'exit 2' }, 'Command exited with code 2', true)
+      reply('done')
+      break
+    }
     case 'notify':
       out({ type: 'extension_ui_request', id: randomUUID(), method: 'notify', message: 'a fake notification', notifyType: 'info' })
       reply('ok')

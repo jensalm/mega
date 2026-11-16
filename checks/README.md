@@ -23,7 +23,7 @@ Where things go:
 
 ## What each suite covers
 
-- **`conversation.mjs`** (76 steps): the conversation view, on long conversations and in its layout. Its service runs in `Asia/Kolkata` (`TZ`) and its page in UTC, as a hardened browser reports, so every time it checks is the service's. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
+- **`conversation.mjs`** (90 steps): the conversation view, on long conversations and in its layout. Its service runs in `Asia/Kolkata` (`TZ`) and its page in UTC, as a hardened browser reports, so every time it checks is the service's. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
   - opening reads only the tail: ten turns, at the newest reply, saying how much is earlier;
   - Show earlier and Show all, each holding the view;
   - the native events toggle refetching what is shown;
@@ -55,9 +55,16 @@ Where things go:
   - a pi conversation, on the fake pi:
     - pi's own words under its header about how it asks;
     - its prompt, tool call and reply in the history as the others', the prompt shown once, its record of pi's identity hidden with the native events;
+    - its gated tool call, while the dialog is pending, saying it waits on the dialog, with no spinner;
     - its turn line with no permission mode. Its extension's gate is blocked, since allowing it is not what the suite is about.
+  - actions, for each harness's fake (its `actions` verb):
+    - a failed action marked " failed" while collapsed, in the error colour, and one that ran not marked;
+    - expanded, the whole command, which the collapsed line cut short, under "Command", then the result under "Result";
+    - the command's copy control taking all of it;
+    - another tool (Claude's Edit, a Codex file change, pi's read) shown as its name and its input, field by field;
+    - an action from the generated history, with nothing its adapter reads, showing the one line it has.
 
-  It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, and the start lines as `shots/start-{tested,newer,older}.png`.
+  It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, the start lines as `shots/start-{tested,newer,older}.png`, and each harness's expanded command and input as `shots/action-{claude,codex,pi}{,-input}.png`.
 - **`firstrun.mjs`** (57 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
   - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
@@ -85,7 +92,7 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (83 steps): the input panel. It checks the following:
+- **`panel.mjs`** (88 steps): the input panel. Its config names `~/Sandbox`, in its scratch `HOME`, beyond the checkout. It checks the following:
   - the reply box resting at one line and opening to its height;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
   - a control in the bar keeping the box open, and a press outside closing it;
@@ -115,9 +122,10 @@ Where things go:
   - scrolled up, neither the activity line nor a docked request moving the view;
   - sent from above five times with the reply held, the prompt row in view above the dock before any output, each time;
   - while following, the reader's wheel during a streaming reply keeping the view where they put it, with "Newer activity below" offered;
-  - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see.
+  - while following, a move up with no input event at all during a streaming reply, the position set from the page, keeping the view where it was put. That stands in for the find bar and for a scrollbar the page cannot see;
+  - `@~/` opening the list of the named directory, shown with `~`, files newest first, with nothing from a dot-directory or outside it, and a directory not named never listed; the pick written per harness, `@"~/Sandbox/shots/shot one.png"` for Claude and the bare absolute path for Codex and pi.
 
-  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`.
+  The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` list as `shots/path-search-outside.png`.
 - **`requests.mjs`** (56 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
@@ -192,7 +200,7 @@ t.check(true, 'the reply is shown')
 await t.done()
 ```
 
-`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. It returns the following:
+`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. `suite(name, { searchDirs })` names directories beyond the checkout for the `@` search, `path_search.directories`, `~` being the suite's scratch `HOME`. It returns the following:
 
 - `check(ok, what)` records a step. `must(ok, what)` records one the suite cannot go past: a suite checks with it, before any Allow, that the request is exactly the one the fake raised, so nothing unexpected is approved. `until(what, pred, ms)` waits on a condition, checking every 50 ms, and fails saying what it waited for.
 - `api(method, path, body)`, `workspace()`, `projectOf(id)` and `convOf(id)` read and call the service.

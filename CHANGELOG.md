@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+FEATURE: **An expanded action shows what it ran, in full.** (2026-11-16) An action's row still reads as one line. Expanded, it now shows what was invoked, then what came back. A shell command shows as the whole command, where the line stops at 200 bytes. Any other tool shows as its name and input, field by field: an edit's file and text, a read's path, an MCP tool's arguments. A copy button takes all of it. Claude Code, Codex and pi each say what their own calls invoked, read from what mega already recorded, so nothing new is stored and older actions show it too. A long command or result scrolls in its box, as results did.
+
+FIX: **A failed pi action is marked, and one held by a dialog is not shown as running.** (2026-11-16) A pi tool call that failed, or that an extension blocked, now reads " failed" in the error colour on its collapsed row, as Claude Code's and Codex's do. While a pi dialog is waiting, the action it holds says "waiting on a dialog" rather than spinning, since pi has not run it.
+
+FEATURE: **`@~/` reaches directories you name beyond the checkout.** (2026-11-16) Name them in the config, `path_search.directories`, such as `~/Sandbox` for screenshots and scratch files. In the reply box, `@~/` or `@/` then lists what is in them, shown with `~`, the newest file first. Nothing outside them is ever listed, and with none named the search is the checkout's, as before. A pick is written the way each harness reads it: `@~/Sandbox/shot.png` for Claude Code, quoted when it has a space, and the absolute path for Codex and pi. What each harness asks before reading there is unchanged.
+
 FEATURE: **Ctrl+Enter allows the oldest waiting approval.** (2026-11-16) With the reply box empty, Ctrl+Enter answers the oldest docked approval with Allow, and Ctrl+Shift+Enter with "Allow this tool for the session" where the harness offers that, as a Codex MCP approval does. Elsewhere Ctrl+Shift+Enter does nothing. The key presses the card's own button, so the answer is yours and nothing about permissions changes.
 - **Sending wins:** with a draft in the box, Ctrl+Enter sends, as before.
 - **Only approvals:** a question, and so every pi dialog, has no key.

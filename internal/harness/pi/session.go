@@ -231,7 +231,14 @@ func mapMessage(m *message, raw map[string]any, id string) []*model.Event {
 		}
 		return evs
 	case "toolResult":
-		return []*model.Event{{Kind: model.EventToolResult, Tool: m.ToolName, ToolUseID: m.ToolCallID, Text: contentText(m.Content), NativeID: id, Raw: raw}}
+		// a result pi marks as an error (a failed command, a call an
+		// extension blocked, an abort) is a failed action, as claude's and
+		// codex's are.
+		ev := &model.Event{Kind: model.EventToolResult, Tool: m.ToolName, ToolUseID: m.ToolCallID, Text: contentText(m.Content), NativeID: id, Raw: raw}
+		if m.IsError {
+			ev.Status = model.TurnError
+		}
+		return []*model.Event{ev}
 	default:
 		// a direct shell command, an extension's context message, a branch
 		// or compaction summary: pi's own, under the native toggle.

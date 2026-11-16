@@ -28,10 +28,17 @@
 // collapsed and open; the bar on one row; and the dock keeping the newest content in view as its
 // height changes while the view follows the bottom (a turn's activity line,
 // a docked request, the reply box growing), never moving a view scrolled up.
-import { renameSync } from 'node:fs'
+// and @~/ searching the directory named beyond the checkout: its paths shown
+// with ~, newest first, no dot-directory and nothing outside it, and a pick
+// written per harness, a quoted mention for claude and the bare absolute
+// path for codex and pi; saved as shots/path-search-outside.png.
+import { mkdirSync, renameSync, utimesSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
-const t = await suite('panel')
+// ~/Sandbox, in the suite's scratch HOME, is named beyond the checkout for
+// the @ search.
+const t = await suite('panel', { searchDirs: ['~/Sandbox'] })
 const { url, check, until, api, convOf } = t
 
 const P = await t.register('panel', t.checkout('panel'))
@@ -634,5 +641,67 @@ check(
   Math.abs(kept - put.top) <= 0.5 && (await fromBottom()) > 32 && (await page.locator('.newer button').isVisible()),
   `a move up with no input event during a streaming reply keeps the view where it was put: row ${put.seq} at ${put.top.toFixed(1)}, then ${kept.toFixed(1)}; ${Math.round(await fromBottom())}px from the bottom`,
 )
+
+// @~/ searches the directory named beyond the checkout, ~/Sandbox: the list
+// shows its paths with ~, newest first, and none in a dot-directory or
+// outside it; a pick is written as the harness reliably resolves it
+// (capability report, 2026-11-16): for claude a mention as the list shows
+// it, quoted for a space; for codex and pi the bare absolute path.
+const home = join(t.dir, 'home')
+const sandbox = join(home, 'Sandbox')
+const made = (rel, minutesAgo) => {
+  const full = join(sandbox, rel)
+  mkdirSync(join(full, '..'), { recursive: true })
+  writeFileSync(full, rel)
+  const when = new Date(Date.now() - minutesAgo * 60000)
+  utimesSync(full, when, when)
+}
+made('older notes.txt', 30)
+made('shots/shot one.png', 1)
+made('.cache/hidden.png', 0)
+mkdirSync(join(home, 'Private'), { recursive: true })
+writeFileSync(join(home, 'Private', 'secret.txt'), 'not named')
+const list = page.locator('.path-list')
+const options = () => list.getByRole('option').allTextContents()
+const pickNewest = async (id) => {
+  await page.evaluate((id) => {
+    location.hash = `#/c/${id}`
+  }, id)
+  await box.waitFor()
+  await box.click()
+  await box.fill('look at @~/')
+  await until('the list of the named directory', async () => (await list.getByRole('option').count()) > 0)
+  const shown = await options()
+  const label = await list.getByRole('listbox').getAttribute('aria-label')
+  await box.press('Enter')
+  const value = await box.inputValue()
+  await box.fill('')
+  return { shown, label, value }
+}
+const atClaude = await pickNewest(C)
+t.say(`  @~/ for claude: ${JSON.stringify(atClaude)}`)
+check(
+  atClaude.label === 'Paths in the directories named beyond the checkout' &&
+    atClaude.shown[0] === '~/Sandbox/shots/shot one.png' &&
+    atClaude.shown.includes('~/Sandbox/older notes.txt') &&
+    atClaude.shown.includes('~/Sandbox/') &&
+    !atClaude.shown.some((p) => p.includes('.cache') || p.includes('Private')),
+  `@~/ opens the list of ~/Sandbox, shown with ~, newest first, with no dot-directory and nothing outside it: ${JSON.stringify(atClaude.shown)}`,
+)
+check(atClaude.value === 'look at @"~/Sandbox/shots/shot one.png" ', `for claude, the pick is a mention as the list shows it, quoted for its space: "${atClaude.value}"`)
+await box.fill('look at @~/Sa')
+await until('the list again', async () => (await list.getByRole('option').count()) > 0)
+await list.screenshot({ path: `${t.dir}/shots/path-search-outside.png` })
+await box.fill('look at @~/Private')
+await until('the search settled', async () => (await list.locator('.path-note').count()) === 1)
+check((await list.locator('.path-note').textContent()) === 'No matching paths', 'a directory not named is never listed, however it is typed')
+await box.fill('')
+for (const [id, name] of [
+  [X, 'codex'],
+  [PiConv, 'pi'],
+]) {
+  const picked = await pickNewest(id)
+  check(picked.value === `look at ${join(sandbox, 'shots/shot one.png')} `, `for ${name}, the pick is the bare absolute path: "${picked.value}"`)
+}
 
 await t.done()

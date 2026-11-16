@@ -32,7 +32,14 @@
 // "Imported" on one from outside; every time in the service's zone while
 // the page reports UTC. and a pi conversation: pi's own words about
 // how it asks under its header, its prompt, tool call and reply as the
-// others', the prompt's bookkeeping hidden, and its turn line with no mode.
+// others', the prompt's bookkeeping hidden, its gated tool call waiting on
+// the dialog rather than running, and its turn line with no mode. and
+// actions, for each harness's fake: a failed one marked while collapsed;
+// expanded, the whole invocation, past the one line's cut, then the result;
+// another tool's input field by field; the copy control; and an action
+// recorded with nothing its adapter reads, showing its one line. it saves
+// each harness's expanded command and input as
+// shots/action-{claude,codex,pi}{,-input}.png.
 // and the runtime-started line: unmarked, with
 // no added words, for a version inside the tested range and for one newer,
 // the normal state; marked in the notice colour for one older, the range
@@ -661,6 +668,14 @@ await until('the gate', async () => (await convOf(Pi)).pending.length === 1)
 const gate = (await convOf(Pi)).pending[0]
 const gateTitle = gate.payload?.questions?.[0]?.question
 if (gate.kind !== 'question' || gateTitle !== 'Approve bash command: sleep 1') throw new Error(`stopped before answering: ${JSON.stringify(gate)}`)
+// the gated bash call has not run while its dialog waits: its row says so,
+// and is not shown as running.
+const gatedRow = page.locator('.events details.tool', { hasText: 'bash sleep 1' })
+await until('the gated row', async () => (await gatedRow.count()) === 1)
+check(
+  ((await gatedRow.locator('summary').textContent()) ?? '').includes('waiting on a dialog') && (await gatedRow.locator('.spinner').count()) === 0,
+  `a pi action whose dialog is pending says it waits on the dialog, not that it runs: "${await gatedRow.locator('summary').textContent()}"`,
+)
 await api('POST', `/api/conversations/${Pi}/answer`, { request_id: gate.id, answers: { [gateTitle]: 'Block' } })
 await t.idle(Pi)
 await until('the tool row and reply', async () => (await page.locator('.events .message.assistant', { hasText: /^blocked$/ }).count()) === 1)
@@ -670,6 +685,85 @@ check((await page.locator('.events .message.user', { hasText: /^ask$/ }).count()
 const piLine = await page.locator('.events .turn-end:not(.pending) .turn-line').last().textContent()
 check(/^Ran Fake Large · medium · sent \S+( [AP]M)? · took /.test(piLine ?? ''), `each turn's line says what it ran with, and no mode: "${piLine}"`)
 await t.shot(page, 'pi-conversation')
+
+// actions, for each harness's fake: collapsed, one line, a failed one marked
+// in the error colour; expanded, what it invoked in full, past the line's
+// two hundred bytes, then what came back; a copy control for the
+// invocation; and an action recorded with nothing its adapter can read,
+// showing the one line it has.
+await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: url })
+const rowsOf = () => page.locator('.events details.tool')
+const errorColour = await page.evaluate(() => {
+  const probe = document.createElement('span')
+  probe.style.color = 'var(--error)'
+  document.body.append(probe)
+  const colour = getComputedStyle(probe).color
+  probe.remove()
+  return colour
+})
+for (const [harness, other, otherFields] of [
+  ['claude', 'Edit', 'file_path,old_string,new_string'],
+  ['codex', 'edit', 'update,add'],
+  ['pi', 'read', 'path,limit,offset'],
+]) {
+  const id = (await t.launch(P.id, harness, 'actions', { name: `${harness} actions` })).id
+  await t.idle(id)
+  await page.evaluate((id) => {
+    location.hash = `#/c/${id}`
+  }, id)
+  await until(`${harness}'s three actions`, async () => (await rowsOf().count()) === 3)
+  const [long, edit, failed] = [rowsOf().nth(0), rowsOf().nth(1), rowsOf().nth(2)]
+  const line = (await long.locator('summary').textContent()) ?? ''
+  const failedSummary = failed.locator('summary .tool-error')
+  check(
+    (await failed.getAttribute('open')) === null &&
+      (await failedSummary.textContent()) === ' failed' &&
+      (await failedSummary.evaluate((e) => getComputedStyle(e).color)) === errorColour &&
+      (await long.locator('summary .tool-error').count()) === 0,
+    `${harness}: a failed action is marked while collapsed, in the error colour; one that ran is not`,
+  )
+  await long.locator('summary').click()
+  const command = long.locator('pre.command')
+  await until(`${harness}: the command read`, async () => (await command.count()) === 1)
+  const said = (await command.textContent()) ?? ''
+  const parts = await long.locator('.tool-part').allTextContents()
+  const order = await long.evaluate((row) => {
+    const at = (sel) => [...row.querySelectorAll('*')].indexOf(row.querySelector(sel))
+    return at('pre.command') < at('.tool-output:not(.invocation) pre')
+  })
+  check(
+    !line.includes('END-OF-FAKE-COMMAND') && said.includes('END-OF-FAKE-COMMAND') && said.includes('\n') && parts.join(',') === 'Command,Result' && order,
+    `${harness}: expanded, the whole command, which the one line cut short, then the result: ${JSON.stringify(parts)}, ${said.length} bytes`,
+  )
+  await long.locator('.invocation').getByRole('button', { name: 'Copy the command' }).click()
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  check(copied === said, `${harness}: its copy control takes the whole command`)
+  await long.evaluate((row) => row.scrollIntoView({ block: 'start' }))
+  await long.screenshot({ path: `${t.dir}/shots/action-${harness}.png` })
+  await edit.locator('summary').click()
+  await until(`${harness}: the ${other} read`, async () => (await edit.locator('.invocation-fields dt').count()) > 0)
+  const names = (await edit.locator('.invocation-fields dt').allTextContents()).join(',')
+  check(
+    (await edit.locator('.tool-part').first().textContent()) === `Invoked ${harness === 'codex' ? 'edit' : other}` && names === otherFields,
+    `${harness}: another tool shows its name and its input, field by field: ${names}`,
+  )
+  // the row at the top of the view, clear of the panel pinned at the foot.
+  await edit.evaluate((row) => row.scrollIntoView({ block: 'start' }))
+  await edit.screenshot({ path: `${t.dir}/shots/action-${harness}-input.png` })
+}
+// an action from the generated history, whose payload no adapter reads.
+await page.evaluate((id) => {
+  location.hash = `#/c/${id}`
+}, A)
+await until('A shown again', async () => (await rowsOf().count()) > 0)
+const old = rowsOf().last()
+const oldLine = ((await old.locator('summary').textContent()) ?? '').replace(/ (no result recorded|failed)$/, '')
+await old.locator('summary').click()
+await until('the old action read', async () => (await old.locator('.invocation-summary').count()) === 1)
+check(
+  ((await old.textContent()) ?? '').includes('Only its one line was recorded') && (await old.locator('.invocation-summary').textContent()) === oldLine,
+  `an action recorded with nothing its adapter reads shows the line it has: "${oldLine.slice(0, 60)}"`,
+)
 
 // dark: the centred conversation, with the panel open and collapsed.
 const dark = await t.page({ width: 1440, height: 900, colorScheme: 'dark' })

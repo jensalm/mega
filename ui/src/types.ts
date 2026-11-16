@@ -338,6 +338,19 @@ export interface History {
   earlier?: { turns: number; events: number }
 }
 
+// Invocation is what an action invoked, as its harness's adapter reads it
+// from the recorded event: a shell command whole, or a tool's input as named
+// fields, each value as text. recorded is false where the event holds
+// nothing the adapter can read, and summary, the action's one line, is then
+// all there is.
+export interface Invocation {
+  tool: string
+  command?: string
+  fields?: { name: string; value: string }[]
+  recorded: boolean
+  summary?: string
+}
+
 export interface ConversationEvent {
   seq: number
   at: string

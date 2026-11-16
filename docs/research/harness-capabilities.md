@@ -931,6 +931,46 @@ For the card `pi-adapter`: everything in the pi section above was observed at pi
 - **Session data:** `sessions/`.
 - **Not pi's:** `~/.pi/context-mode/`.
 
+## Follow-up (2026-11-16): a path outside the checkout
+
+What each harness does with a file named outside its checkout, in the forms the reply box's path search could insert for a directory the operator names, such as `~/Sandbox`. It also records what each asks before reading there. The file was `note.txt` in a scratch folder beside the fixtures, `roundhouse-fixtures/outside-spike/`, with a second named `spaced note.txt`. Each held a unique token, and the folder was removed afterwards. The path was written as `~/Repos/q/research/roundhouse-fixtures/outside-spike/…` (the `~` form) or `/home/michael/Repos/q/research/roundhouse-fixtures/outside-spike/…` (absolute).
+
+### Claude Code 2.1.325, Agent SDK 0.3.318
+
+`probes/claude/mention.mjs`, with its new `--path` and `--mention`, on `claude-rt1`. As in the 2026-11-10 follow-up, `Read`, `Bash`, `Glob`, `Grep`, `Agent` and `Task` were disallowed and every permission request was denied and recorded. Logs are `probes/claude/logs/outside-*`.
+
+- **`@~/…/note.txt` and `@/…/note.txt` both attached** `[observed]`. The reply was the token with no tool call, as for a path inside the checkout.
+- **Quoted, both attached too:** `@"~/…"` and `@"/…"`.
+- **A name with spaces attaches only quoted** `[observed]`. `@"~/…/spaced note.txt"` and `@"/…/spaced note.txt"` attached; the bare `@~/…/spaced note.txt` and the backslash-escaped absolute form replied `NOT-ATTACHED`, as inside the checkout.
+- **The control,** the absolute path with no `@`, replied `NOT-ATTACHED` `[observed]`.
+- **What Claude asks.** An `@` mention attached the outside file with no permission request, from `claude-rt1` and from a fresh checkout with no project settings alike (`outside-mention-fresh`): naming the file is the operator's own act. Its own `Read` of the same file, with `--allow-read` and a prompt asking it to use the tool:
+  - **from `claude-rt1`,** it ran with no request, since the fixture's project settings allow `Read` (`outside-read-{abs,tilde}`);
+  - **from a fresh checkout,** it asked `Read` for the file's absolute path, and the denial ended it `NOT-READ` (`outside-read-fresh`), so a read outside the checkout asks under the operator's settings unless a rule allows it.
+
+### codex-cli 0.166.0
+
+`probes/codex/outside.mjs`, new, on `codex-rt1`: one thread with four turns, each asking for a file's exact contents, every approval declined and recorded. The thread started with approval policy `on-request` and a `workspaceWrite` sandbox. The log is `probes/codex/logs/outside.jsonl`.
+
+- **`~/…/note.txt` and the absolute path were both read** `[observed]`. In both, the agent ran `cat` on the absolute path, so it expanded the `~` itself.
+- **The spaced name, in either form,** was read with the absolute path single-quoted by the agent `[observed]`.
+- **What Codex asks:** nothing. No approval was requested for any of the four reads `[observed]`: the workspace-write sandbox reads anywhere, and `cat` needed no approval under `on-request`.
+
+### pi 1.5.2, `ollama/qwen3.8-27b`
+
+`probes/pi/probe.mjs`, with the new `scenarios/outside.json` (the four prompts), on `pi-rt1` in a new session. The log is `probes/pi/logs/v1.5.2/outside.jsonl`.
+
+- **Every form was read** `[observed]`. In each turn the agent called pi's `read` tool with the path exactly as the prompt wrote it, `~` or absolute, spaces and all, and replied with the token.
+- **pi expands `~` itself:** its `read`, `edit` and the other file tools resolve a path through `resolveToCwd`, which expands `~`, keeps an absolute path, and strips a leading `@` `[source]` (`dist/core/tools/path-utils.js`).
+- **What pi asks:** nothing `[observed]`. No dialog was raised: pi has no permission model, and the fixture's extension asks only before a `bash` command containing `sleep`.
+
+### Consequence
+
+The path search inserts, for a path under a directory the operator named:
+- **for Claude,** `@~/…`, as the list shows it, quoted when it holds whitespace (`@"~/Sandbox/a b.png"`), which Claude's own CLI attaches, outside the checkout as inside it;
+- **for Codex and pi,** the bare absolute path. Both agents handled `~` here, but in Codex it is the model that expands it, so an absolute path does not depend on the model quoting `~` correctly in a shell. pi's tools would take either.
+
+Mega changes nothing about what a harness asks. A Claude mention attaches without asking, as the operator's own naming of the file. A read by the agent's own tools asks, or not, as the harness and the operator's settings say.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

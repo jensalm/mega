@@ -1224,6 +1224,36 @@ dialog .actions {
   color: var(--error);
 }
 
+/* an expanded action: what it invoked, then what came back, each under a
+   small label. the boxes are bounded as any pre is and scroll; a field of a
+   tool's input is its name over its value. */
+.tool-part {
+  color: var(--muted);
+  font-size: calc(11px * var(--fs));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 8px 0 0;
+  text-transform: uppercase;
+}
+
+.invocation-fields {
+  margin: 0;
+}
+
+.invocation-fields dt {
+  color: var(--muted);
+  font: calc(12px * var(--fs))/1.5 var(--mono);
+  margin-top: 6px;
+}
+
+.invocation-fields dd {
+  margin: 0;
+}
+
+.invocation-fields dd pre {
+  margin-top: 2px;
+}
+
 .system {
   color: var(--muted);
   font-size: calc(12px * var(--fs));

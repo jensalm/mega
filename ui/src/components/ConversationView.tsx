@@ -160,6 +160,7 @@ export function ConversationView(props: ConversationViewProps) {
         showNative={showNative}
         delta={delta}
         projectId={project.id}
+        conversationId={conversation.id}
         harness={conversation.harness}
         inFlight={
           conversation.turn_asked && conversation.turn_ran

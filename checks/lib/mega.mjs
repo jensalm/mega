@@ -72,7 +72,10 @@ export async function until(what, pred, ms = 20000) {
 const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 // { tz } runs the service in that time zone, with TZ, so a suite can give
 // its pages another and check that times are said in the service's.
-export async function suite(name, { bare = false, tz } = {}) {
+// { searchDirs } names directories beyond the checkout for the reply box's @
+// search (path_search.directories), written as given, ~ for the suite's
+// scratch HOME.
+export async function suite(name, { bare = false, tz, searchDirs = [] } = {}) {
   const port = Number(process.env.MEGA_CHECK_PORT || 18470)
   if (port === 8470) {
     cannotRun('port 8470 is the operator’s mega; checks use another (MEGA_CHECK_PORT)')
@@ -147,6 +150,7 @@ export async function suite(name, { bare = false, tz } = {}) {
         `  binary: ${join(repo, 'internal/harness/pi/fake/pi')}`,
         'environment:',
         '  shell: /bin/bash',
+        ...(searchDirs.length > 0 ? ['path_search:', '  directories:', ...searchDirs.map((d) => `    - ${d}`)] : []),
         '',
       ].join('\n'),
     )

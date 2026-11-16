@@ -32,6 +32,10 @@ type Options struct {
 	// Snapshots keeps copies of the harnesses' configuration (snapshot);
 	// nil takes none, as the tests and the harness round trips do.
 	Snapshots *snapshot.Store
+	// SearchDirs are the directories beyond any checkout the reply box's @
+	// search reaches (config path_search.directories), absolute. none keeps
+	// the search to the checkout.
+	SearchDirs []string
 }
 
 // Workspace is the arrangement as the service last confirmed it.
@@ -78,8 +82,9 @@ type Service struct {
 	logsClosed bool
 	subs       map[*Subscription]struct{}
 	closed     bool
-	catalogs   catalogs  // model lists, per harness, for the service's life
-	paths      pathCache // checkout listings, held briefly
+	catalogs   catalogs      // model lists, per harness, for the service's life
+	paths      pathCache     // checkout listings, held briefly
+	outside    outsideSearch // the named directories' listings, held briefly
 	gate       shutdownGate
 	// resolveSlots bounds the background resolutions running at once
 	// (resolveAtOnce); background counts them, and the start-up check of the
@@ -119,6 +124,7 @@ func New(reg *registry.Registry, opts Options) (*Service, error) {
 
 		resolveSlots: make(chan struct{}, resolveAtOnce),
 		snapshots:    opts.Snapshots,
+		outside:      outsideSearch{dirs: opts.SearchDirs},
 	}
 	if s.isUntrusted == nil {
 		s.isUntrusted = func(string) bool { return false }

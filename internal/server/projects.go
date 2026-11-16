@@ -165,13 +165,35 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// pathsView is a path search's answer: the paths as the list shows them,
+// relative to the checkout, or, for a search of the directories named beyond
+// it, with ~ for the home directory; then Full, for those only, each path's
+// absolute form in the same order, for a harness that is given it.
 type pathsView struct {
 	Paths []string
+	Full  []string `dd:",+omitempty"`
 }
 
-// paths searches a project's checkout by name. directories end in a slash.
+// paths searches a project's checkout by name, or the directories the
+// operator named beyond it for a query starting with ~/ or /. directories
+// end in a slash.
 func (s *Server) paths(w http.ResponseWriter, r *http.Request) {
-	paths, err := s.svc.Paths(r.PathValue("id"), r.URL.Query().Get("q"))
+	q := r.URL.Query().Get("q")
+	outside, searched, err := s.svc.OutsidePaths(r.PathValue("id"), q)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if searched {
+		view := &pathsView{Paths: make([]string, 0, len(outside)), Full: make([]string, 0, len(outside))}
+		for _, p := range outside {
+			view.Paths = append(view.Paths, p.Shown)
+			view.Full = append(view.Full, p.Full)
+		}
+		writeJSON(w, r, http.StatusOK, view)
+		return
+	}
+	paths, err := s.svc.Paths(r.PathValue("id"), q)
 	if err != nil {
 		writeError(w, r, err)
 		return

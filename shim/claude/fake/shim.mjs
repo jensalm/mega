@@ -22,6 +22,9 @@
 //   tool MS          a Bash call to `go test ./...` that runs for MS, then
 //                    its result and one assistant message, "done"
 //   output N         a Bash call whose result is N numbered lines, then "done"
+//   actions          three tool calls, then "done": a Bash command of several
+//                    lines, longer than an action's one-line summary keeps;
+//                    an Edit; and a Bash command that fails (is_error)
 //   background N MS  N Bash calls run in the background (job i lasts i*MS),
 //                    then the turn ends; as each job finishes, the frames
 //                    claude code 2.1.318 sends (task_updated,
@@ -165,7 +168,7 @@ const delta = (text) =>
 const end = (subtype = 'success') =>
   keep({ type: 'result', subtype, is_error: subtype !== 'success', uuid: randomUUID(), session_id: session })
 // toolCall records a tool call, waits ms as if it ran, then records its result.
-async function toolCall(name, input, ms, result = 'ok') {
+async function toolCall(name, input, ms, result = 'ok', isError = false) {
   const id = 'tu-' + randomUUID().slice(0, 8)
   keep({
     type: 'assistant',
@@ -180,7 +183,7 @@ async function toolCall(name, input, ms, result = 'ok') {
     uuid: randomUUID(),
     session_id: session,
     parent_tool_use_id: null,
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: result }] },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: result, ...(isError ? { is_error: true } : {}) }] },
   })
 }
 const filler = (i) =>
@@ -263,6 +266,17 @@ async function turn(text) {
     ask('echo second')
   } else if (verb === 'tool') {
     await toolCall('Bash', { command: 'go test ./...' }, Number(a) || 1000)
+    say('done')
+    end()
+  } else if (verb === 'actions') {
+    const long = [
+      'cd internal/service',
+      "go test ./... -run 'TestAnUpdateBehindTheSamePathIsReadAgain|TestTheStartUpCheckReadsVersions' -count=1 -v 2>&1 | tee /tmp/fake-test-output.log",
+      'echo "the whole command, past the summary\'s two hundred bytes: END-OF-FAKE-COMMAND"',
+    ].join('\n')
+    await toolCall('Bash', { command: long, description: 'Run the version tests' }, 100, 'ok  \tgithub.com/michaelquigley/mega/internal/service\t1.010s')
+    await toolCall('Edit', { file_path: '/fake/checkout/main.go', old_string: 'func old() {}', new_string: 'func new() {\n\treturn\n}' }, 100, 'The file /fake/checkout/main.go has been updated.')
+    await toolCall('Bash', { command: 'false', description: 'Fail on purpose' }, 100, 'Exit code 1', true)
     say('done')
     end()
   } else if (verb === 'output') {
