@@ -39,8 +39,17 @@ test: frontend-test shim
 
 # harness round trips against the disposable fixtures. these drive the real
 # claude code with the operator's login and cost model turns; run by hand.
+# the fixtures, and any other setting internal/e2e/doc.go names, come from
+# the environment or from e2e.local.mk, an optional, git-ignored file of make
+# assignments beside this one (MEGA_E2E_CLAUDE_FIXTURE ?= /path, so a value in
+# the environment still wins). only those set are passed on; a round trip
+# whose fixture is unset is skipped.
+-include e2e.local.mk
+E2E_VARS := MEGA_E2E_CLAUDE_FIXTURE MEGA_E2E_CODEX_FIXTURE MEGA_E2E_NODE MEGA_E2E_CLAUDE MEGA_E2E_CODEX MEGA_E2E_CLAUDE_MODEL MEGA_E2E_CODEX_MODEL
+E2E_ENV = $(foreach v,$(E2E_VARS),$(if $($(v)),$(v)='$($(v))'))
+
 e2e: shim
-	go test -tags e2e -count=1 -v -timeout 30m ./internal/e2e/
+	$(E2E_ENV) go test -tags e2e -count=1 -v -timeout 30m ./internal/e2e/
 
 # the browser checks: every suite in checks/, or SUITE=name (or a list), each
 # against its own scratch mega on a scratch port with the committed fakes.

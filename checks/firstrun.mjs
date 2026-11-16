@@ -37,18 +37,20 @@
 // - --listen: another mega on the port the flag names, and one refused for an
 //   address that is not loopback;
 // - the harnesses installed, as stand-ins that only say their versions: a
-//   native Claude Code build in the versions folder, newer than the tested
-//   range and found there with no claude on the PATH, and a whole Codex
-//   package on the PATH, inside it. a mega on fresh data says each version
-//   in its start-up log, against the tested range, and on its first page,
-//   Claude Code's marked in the notice colour; `mega version` says them too;
+//   native Claude Code build in the versions folder, found there with no
+//   claude on the PATH, and a whole Codex package on the PATH, inside its
+//   range. a mega on fresh data says each version in its start-up log and
+//   on its first page, in one short sentence: a Claude Code newer than its
+//   range plainly, as the normal state it is, and in `mega version` and
+//   /api/version too; then one older, marked in the notice colour with the
+//   stronger sentence, and a warning in the log;
 // - no page errors and nothing fetched off 127.0.0.1.
 //
 // it saves each page as shots/{empty,empty-dark,register,register-refused,
-// project,launch-missing,restarted,versions}.png. each step's text is printed, so the
+// project,launch-missing,restarted,versions-newer,versions-older}.png. each step's text is printed, so the
 // run's output is a record of the words a newcomer reads.
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
@@ -292,61 +294,106 @@ shown('--listen 0.0.0.0', (refusal.match(/[^"]*not a loopback address[^"]*/) ?? 
 check(refusedCode !== 0 && refusedCode !== 'still running' && refusal.includes("listen '0.0.0.0:"), '--listen with an address that is not loopback is refused, as the config value is')
 
 // the harnesses installed, as stand-ins that only say their versions: a
-// native Claude Code build, newer than the tested range, in the versions
-// folder the default falls back to, and the fake Codex package, inside it,
-// on the PATH. neither ever runs a conversation here. a mega on fresh data
-// shows its first page with them found.
-const versions = { claude: '2.1.330', codex: '0.166.0' }
-execFileSync('go', ['build', '-o', join(claudePath, versions.claude), './internal/harness/claude/fakebuild'], { cwd: t.repo, stdio: 'inherit' })
-symlinkSync(join(t.repo, 'internal/harness/codex/fake/codex'), join(t.dir, 'bin/codex'))
-const fresh = join(t.dir, 'fresh')
-mkdirSync(join(fresh, 'data'), { recursive: true })
-const freshEnv = { ...otherEnv, XDG_STATE_HOME: join(fresh, 'state'), XDG_CONFIG_HOME: join(fresh, 'config'), XDG_DATA_HOME: join(fresh, 'xdgdata') }
-const freshPort = t.port + 2
-const freshUrl = `http://127.0.0.1:${freshPort}`
-const installed = spawn(t.bin, ['--config', t.config, '--data', join(fresh, 'data'), '--listen', `127.0.0.1:${freshPort}`], { stdio: ['ignore', 'pipe', 'pipe'], env: freshEnv })
-let installedOut = ''
-installed.stdout.on('data', (d) => (installedOut += d))
-installed.stderr.on('data', (d) => (installedOut += d))
-const installedExited = new Promise((r) => installed.once('exit', (code) => r(code)))
-const freshLog = () => (existsSync(join(fresh, 'state/mega/mega.log')) ? readFileSync(join(fresh, 'state/mega/mega.log'), 'utf8') : '') + installedOut
-const versionLines = () => harnessLines(freshLog()).filter((l) => l.includes('can run'))
-const bothRead = await soon(async () => versionLines().length >= 2, 20000)
-for (const line of versionLines()) shown('the start-up log, installed', line.trim())
+// native Claude Code build in the versions folder the default falls back
+// to, and the fake Codex package, inside its range, on the PATH. neither
+// ever runs a conversation here. a mega on fresh data shows its first page
+// with them found: first with a Claude Code newer than its range, the normal
+// state for a harness that updates itself, said plainly; then with one
+// older, which needs a look and is marked.
 const claudeTested = '2.1.318 to 2.1.325'
 const codexTested = '0.163.0 to 0.169.0'
-check(
-  bothRead && versionLines().some((l) => l.includes("harness 'claude' can run") && l.includes(join(claudePath, versions.claude)) && l.includes('the newest build installed') && l.includes(`Claude Code '${versions.claude}' is newer than the builds mega was tested with, '${claudeTested}'`)),
-  'the start-up log says Claude Code can run from the newest installed build, and that its version is newer than the tested range, naming it',
-)
-check(
-  versionLines().some((l) => l.includes("harness 'codex' can run") && l.includes(`version '${versions.codex}', of the '${codexTested}' mega was tested with`)),
-  'the start-up log says Codex can run, and its version inside the tested range',
-)
-await page.goto(freshUrl)
+const codexVersion = '0.166.0'
+symlinkSync(join(t.repo, 'internal/harness/codex/fake/codex'), join(t.dir, 'bin/codex'))
+const installBuild = (version) => {
+  rmSync(claudePath, { recursive: true, force: true })
+  execFileSync('go', ['build', '-o', join(claudePath, version), './internal/harness/claude/fakebuild'], { cwd: t.repo, stdio: 'inherit' })
+}
+// freshMega starts a mega on fresh data and its own port, and returns its
+// address, its log and how to stop it.
+const freshMega = (name, port) => {
+  const fresh = join(t.dir, name)
+  mkdirSync(join(fresh, 'data'), { recursive: true })
+  const env = { ...otherEnv, XDG_STATE_HOME: join(fresh, 'state'), XDG_CONFIG_HOME: join(fresh, 'config'), XDG_DATA_HOME: join(fresh, 'xdgdata') }
+  const p = spawn(t.bin, ['--config', t.config, '--data', join(fresh, 'data'), '--listen', `127.0.0.1:${port}`], { stdio: ['ignore', 'pipe', 'pipe'], env })
+  let out = ''
+  p.stdout.on('data', (d) => (out += d))
+  p.stderr.on('data', (d) => (out += d))
+  const exited = new Promise((r) => p.once('exit', (code) => r(code)))
+  const log = () => (existsSync(join(fresh, 'state/mega/mega.log')) ? readFileSync(join(fresh, 'state/mega/mega.log'), 'utf8') : '') + out
+  return { url: `http://127.0.0.1:${port}`, env, log, stop: async () => (p.kill('SIGINT'), await exited) }
+}
+// harnessLine is the start-up log's line for a harness that can run, with
+// its level.
+const harnessLine = (log, name) => {
+  const line = harnessLines(log).find((l) => l.includes(`harness '${name}' can run`)) ?? ''
+  return { line, level: (line.match(/"level":"(\w+)"/) ?? [])[1] }
+}
 const freshClaude = page.locator('main .first-run [data-harness="claude"]')
 const freshCodex = page.locator('main .first-run [data-harness="codex"]')
-const versionsShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(versions.claude) && (await text(freshCodex)).includes(versions.codex), 15000)
-shown('the first page on Claude Code, installed', versionsShown ? await text(freshClaude) : '(nothing)')
-shown('the first page on Codex, installed', versionsShown ? await text(freshCodex) : '(nothing)')
-check(versionsShown && (await text(freshClaude)).includes(`Claude Code '${versions.claude}' is newer than the builds mega was tested with, '${claudeTested}'`), 'the first page says Claude Code can run, with its version and that it is newer than the tested range')
-check(versionsShown && (await freshClaude.getAttribute('class'))?.split(' ').includes('notice'), 'the first page marks Claude Code, outside the tested range, in the notice colour')
-check(versionsShown && (await text(freshCodex)).includes(`Version ${versions.codex}, of the ${codexTested} mega was tested with`) && !(await freshCodex.getAttribute('class'))?.split(' ').includes('notice'), 'the first page says Codex’s version, inside the tested range, unmarked')
-const freshVersion = await (await fetch(`${freshUrl}/api/version`)).json()
-const byName = Object.fromEntries((freshVersion.harnesses ?? []).map((h) => [h.name, h]))
-shown('/api/version on the harnesses', JSON.stringify({ tested: freshVersion.tested, harnesses: freshVersion.harnesses?.map((h) => ({ name: h.name, version: h.version, standing: h.standing })) }))
+const classes = async (loc) => ((await loc.getAttribute('class')) ?? '').split(' ')
+
+// a newer Claude Code: plain wherever the version is said.
+const newer = '2.1.330'
+installBuild(newer)
+const n = freshMega('fresh-newer', t.port + 2)
+const newerRead = await soon(async () => harnessLine(n.log(), 'claude').line !== '' && harnessLine(n.log(), 'codex').line !== '', 20000)
+const nc = harnessLine(n.log(), 'claude')
+const nx = harnessLine(n.log(), 'codex')
+shown('the start-up log, a newer Claude Code', nc.line.trim())
+shown('the start-up log, Codex', nx.line.trim())
 check(
-  freshVersion.tested?.claude === claudeTested && freshVersion.tested?.codex === codexTested && byName.claude?.version === versions.claude && byName.claude?.standing === 'newer' && byName.codex?.standing === 'tested',
-  '/api/version names the tested ranges and the versions found, with where each stands',
+  newerRead && nc.level === 'INFO' && nc.line.includes(join(claudePath, newer)) && nc.line.includes('the newest build installed') && nc.line.includes(`version '${newer}', newer than the '${claudeTested}' mega was tested with`),
+  'the start-up log says a newer Claude Code plainly, at info, found as the newest build installed',
 )
-await t.shot(page, 'versions')
-installed.kill('SIGINT')
-await installedExited
+check(nx.level === 'INFO' && nx.line.includes(`version '${codexVersion}', of the '${codexTested}' mega was tested with`), 'the start-up log says Codex’s version, inside its range')
+await page.goto(n.url)
+const newerShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(newer) && (await text(freshCodex)).includes(codexVersion), 15000)
+shown('the first page on a newer Claude Code', newerShown ? await text(freshClaude) : '(nothing)')
+shown('the first page on Codex', newerShown ? await text(freshCodex) : '(nothing)')
+check(
+  newerShown && (await text(freshClaude)) === `Claude Code can run: version ${newer}, at '${join(claudePath, newer)}', newer than the ${claudeTested} mega was tested with.` && !(await classes(freshClaude)).includes('notice'),
+  'the first page says a newer Claude Code in one short plain sentence: its build, where it is and the range, with no node or shim and no notice colour',
+)
+check(
+  newerShown && (await text(freshCodex)) === `Codex can run: version ${codexVersion}, at '${join(t.dir, 'bin/codex')}', within the ${codexTested} mega was tested with.` && !(await classes(freshCodex)).includes('notice'),
+  'the first page says Codex the same way, within its range',
+)
+const newerVersion = await (await fetch(`${n.url}/api/version`)).json()
+const byName = Object.fromEntries((newerVersion.harnesses ?? []).map((h) => [h.name, h]))
+shown('/api/version on the harnesses', JSON.stringify({ tested: newerVersion.tested, harnesses: newerVersion.harnesses?.map((h) => ({ name: h.name, version: h.version, standing: h.standing, note: h.note })) }))
+check(
+  newerVersion.tested?.claude === claudeTested && newerVersion.tested?.codex === codexTested && byName.claude?.version === newer && byName.claude?.standing === 'newer' && !byName.claude?.note && byName.codex?.standing === 'tested',
+  '/api/version names the tested ranges and the versions found, a newer one with no sentence',
+)
+await t.shot(page, 'versions-newer')
+await n.stop()
 // `mega version`, in the same environment, says the same.
-const said = execFileSync(t.bin, ['version', '--config', t.config], { env: freshEnv, encoding: 'utf8' })
+const said = execFileSync(t.bin, ['version', '--config', t.config], { env: n.env, encoding: 'utf8' })
 for (const line of said.split('\n').filter((l) => /^ {2}(claude|codex):/.test(l))) shown('mega version', line.trim())
-check(said.includes(`claude: tested ${claudeTested}; found `) && said.includes(`Claude Code '${versions.claude}' is newer`), '`mega version` says Claude Code’s tested range and the newer build found')
-check(said.includes(`codex: tested ${codexTested}; found '${versions.codex}'`), '`mega version` says Codex’s tested range and the version found')
+check(said.includes(`claude: tested ${claudeTested}; found '${newer}', newer, claude code '${join(claudePath, newer)}'`), '`mega version` says Claude Code’s tested range and the newer build found, plainly')
+check(said.includes(`codex: tested ${codexTested}; found '${codexVersion}'`), '`mega version` says Codex’s tested range and the version found')
+
+// an older Claude Code: marked, with the stronger sentence, wherever the
+// version is said.
+const older = '2.1.300'
+installBuild(older)
+const o = freshMega('fresh-older', t.port + 3)
+const olderRead = await soon(async () => harnessLine(o.log(), 'claude').line !== '', 20000)
+const oc = harnessLine(o.log(), 'claude')
+shown('the start-up log, an older Claude Code', oc.line.trim())
+check(
+  olderRead && oc.level === 'WARN' && oc.line.includes(`Claude Code '${older}' is older than the builds mega was tested with, '${claudeTested}'; the Agent SDK mega runs expects Claude Code '2.1.318' or later`),
+  'the start-up log warns of an older Claude Code, with the stronger sentence',
+)
+await page.goto(o.url)
+const olderShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(older), 15000)
+shown('the first page on an older Claude Code', olderShown ? await text(freshClaude) : '(nothing)')
+check(
+  olderShown && (await text(freshClaude)).startsWith(`Claude Code can run: at '${join(claudePath, older)}'. Claude Code '${older}' is older than the builds mega was tested with`) && (await classes(freshClaude)).includes('notice'),
+  'the first page marks an older Claude Code in the notice colour, with the stronger sentence',
+)
+await t.shot(page, 'versions-older')
+await o.stop()
 
 // nothing on the walk said "internal error", and nothing answered 500.
 check(internalShown.length === 0, `no page said "internal error"${internalShown.length ? `: ${internalShown.join(', ')}` : ''}`)

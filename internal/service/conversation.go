@@ -412,7 +412,7 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 			dl.Debugf("reading the version of '%s' before launching '%s': %v", h.Name(), conversationID, verr)
 		}
 		inc.version = version
-		if standing, note := harness.Stand(h.Name(), version); standing != harness.StandingTested {
+		if _, note := harness.Stand(h.Name(), version); note != "" {
 			dl.Infof("launching '%s': %s", conversationID, note)
 		}
 	}

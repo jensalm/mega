@@ -26,13 +26,17 @@ const resolveAtOnce = 4
 type HarnessStatus struct {
 	Name  string
 	Found bool
+	// Where names every program it runs, for the log; Path is the harness's
+	// own, for the first page.
 	Where string
+	Path  string
 	// Reason is why it cannot run, without the harness's name, which the
 	// page and the log put before it.
 	Reason string
 	// Version is what the harness's own --version printed, Tested its tested
 	// range (harness.Tested), and Standing and Note where the version stands
-	// against that range and the sentence saying so. Version and Standing
+	// against that range and the sentence for one that needs a look (older,
+	// or unreadable; a newer build has none). Version and Standing
 	// are empty until the version has been read; an unreadable one is
 	// StandingUnknown.
 	Version  string
@@ -110,6 +114,9 @@ func (s *Service) checkHarnesses() {
 			dl.Warnf("harness '%s' cannot run: %s (looked for in %s)", status.Name, status.Reason, where)
 		case status.Standing == harness.StandingTested:
 			dl.Infof("harness '%s' can run, in %s: %s; version '%s', of the '%s' mega was tested with", status.Name, where, status.Where, status.Version, status.Tested)
+		case status.Standing == harness.StandingNewer:
+			// the normal state for a harness that updates itself.
+			dl.Infof("harness '%s' can run, in %s: %s; version '%s', newer than the '%s' mega was tested with", status.Name, where, status.Where, status.Version, status.Tested)
 		default:
 			dl.Warnf("harness '%s' can run, in %s: %s; %s", status.Name, where, status.Where, status.Note)
 		}
@@ -197,6 +204,7 @@ func (s *Service) harnessStatusLocked() []HarnessStatus {
 			status.Found = true
 			if locator, ok := h.(harness.Locator); ok {
 				status.Where = locator.Locate(s.harnessFind)
+				status.Path = locator.Path(s.harnessFind)
 			}
 			status.Tested = harness.Tested[name].String()
 			if read, ok := s.harnessVersions[name]; ok && read.where == status.Where {

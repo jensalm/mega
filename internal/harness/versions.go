@@ -99,10 +99,12 @@ func CompareVersions(a, b string) int {
 }
 
 // Stand says where a harness's version stands against its tested range, and
-// a sentence saying so for the operator, empty when it is tested. nothing is
-// refused for its version: an older build is worded more strongly than a
-// newer one, since claude's agent sdk expects the claude code of its own
-// patch or later.
+// a sentence for the operator when it needs a look: an older build, since
+// claude's agent sdk expects the claude code of its own patch or later, and
+// a version that could not be read. a newer build has none: claude code
+// releases every day or two, so an installed build is above the range almost
+// always, and that is the normal state, said in plain words. nothing is
+// refused for its version.
 func Stand(harnessName, version string) (standing, note string) {
 	r, ok := Tested[harnessName]
 	label := labels[harnessName]
@@ -120,7 +122,7 @@ func Stand(harnessName, version string) (standing, note string) {
 		}
 		return StandingOlder, fmt.Sprintf("%s '%s' is older than the builds mega was tested with, '%s'; some calls mega makes may not be understood", label, version, r)
 	case CompareVersions(version, r.High) > 0:
-		return StandingNewer, fmt.Sprintf("%s '%s' is newer than the builds mega was tested with, '%s'; it is likely to work", label, version, r)
+		return StandingNewer, ""
 	}
 	return StandingTested, ""
 }

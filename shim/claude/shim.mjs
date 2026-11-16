@@ -46,6 +46,9 @@
 // version from the initialize reply and the session's model from
 // getContextUsage's summary, which runs no turn (capability report, 2.1.318).
 
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
@@ -218,11 +221,62 @@ async function ready(q, emit) {
   emit({ type: 'ready', version: init.ok.claude_code_version ?? '', model: usage?.model ?? '' });
 }
 
+// messages prints the session's history as the sdk's reader gives it. a
+// message written by no model (message.model "<synthetic>") is either claude's
+// own bookkeeping, such as the "No response requested." it writes after an
+// interrupted turn, or an api error; the reader drops the transcript's
+// isApiErrorMessage and error, which alone tell them apart (capability
+// report, 2026-11-15). so those two are read back from the session's
+// transcript, by uuid, and passed on as the transcript has them. when the
+// transcript cannot be read, nothing is added, and the adapter keeps the
+// message a reply.
 export async function messages(opt, sdk, io) {
   const emit = writer(io.stdout);
   const list = await sdk.getSessionMessages(opt.session, { dir: opt.cwd });
-  for (const m of list) emit(m);
+  const synthetic = list.some(m => m?.message?.model === syntheticModel) ? transcriptFlags(opt.session, opt.cwd, io.env ?? process.env) : new Map();
+  for (const m of list) {
+    const flags = m?.message?.model === syntheticModel ? synthetic.get(m.uuid) : undefined;
+    emit(flags ? { ...m, ...flags } : m);
+  }
   return 0;
+}
+
+const syntheticModel = '<synthetic>';
+
+// transcriptFlags reads the session's transcript, under claude's config
+// directory (CLAUDE_CONFIG_DIR, else ~/.claude), and returns, for each
+// message written by no model, its isApiErrorMessage and any error, by uuid,
+// as far as the transcript has them.
+// the transcript is in the project's folder, named from the checkout's path
+// with every other character a dash; a session id is unique, so any project
+// folder holding it will do when that one does not.
+function transcriptFlags(session, cwd, env) {
+  const flags = new Map();
+  const projects = join(env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects');
+  const name = `${session}.jsonl`;
+  let file = join(projects, cwd.replace(/[^a-zA-Z0-9]/g, '-'), name);
+  try {
+    if (!existsSync(file)) {
+      const dir = readdirSync(projects).find(d => existsSync(join(projects, d, name)));
+      if (!dir) return flags;
+      file = join(projects, dir, name);
+    }
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (!line.includes(syntheticModel)) continue;
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (entry?.message?.model !== syntheticModel || typeof entry.uuid !== 'string') continue;
+      // only what the transcript says: a flag that is not a boolean is left
+      // out, so the adapter keeps the message a reply.
+      const f = {};
+      if (typeof entry.isApiErrorMessage === 'boolean') f.isApiErrorMessage = entry.isApiErrorMessage;
+      if (entry.error) f.error = entry.error;
+      if (Object.keys(f).length > 0) flags.set(entry.uuid, f);
+    }
+  } catch {
+    // unreadable: nothing is added.
+  }
+  return flags;
 }
 
 export async function list(opt, sdk, io) {

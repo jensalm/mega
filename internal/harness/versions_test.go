@@ -40,8 +40,9 @@ func TestParseAndCompareVersions(t *testing.T) {
 }
 
 // a version is tested inside its harness's range, newer or older outside
-// it, and unknown when it cannot be read; an older claude code is worded
-// more strongly than a newer one, and nothing is refused.
+// it, and unknown when it cannot be read. a newer build, the normal state,
+// has no sentence; an older one and an unreadable one have one, an older
+// claude code's citing the agent sdk; nothing is refused.
 func TestStandAgainstTheTestedRange(t *testing.T) {
 	claude, codex := Tested[model.HarnessClaude], Tested[model.HarnessCodex]
 	for _, c := range []struct {
@@ -50,9 +51,9 @@ func TestStandAgainstTheTestedRange(t *testing.T) {
 	}{
 		{model.HarnessClaude, claude.Low, StandingTested, nil},
 		{model.HarnessClaude, claude.High, StandingTested, nil},
-		{model.HarnessClaude, "2.1.999", StandingNewer, []string{"Claude Code '2.1.999' is newer than the builds mega was tested with", claude.String(), "likely to work"}},
+		{model.HarnessClaude, "2.1.999", StandingNewer, nil},
 		{model.HarnessClaude, "2.1.300", StandingOlder, []string{"Claude Code '2.1.300' is older", "expects Claude Code '" + claude.Low + "' or later", "may fail"}},
-		{model.HarnessCodex, "0.170.0", StandingNewer, []string{"Codex '0.170.0' is newer", codex.String()}},
+		{model.HarnessCodex, "0.170.0", StandingNewer, nil},
 		{model.HarnessCodex, "0.150.0", StandingOlder, []string{"Codex '0.150.0' is older", codex.String()}},
 		{model.HarnessClaude, "", StandingUnknown, []string{"could not be read", claude.String()}},
 		{model.HarnessCodex, "fake", StandingUnknown, []string{"could not be read"}},
@@ -66,8 +67,8 @@ func TestStandAgainstTheTestedRange(t *testing.T) {
 				t.Errorf("%s %q: note %q does not say %q", c.harness, c.version, note, s)
 			}
 		}
-		if c.standing == StandingTested && note != "" {
-			t.Errorf("%s %q: a tested version has a note: %q", c.harness, c.version, note)
+		if (c.standing == StandingTested || c.standing == StandingNewer) && note != "" {
+			t.Errorf("%s %q: a %s version has a note: %q", c.harness, c.version, c.standing, note)
 		}
 	}
 }
@@ -124,14 +125,21 @@ func TestReadVersion(t *testing.T) {
 	if took := time.Since(start); took > 3*time.Second {
 		t.Errorf("a hang held the read for %s", took)
 	}
+	// the child was sent SIGKILL with its group; once the kernel has delivered
+	// it, which can take a moment, it is gone, or dying ("X (dead)"), or a
+	// zombie until reaped.
 	pid, _ := os.ReadFile(marker)
-	if strings.TrimSpace(string(pid)) != "" {
-		if _, err := os.Stat("/proc/" + strings.TrimSpace(string(pid))); err == nil {
-			// a killed child lingers only until reaped, as a zombie.
-			status, _ := os.ReadFile("/proc/" + strings.TrimSpace(string(pid)) + "/status")
-			if !strings.Contains(string(status), "zombie") {
-				t.Errorf("the hang's child is still running")
-			}
+	if child := strings.TrimSpace(string(pid)); child != "" {
+		dead := func() bool {
+			status, err := os.ReadFile("/proc/" + child + "/status")
+			return err != nil || strings.Contains(string(status), "zombie") || strings.Contains(string(status), "(dead)")
+		}
+		gone := dead()
+		for deadline := time.Now().Add(2 * time.Second); !gone && time.Now().Before(deadline); gone = dead() {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if !gone {
+			t.Errorf("the hang's child is still running")
 		}
 	}
 }

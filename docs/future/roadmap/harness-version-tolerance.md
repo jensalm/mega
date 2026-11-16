@@ -1,6 +1,6 @@
 ---
 title: harness version tolerance
-state: building
+state: evaluating
 created: 2026-11-13
 tags: [story, spike]
 ---

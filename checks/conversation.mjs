@@ -26,10 +26,10 @@
 // mega" on its reply. and each turn's line: hidden at rest, shown on hover
 // and on focus with nothing moving, staying in the notice colour when the
 // fake reports another model than the one asked for, and none on turns
-// recorded before mega kept it. and the runtime-started line: unmarked for a
-// version inside the tested range, marked in the notice colour with the
-// range in its title for one newer, more strongly for one older, and nothing
-// refused. and the MCP servers: an item in the More menu with the
+// recorded before mega kept it. and the runtime-started line: unmarked, with
+// no added words, for a version inside the tested range and for one newer,
+// the normal state; marked in the notice colour for one older, the range
+// after the version and the sentence in its title; and nothing refused. and the MCP servers: an item in the More menu with the
 // count, a mark on More while a server failed or needs signing in, in view at
 // the bottom, and the list the item opens, with each
 // status, an error, the harness's own place to sign in, tools on expansion,
@@ -339,12 +339,12 @@ await page.evaluate((id) => {
 }, C)
 await until('C shown again', async () => (await page.locator('.events .message.assistant', { hasText: 'a reply given in a terminal' }).count()) === 1)
 
-// the runtime-started line names the version the harness reported; one
-// outside mega's tested range is marked on that line, in the notice colour,
-// with the range in its title, and an older build is worded more strongly
-// than a newer one. one inside the range is not marked, and nothing is
-// refused for its version. the fake shim reports the version a file beside
-// it names.
+// the runtime-started line names the version the harness reported. one
+// older than mega's tested range is marked on that line, in the notice
+// colour, with the range after the version and the sentence in its title.
+// one inside the range, and one newer, the normal state for a harness that
+// updates itself, are not marked and gain no words; nothing is refused for
+// its version. the fake shim reports the version a file beside it names.
 const versionFile = join(t.dir, 'fakeshim', 'claude-version')
 const claudeTested = '2.1.318 to 2.1.325'
 const startLine = page.locator('.events p.system', { hasText: /^Runtime started/ }).first()
@@ -392,16 +392,15 @@ await lineShot('start-tested')
 const newer = await startedWith('2.1.999', 'version newer')
 t.say(`  newer than the range: ${JSON.stringify(newer)}`)
 check(
-  newer.inColumn && newer.className === 'system version-outside version-newer' && newer.bg === newer.noticeBg && newer.text.includes(`v2.1.999 · newer than the ${claudeTested} mega was tested with`),
-  `a start newer than the tested range is marked on its line, in the notice colour, naming the range: "${newer.text}"`,
+  newer.inColumn && newer.className === 'system' && newer.title === null && newer.bg !== newer.noticeBg && newer.text === 'Runtime started · fake-opus-1 · v2.1.999',
+  `a start newer than the tested range, the normal state, is not marked and gains no words: "${newer.text}"`,
 )
-check(newer.title === `Claude Code '2.1.999' is newer than the builds mega was tested with, '${claudeTested}'; it is likely to work`, `and its title says so: "${newer.title}"`)
 await lineShot('start-newer')
 const older = await startedWith('2.1.300', 'version older')
 t.say(`  older than the range: ${JSON.stringify(older)}`)
 check(
-  older.inColumn && older.className === 'system version-outside version-older' && older.bg === older.noticeBg && older.border === 'solid' && newer.border === 'dashed' && older.text.includes(`v2.1.300 · older than the ${claudeTested} mega was tested with`),
-  `a start older than the tested range is marked more strongly, with a solid edge where a newer one's is dashed: "${older.text}"`,
+  older.inColumn && older.className === 'system version-older' && older.bg === older.noticeBg && older.border === 'solid' && older.text.includes(`v2.1.300 · older than the ${claudeTested} mega was tested with`),
+  `a start older than the tested range is marked on its line, in the notice colour, naming the range: "${older.text}"`,
 )
 check(older.title?.includes("expects Claude Code '2.1.318' or later, so some calls may fail"), `and its title says what the agent sdk expects: "${older.title}"`)
 await lineShot('start-older')

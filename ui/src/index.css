@@ -1224,20 +1224,16 @@ dialog .actions {
   color: var(--error);
 }
 
-/* a runtime started on a version outside the tested range: the same line,
-   in the notice colour, with the range and the sentence in its title. an
-   older build is the stronger case, so its mark is solid. */
-.system.version-outside {
+/* a runtime started on a build older than the tested range: the same line,
+   in the notice colour, with the range and the sentence in its title. a
+   newer build, the normal state, is not marked. */
+.system.version-older {
   align-self: flex-start;
   background: var(--notice-bg);
-  border: 1px dashed var(--notice-line);
+  border: 1px solid var(--notice-line);
   border-radius: 4px;
   color: var(--text);
   padding: 1px 6px;
-}
-
-.system.version-outside.version-older {
-  border-style: solid;
 }
 
 /* a sentence in the notice colour, inside other text. */

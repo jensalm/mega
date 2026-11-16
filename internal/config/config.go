@@ -23,8 +23,9 @@ const (
 	// updater links, so an update never leaves mega on a pruned build. with
 	// none on the PATH the adapter falls back to the newest native build in
 	// the installer's versions folder. the builds mega was tested with are
-	// harness.Tested.
-	defaultClaudeExecutable = "claude"
+	// harness.Tested. exported so the harness round trips (internal/e2e) run
+	// what mega runs by default, and cannot drift from it.
+	DefaultClaudeExecutable = "claude"
 )
 
 // defaultClaudeShim is the shim directory, stamped at build time by the
@@ -76,7 +77,7 @@ type Claude struct {
 func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 	cfg := &Config{
 		Listen: defaultListen,
-		Claude: Claude{Node: "node", Shim: defaultClaudeShim, Executable: defaultClaudeExecutable},
+		Claude: Claude{Node: "node", Shim: defaultClaudeShim, Executable: DefaultClaudeExecutable},
 		Codex:  Codex{Binary: "codex"},
 	}
 	if configPath != "" {

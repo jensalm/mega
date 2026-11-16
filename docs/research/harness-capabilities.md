@@ -819,6 +819,66 @@ Fetched from OpenAI's GitHub releases into scratch. The control is the operator'
 - **How early mega can know.** Both harnesses report their version in about 10 ms with `--version`, cheap enough for the start-up check and for every launch. Both also report it at launch, as they do today.
 - **Sharing the store across versions.** Neither harness's store is left unreadable by a nearby older build. Claude's `migrationVersion` moving down and back is the one rewrite seen.
 
+## Follow-up (2026-11-15): Claude's bookkeeping after an interrupted turn
+
+For the card `an-interrupted-turn-imports-no-response-requested`: how Claude Code marks the "No response requested." it writes after an interrupted turn, so mega can map it by a mark rather than by its sentence.
+
+**How it was read.** The fixture `claude-rt1`'s own sessions, written during the version spike, were read two ways: the transcript files under `~/.claude/projects/`, and through the shim's `messages` command, which is the SDK's history reader and what an import reads. Across every local transcript, only the flags of messages written by no model were tallied, never their text beyond Claude's own fixed sentences.
+
+**The mark** `[observed]`, at Claude Code 2.1.318, 2.1.319, 2.1.321, 2.1.322 and 2.1.325, Agent SDK 0.3.318:
+- **What it is.** An `assistant` message whose `message.model` is `<synthetic>`, with `stop_reason` `stop_sequence`, an empty `stop_sequence`, and zero usage. Its one text block is "No response requested.".
+- **Where it sits.** It follows the user message "[Request interrupted by user for tool use]" and the rejected tool result for the interrupted call. It is in the transcript only; the live stream never delivers it.
+- **When it is written** (2.1.325, observed by the e2e round trip on 2026-11-15). It is written when the next prompt reaches a run that resumed the session, just before that prompt. Nothing else wrote it:
+  - a prompt in the same run that was interrupted;
+  - five idle seconds before the release;
+  - a live switch to plan and back;
+  - a resume with no prompt.
+
+  So an import meets it only after a later resumed turn, as the spike's exact-id resume did.
+- **The transcript's top-level flags.** `isApiErrorMessage: false`, and no `error`.
+- **Through the history reader** the `message` comes whole, `model` included, but the top-level `isApiErrorMessage` and `error` are dropped.
+
+**The other message written by no model** `[observed]`: an API error, such as "Login reached its time limit · Please run /login", at 2.1.318 and 2.1.319.
+- **How it is marked.** It has the same `message` fields, `model` `<synthetic>` included. At the top level it has `isApiErrorMessage: true` and `error: "authentication_failed"`, and the live stream delivers it with `error`.
+- **Through the history reader** the two are told apart only by their text.
+
+**The 7 interrupted turns in the fixture's sessions,** one per spike run, each wrote exactly one such message. Across every local transcript, 9 were found, and 2 API errors.
+
+**What this permits.** Through the SDK alone, the two kinds cannot be told apart on import. Reading the transcript's own `isApiErrorMessage` by uuid can. A `<synthetic>` message the transcript marks `isApiErrorMessage: false` is Claude's bookkeeping, not speech, and can be mapped as a native event. An API error stays a reply, live or read back. The shim's `messages` read it back this way on a real run of 2.1.325 on 2026-11-15.
+
+## Follow-up (2026-11-15): the versions probe, run against the installed builds
+
+`probes/versions/` was run once each against what is installed, through a scratch mega on the disposable fixtures, with the operator's own logins and nothing installed or changed.
+
+**Claude Code 2.1.325** `[observed]`, the bare name `claude`, which resolves to `~/.local/bin/claude` and from there to `versions/2.1.325`. Agent SDK 0.3.318, run with `DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1`. All 50 steps passed in 29 s:
+- **Before the first turn:** mega's start-up check found it tested. The model list had 14 models at 2.1.325, in 1.0 s, and a new conversation copied `opus` at `xhigh` in `default`.
+- **The turns:**
+  - the marker turn, on `claude-opus-5-5`;
+  - an approval for `sleep 3`, asserted and then allowed;
+  - an interrupt with a second approval pending, which ended the turn `interrupted` and the request `aborted`;
+  - plan and back, each confirmed.
+- **MCP status:** 7 servers, 4 connected and 3 needing sign-in.
+- **Release and resumes:** a start without a prompt on the same session, reporting 2.1.325 and importing nothing; then a prompt, a release, and an exact-id resume that recalled every marker.
+- **The one import** was Claude's "No response requested.", now a native event, "assistant/synthetic", not a reply (the follow-up above).
+- **The rest:** no turn's line differed, across 5 turns, and the installed builds and the `claude` link were unchanged. The versions folder now holds 2.1.321, 2.1.322 and 2.1.325; 2.1.318 and 2.1.319 were pruned after the spike.
+
+**codex-cli 0.166.0** `[observed]`, the `codex` on `PATH`: npm's `codex.js`, whose platform package has `codex-package.json`, `bin/codex` and `bin/codex-code-mode-host` and names no exec server. It ran in a scratch `CODEX_HOME` holding copies of the configuration and a link to `auth.json`. All 59 steps passed, and the 9 steps of a second mega's discovery and adoption:
+- **Before the first turn:**
+  - the helper check passed and the start-up check found the build tested;
+  - the guard saw the override set `CODEX_HOME`;
+  - the model list had 8 models in 5.3 s, and a new conversation copied `gpt-6-astra` at `high`.
+- **The turns:**
+  - the marker turn;
+  - a write outside the checkout, asserted, written only after Allow;
+  - an interrupted second write that wrote nothing;
+  - the MCP approval for `fixture/echo`, not run before Allow and run after.
+- **MCP status:** 6 servers connected.
+- **Release and resumes:** a start without a prompt imported nothing, and the exact-id resume imported nothing.
+- **Turn lines:** none differed, across 6 turns.
+- **Discovery and adoption:** the second mega listed the thread and adopted it, importing 16 messages.
+- **The real `~/.codex`** was unchanged.
+- **One probe fix.** Under a scratch `CODEX_HOME` in a temporary directory, `codex --version` first prints a warning that it will not create its PATH aliases. The runner now takes the `codex-cli` line.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

@@ -187,16 +187,17 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
           )
         }
         {
-          // a start whose version is outside the tested range is marked, on
+          // a start whose build is older than the tested range is marked, on
           // the line that already names the version, in the notice colour,
           // with the range and the sentence as its title. nothing else is
-          // said, and nothing was refused.
-          const outside = event.status === 'started' && (event.facts?.standing === 'newer' || event.facts?.standing === 'older')
+          // said, and nothing was refused. a newer build is the normal state
+          // for a harness that updates itself, and is not marked.
+          const outside = event.status === 'started' && event.facts?.standing === 'older'
           let className = 'system'
           if (event.status === 'error' || event.status === 'unsupervised' || event.status === 'not_started') {
             className = 'system alert'
           } else if (outside) {
-            className = `system version-outside version-${event.facts?.standing}`
+            className = 'system version-older'
           }
           return (
             <p key={event.seq} data-seq={event.seq} className={className} title={outside ? event.facts?.version_note : undefined}>
@@ -204,7 +205,7 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
               {event.facts?.model && ` · ${event.facts.model}`}
               {event.facts?.effort && ` · effort ${event.facts.effort}`}
               {event.facts?.version && ` · v${event.facts.version}`}
-              {outside && ` · ${event.facts?.standing === 'older' ? 'older than' : 'newer than'} the ${event.facts?.tested} mega was tested with`}
+              {outside && ` · older than the ${event.facts?.tested} mega was tested with`}
               {event.text && `: ${event.text}`}
             </p>
           )

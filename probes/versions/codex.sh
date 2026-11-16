@@ -96,7 +96,10 @@ compare_state() {
   fi
 }
 
-version=$(env CODEX_HOME="$codex_home" "$runs" --version 2>&1 | head -n 1) || die "'$runs --version' failed: $version"
+# the codex-cli line: under a scratch CODEX_HOME in a temporary directory,
+# codex first warns that it will not create its PATH aliases there.
+version=$(env CODEX_HOME="$codex_home" "$runs" --version 2>&1) || die "'$runs --version' failed: $version"
+version=$(grep -m 1 'codex-cli' <<<"$version" || head -n 1 <<<"$version")
 label=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"$version" | head -n 1 || true)
 dir="$probe_root/codex-${label:-unknown}-$port-$(date +%Y%m%d-%H%M%S)"
 build_mega

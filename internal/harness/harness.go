@@ -82,9 +82,11 @@ type Harness interface {
 }
 
 // Locator is a harness that can say where the programs it runs were found in
-// an environment it can run in, for the start-up log and the first page.
+// an environment it can run in: Locate names every program, for the
+// start-up log, and Path the harness's own, for the first page.
 type Locator interface {
 	Locate(find []string) string
+	Path(find []string) string
 }
 
 // Place is where a harness process runs on a project's behalf: the checkout;

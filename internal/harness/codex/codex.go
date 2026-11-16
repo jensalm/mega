@@ -210,11 +210,16 @@ func (h *Harness) Check(find []string) error {
 // Locate says where codex was found in find, for a harness that can run
 // there.
 func (h *Harness) Locate(find []string) string {
-	path, err := h.resolve(find)
-	if err != nil {
-		path = h.cfg.Binary
+	return fmt.Sprintf("codex '%s'", h.Path(find))
+}
+
+// Path is the codex mega would run, or the configured one when it cannot be
+// found.
+func (h *Harness) Path(find []string) string {
+	if path, err := h.resolve(find); err == nil {
+		return path
 	}
-	return fmt.Sprintf("codex '%s'", path)
+	return h.cfg.Binary
 }
 
 // Models lists the models codex offers, from a short-lived app-server with no

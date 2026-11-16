@@ -35,6 +35,10 @@ type Config struct {
 	Executable      string
 	ManagedSettings string
 	Where           string
+	// FileRead is whether a config file was read, so that a configured
+	// executable came from it; with none, Where names the file mega looked
+	// for, and nothing named the executable there.
+	FileRead bool
 }
 
 // Harness runs claude code through the stdio shim.
@@ -110,6 +114,15 @@ func (h *Harness) Locate(find []string) string {
 		return fmt.Sprintf("claude code '%s', the newest build installed, with no '%s' on the PATH, node '%s', shim '%s'", executable, h.cfg.Executable, node, h.cfg.Shim)
 	}
 	return fmt.Sprintf("claude code '%s', node '%s', shim '%s'", executable, node, h.cfg.Shim)
+}
+
+// Path is the claude code executable mega would run, or the configured one
+// when it cannot be found.
+func (h *Harness) Path(find []string) string {
+	if path, _, err := h.locate(find); err == nil {
+		return path
+	}
+	return h.cfg.Executable
 }
 
 // Version is the version the claude code mega would run prints for
@@ -194,9 +207,13 @@ func (h *Harness) locate(find []string) (path string, fallback bool, err error) 
 	if strings.Contains(path, "/") {
 		if err := harness.CheckPath(model.HarnessClaude, path, ""); err != nil {
 			if beside := installed(filepath.Dir(path)); len(beside) > 0 {
+				follow := "use claude in its place"
+				if h.cfg.FileRead {
+					follow = "set claude.executable to claude" + h.where() + " or remove it from there"
+				}
 				return "", false, &harness.MissingError{Harness: model.HarnessClaude, Executable: path, Reason: fmt.Sprintf(
-					"'%s' is not installed; the builds installed beside it are %s. to follow the installed Claude Code, set claude.executable to claude%s or remove it from there; or name one of those builds",
-					path, strings.Join(beside, ", "), h.where())}
+					"'%s' is not installed; the builds installed beside it are %s. to follow the installed Claude Code, %s; or name one of those builds",
+					path, strings.Join(beside, ", "), follow)}
 			}
 			return "", false, harness.CheckPath(model.HarnessClaude, path, h.advice("install Claude Code", "claude.executable"))
 		}

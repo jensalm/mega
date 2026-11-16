@@ -267,16 +267,17 @@ export interface Workspace {
   harnesses?: HarnessStatus[]
 }
 
-// HarnessStatus is one harness: where its programs were found, or why it
-// cannot run.
+// HarnessStatus is one harness: where its programs were found (where names
+// every program, for the log; path the harness's own), or why it cannot run.
 export interface HarnessStatus {
   name: string
   found: boolean
   where?: string
+  path?: string
   reason?: string
   // the version its --version printed, its tested range, where the version
-  // stands (tested, newer, older or unknown) and the sentence saying so;
-  // absent until the version has been read.
+  // stands (tested, newer, older or unknown) and the sentence for one that
+  // needs a look, older or unknown; absent until the version has been read.
   version?: string
   tested?: string
   standing?: string
@@ -340,7 +341,7 @@ export interface ConversationEvent {
   // mode a start with no prompt requested; recorded, never drawn.
   // standing, tested and version_note: on a runtime's start, where its
   // version stood against the tested range then, the range, and the
-  // sentence saying so when it is outside it.
+  // sentence for an older or unreadable version.
   facts?: {
     session?: string
     model?: string

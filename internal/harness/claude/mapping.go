@@ -30,6 +30,15 @@ type sdkMessage struct {
 	IsError           bool
 	Event             map[string]any `dd:",+opaque,+nullable"`
 
+	// Error is set on an assistant message claude made itself to report an
+	// api error, such as "authentication_failed". IsAPIErrorMessage is the
+	// transcript's own flag on a message written by no model. the live stream
+	// delivers Error; the history reader drops both, and the shim's messages
+	// command reads them back from the transcript, leaving them out when it
+	// cannot.
+	Error             string `dd:",+nullable"`
+	IsAPIErrorMessage *bool  `dd:"isApiErrorMessage,+nullable"`
+
 	// IsMeta marks a user message claude added itself, such as a subagent's
 	// hand-back, which the history reader synthesizes and the live stream
 	// never delivers. the reader spells it is_meta; isMeta is the transcript's
@@ -42,6 +51,28 @@ type sdkMessage struct {
 
 type sdkContent struct {
 	Content any `dd:",+opaque,+nullable"`
+	// Model is the model that wrote an assistant message: "<synthetic>" for
+	// one claude code wrote itself rather than a model.
+	Model string `dd:",+nullable"`
+}
+
+// syntheticModel is the model claude code names on an assistant message it
+// wrote itself rather than a model, in the transcript and through the
+// history reader (capability report, 2026-11-15).
+const syntheticModel = "<synthetic>"
+
+// bookkeeping reports whether an assistant message is claude code's own
+// bookkeeping rather than speech: written by no model, and known from its
+// transcript not to be an api error. after an interrupted turn, claude
+// writes "No response requested." to its transcript this way, when the next
+// prompt reaches a resumed run; the live stream never delivers it, so only
+// an import meets it. an api error is also written by no model; it carries
+// its error, live and read back, and stays a reply. a message written by no
+// model whose transcript flag is unknown stays a reply too: shown, never
+// hidden.
+func (msg *sdkMessage) bookkeeping() bool {
+	return msg.Type == "assistant" && msg.Message != nil && msg.Message.Model == syntheticModel &&
+		msg.Error == "" && msg.IsAPIErrorMessage != nil && !*msg.IsAPIErrorMessage
 }
 
 type sdkBlock struct {
@@ -80,6 +111,10 @@ func mapMessage(raw map[string]any) ([]*model.Event, error) {
 		return nil, err
 	}
 	switch {
+	case msg.ParentToolUseID == "" && msg.bookkeeping():
+		// not speech: kept under the native toggle with its identity, as a
+		// meta user message is, so it is never output and never attention.
+		return []*model.Event{{Kind: model.EventNative, Text: "assistant/synthetic", NativeID: msg.UUID, Raw: raw}}, nil
 	case msg.Type == "assistant" && msg.ParentToolUseID == "":
 		return mapBlocks(msg, raw, assistantBlock)
 	case msg.Type == "user" && msg.ParentToolUseID == "" && (msg.IsMeta || msg.IsMetaCamel):

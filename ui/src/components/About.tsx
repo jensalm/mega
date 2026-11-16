@@ -60,8 +60,9 @@ export function AboutPanel({ about, newer, onClose }: { about: About; newer: boo
                 {status && !status.found && `Tested ${about.tested[h.value]}; cannot run: ${status.reason ?? ''}`}
                 {status?.found && (
                   <>
-                    {status.version ? `Version ${status.version}` : status.standing ? 'Version unknown' : 'Version not read yet'}; tested {status.tested}.
-                    {status.standing && status.standing !== 'tested' && <span className="notice-text"> {asSentence(status.note)}.</span>}
+                    {status.version ? `Version ${status.version}` : status.standing ? 'Version unknown' : 'Version not read yet'}; tested {status.tested}
+                    {status.standing === 'newer' ? ', so this build is newer.' : '.'}
+                    {(status.standing === 'older' || status.standing === 'unknown') && <span className="notice-text"> {asSentence(status.note)}.</span>}
                   </>
                 )}
               </dd>

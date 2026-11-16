@@ -23,15 +23,15 @@ func startedFacts(t *testing.T, r *rig, id string) *model.RuntimeFacts {
 }
 
 // a runtime's start records where its version stands against the tested
-// range, for the history's started line to mark: a tested version
-// unmarked, a newer and an older one with the range and the sentence, an
-// older more strongly; nothing is refused for its version.
+// range, for the history's started line: a tested version and a newer one,
+// the normal state, with no sentence; an older and an unreadable one with
+// it; nothing is refused for its version.
 func TestTheStartRecordsWhereTheVersionStands(t *testing.T) {
 	r := newRig(t)
 	tested := harness.Tested[model.HarnessClaude]
 	for _, c := range []struct{ version, standing, says string }{
 		{"2.1.320", harness.StandingTested, ""},
-		{"2.1.999", harness.StandingNewer, "is newer than the builds mega was tested with"},
+		{"2.1.999", harness.StandingNewer, ""},
 		{"2.1.100", harness.StandingOlder, "expects Claude Code '" + tested.Low + "' or later"},
 		{"fake", harness.StandingUnknown, "could not be read"},
 	} {
@@ -84,7 +84,7 @@ func TestTheStartUpCheckReadsVersions(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("harnesses = %+v", got)
 	}
-	if c := got[0]; !c.Found || c.Version != "2.1.330" || c.Standing != harness.StandingNewer || c.Tested != harness.Tested[model.HarnessClaude].String() || !strings.Contains(c.Note, "Claude Code '2.1.330' is newer") {
+	if c := got[0]; !c.Found || c.Version != "2.1.330" || c.Standing != harness.StandingNewer || c.Tested != harness.Tested[model.HarnessClaude].String() || c.Note != "" {
 		t.Errorf("claude = %+v", c)
 	}
 	if x := got[1]; !x.Found || x.Version != "" || x.Standing != harness.StandingUnknown || !strings.Contains(x.Note, "could not be read") {

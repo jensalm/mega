@@ -1,17 +1,30 @@
 import { asSentence, harnesses } from '../harnesses'
 import type { HarnessStatus } from '../types'
 
-// HarnessVersion says a found harness's version against its tested range:
-// tested, or the sentence for one outside it or unread. nothing is said
-// until the version has been read.
-function HarnessVersion({ status }: { status: HarnessStatus }) {
-  if (!status.standing) {
-    return null
+// needsLook is a found harness whose version needs the operator's look: one
+// older than the tested range, or one that could not be read. a newer build
+// is the normal state for a harness that updates itself, and is said plainly.
+const needsLook = (s: HarnessStatus) => s.standing === 'older' || s.standing === 'unknown'
+
+// Found says a harness that can run in a sentence: its build, where it was
+// found, and the range mega was tested with, in plain words; for one that
+// needs a look, the sentence saying why, in the notice colour. node and the
+// shim are the start-up log's to name.
+function Found({ status }: { status: HarnessStatus }) {
+  const at = `'${status.path ?? status.where ?? ''}'`
+  if (status.standing === 'tested' || status.standing === 'newer') {
+    const relation = status.standing === 'newer' ? 'newer than' : 'within'
+    return (
+      <>
+        can run: version {status.version}, at {at}, {relation} the {status.tested} mega was tested with.
+      </>
+    )
   }
-  if (status.standing === 'tested') {
-    return <span className="harness-version"> Version {status.version}, of the {status.tested} mega was tested with.</span>
-  }
-  return <span className="harness-version"> {asSentence(status.note)}.</span>
+  return (
+    <>
+      can run: at {at}.{needsLook(status) && <span className="harness-version"> {asSentence(status.note)}.</span>}
+    </>
+  )
 }
 
 // FirstRun is the empty workspace's page: what mega is for, the control to
@@ -36,9 +49,8 @@ export function FirstRun({ status }: { status: HarnessStatus[] | undefined }) {
               return null
             }
             return (
-              <li key={h.value} data-harness={h.value} className={s.found ? (s.standing && s.standing !== 'tested' ? 'found notice' : 'found') : 'missing notice'}>
-                <strong>{h.label}</strong> {s.found ? `can run: ${s.where ?? ''}.` : `cannot run: ${s.reason ?? ''}`}
-                {s.found && <HarnessVersion status={s} />}
+              <li key={h.value} data-harness={h.value} className={s.found ? (needsLook(s) ? 'found notice' : 'found') : 'missing notice'}>
+                <strong>{h.label}</strong> {s.found ? <Found status={s} /> : `cannot run: ${s.reason ?? ''}`}
               </li>
             )
           })}

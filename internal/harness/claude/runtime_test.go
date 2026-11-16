@@ -245,3 +245,66 @@ func TestAnswerFailsWhenTheRuntimeEnds(t *testing.T) {
 		t.Errorf("answer after exit: %v", err)
 	}
 }
+
+// an interrupted turn, read back through the shim's messages command: claude
+// code 2.1.319 wrote "No response requested." to the transcript as an
+// assistant message from the model "<synthetic>", and the shim adds the
+// transcript's isApiErrorMessage, false (recorded 2026-11-15 from the
+// claude-rt1 fixture, usage and diagnostics dropped). it is claude's
+// bookkeeping, a native event, and never a reply; the messages around it map
+// as before.
+func TestInterruptedTurnBookkeepingIsNative(t *testing.T) {
+	data, err := os.ReadFile("testdata/interrupted-history.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evs []*model.Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		r, sink, _ := testRuntime()
+		r.started = true
+		r.handle([]byte(`{"type":"event","msg":` + line + `}`))
+		evs = append(evs, sink.events...)
+	}
+	var synthetic *model.Event
+	for _, ev := range evs {
+		if ev.NativeID == "b54150b2-5f5f-4d74-ab50-cc94c577c0ed" {
+			synthetic = ev
+		}
+		if ev.Kind == model.EventAssistant && strings.Contains(ev.Text, "No response requested") {
+			t.Errorf("the bookkeeping is a reply: %+v", ev)
+		}
+	}
+	if synthetic == nil || synthetic.Kind != model.EventNative || synthetic.Text != "assistant/synthetic" {
+		t.Fatalf("the bookkeeping maps to %+v", synthetic)
+	}
+	replies := 0
+	for _, ev := range evs {
+		if ev.Kind == model.EventAssistant {
+			replies++
+		}
+	}
+	if replies != 1 || evs[len(evs)-1].Kind != model.EventAssistant || evs[len(evs)-1].Text != "BETA-START-9e1f" {
+		t.Errorf("the reply after it: %d replies, last %+v", replies, evs[len(evs)-1])
+	}
+}
+
+// an api error is also written by no model, and stays a reply the operator
+// reads: live, where it carries its error; read back, where the shim adds
+// the transcript's flags; and whenever the transcript could not say, since a
+// message of unknown kind is shown, never hidden.
+func TestAnAPIErrorStaysAReply(t *testing.T) {
+	const body = `"type":"assistant","uuid":"c0ffee00-0000-4000-8000-0000000000e1","session_id":"s","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Login reached its time limit"}]},"parent_tool_use_id":null`
+	for name, msg := range map[string]string{
+		"live":            `{` + body + `,"error":"authentication_failed"}`,
+		"read back":       `{` + body + `,"isApiErrorMessage":true,"error":"authentication_failed"}`,
+		"flag only":       `{` + body + `,"isApiErrorMessage":true}`,
+		"transcript gone": `{` + body + `}`,
+	} {
+		r, sink, _ := testRuntime()
+		r.started = true
+		r.handle([]byte(`{"type":"event","msg":` + msg + `}`))
+		if len(sink.events) != 1 || sink.events[0].Kind != model.EventAssistant {
+			t.Errorf("%s: events = %+v", name, sink.events)
+		}
+	}
+}

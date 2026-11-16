@@ -74,7 +74,7 @@ Each step prints `ok` or `FAIL`, and a run ends with a JSON summary, which is al
 
 A build is fit to add to a range when every step passed and the state checks found nothing changed.
 
-Claude Code's exact-id resume imports one event, "No response requested.", at every build seen. Claude writes it to the transcript after the interrupted turn. It is reported, not failed. Any other import, or one at the start without a prompt, is a finding.
+Claude Code's exact-id resume imports one event at every build seen: "No response requested.", which Claude writes to the transcript for the interrupted turn when the next prompt reaches a resumed run. mega maps it as a native event, "assistant/synthetic", so the step passes when the resume imports native events only. A reply imported there, or any import at the start without a prompt, is a finding.
 
 Each run directory holds `driver.out`, `summary.json`, `version.txt`, `state-before.txt` and `state-after.txt`. It also holds mega's own output in `mega.out` and its log in `xdg/state/mega/mega.log`; a warning about versions would show there. A Codex run's `adopt/` holds the second mega's run.
 

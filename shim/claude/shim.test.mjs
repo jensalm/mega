@@ -236,3 +236,63 @@ test('relays mcpServerStatus() verbatim, and its failure', async () => {
   h.send({ type: 'close' });
   assert.equal(await done, 0);
 });
+
+// messages passes on the transcript's isApiErrorMessage and error for each
+// message written by no model, which the sdk's reader drops, so the adapter
+// can tell claude's bookkeeping from an api error; one the transcript does
+// not hold gets nothing, and the rest are as the reader gives them.
+test('messages reads the api-error flags of synthetic messages from the transcript', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const config = mkdtempSync(join(tmpdir(), 'shim-transcript-'));
+  try {
+    const session = '11111111-2222-4333-8444-555555555555';
+    const synthetic = (uuid, text) => ({ type: 'assistant', uuid, session_id: session, message: { model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: null });
+    const reader = [
+      { type: 'user', uuid: 'u1', session_id: session, message: { role: 'user', content: 'hello' }, parent_tool_use_id: null },
+      synthetic('s-book', 'No response requested.'),
+      synthetic('s-err', 'Login reached its time limit'),
+      synthetic('s-gone', 'not in the transcript'),
+      synthetic('s-bare', 'in the transcript with no flag'),
+      synthetic('s-null', 'in the transcript with a null flag'),
+    ];
+    const transcript = [
+      { type: 'user', uuid: 'u1', message: { role: 'user', content: 'hello' } },
+      { type: 'assistant', uuid: 's-book', isApiErrorMessage: false, message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-err', isApiErrorMessage: true, error: 'authentication_failed', message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-bare', message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-null', isApiErrorMessage: null, message: { model: '<synthetic>', content: [] } },
+    ].map(e => JSON.stringify(e)).join('\n') + '\n';
+    const sdk = { getSessionMessages: async () => reader };
+    for (const folder of ['-work-checkout', 'another-folder']) {
+      rmSync(join(config, 'projects'), { recursive: true, force: true });
+      mkdirSync(join(config, 'projects', folder), { recursive: true });
+      writeFileSync(join(config, 'projects', folder, `${session}.jsonl`), transcript);
+      const h = harness();
+      h.io.env = { CLAUDE_CONFIG_DIR: config };
+      assert.equal(await main(['messages', '--session', session, '--cwd', '/work/checkout'], sdk, h.io), 0);
+      await new Promise(r => setImmediate(r));
+      const byId = Object.fromEntries(h.frames.map(f => [f.uuid, f]));
+      assert.equal(byId['s-book'].isApiErrorMessage, false, folder);
+      assert.equal(byId['s-book'].error, undefined, folder);
+      assert.equal(byId['s-err'].isApiErrorMessage, true, folder);
+      assert.equal(byId['s-err'].error, 'authentication_failed', folder);
+      assert.equal('isApiErrorMessage' in byId['s-gone'], false, folder);
+      // a transcript entry with no flag, or one that is not a boolean, is
+      // passed on with none, never as false.
+      assert.equal('isApiErrorMessage' in byId['s-bare'], false, folder);
+      assert.equal('isApiErrorMessage' in byId['s-null'], false, folder);
+      assert.equal('isApiErrorMessage' in byId.u1, false, folder);
+    }
+    // with no transcript at all, nothing is added.
+    rmSync(join(config, 'projects'), { recursive: true, force: true });
+    const h = harness();
+    h.io.env = { CLAUDE_CONFIG_DIR: config };
+    await main(['messages', '--session', session, '--cwd', '/work/checkout'], sdk, h.io);
+    await new Promise(r => setImmediate(r));
+    assert.equal(h.frames.some(f => 'isApiErrorMessage' in f), false);
+  } finally {
+    rmSync(config, { recursive: true, force: true });
+  }
+});

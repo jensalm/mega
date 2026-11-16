@@ -12,8 +12,12 @@
 //	                         marker token, with fixture.txt and the fixture MCP
 //	                         server in .codex/config.toml
 //
+// `make e2e` also reads them from e2e.local.mk, an optional, git-ignored
+// file of make assignments beside the Makefile, and passes on only those set.
+//
 // MEGA_E2E_NODE, MEGA_E2E_CLAUDE, MEGA_E2E_CODEX and the *_MODEL variables
-// override the executables and models used.
+// override the executables and models used. Claude Code defaults to what mega
+// runs by default, config.DefaultClaudeExecutable, found as mega finds it.
 //
 // TestEachProjectRunsInItsOwnEnvironment needs both fixtures and devprj on
 // the interactive shell's PATH. for its life it writes a scratch .devprj, a

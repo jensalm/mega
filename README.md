@@ -13,7 +13,7 @@ One Go binary serves the workspace and its UI on loopback. A small Node bridge (
 - Codex, installed whole: with npm, or from the release's `codex-package-<target>.tar.gz`. The release's lone `codex-<target>.tar.gz` lacks the helper programs Codex runs a shell command with, so mega refuses it. mega runs `codex` on your `PATH`, or wherever `codex.binary` says.
 - Your own Claude and Codex logins. mega uses them as they are and changes nothing in them.
 
-mega was tested with Claude Code 2.1.318 to 2.1.325, with the shim's pinned Agent SDK 0.3.318, and with Codex 0.163.0 to 0.169.0. These are its tested ranges. A build outside them still runs: the start-up log, the first page, `mega version` and the version panel say where each build stands, and a conversation's "Runtime started" line is marked when it runs one outside the range. A build older than the range is the likelier to fail, since the Agent SDK expects the Claude Code of its own patch or later.
+mega was tested with Claude Code 2.1.318 to 2.1.325, with the shim's pinned Agent SDK 0.3.318, and with Codex 0.163.0 to 0.169.0. These are its tested ranges. A build outside them still runs, and the start-up log, the first page, `mega version` and the version panel say where each build stands. Claude Code updates itself every day or two, so a build newer than the range is the normal state, and is said plainly. A build older than the range is the likelier to fail, since the Agent SDK expects the Claude Code of its own patch or later. It is marked wherever versions are shown, and on a conversation's "Runtime started" line.
 
 ## Build and run from source
 
@@ -36,6 +36,15 @@ make checks           # every suite; make checks SUITE=requests runs one
 ```
 
 `make checks` fails, saying so, when that browser is missing. `checks/README.md` says what each suite covers and how to add one.
+
+`make e2e` runs the harness round trips in `internal/e2e` against the real Claude Code and Codex, with your own logins, in two disposable fixture checkouts; `internal/e2e/doc.go` says what each holds. They cost model turns and are run by hand. Each takes its fixture from `MEGA_E2E_CLAUDE_FIXTURE` or `MEGA_E2E_CODEX_FIXTURE` and is skipped when that is unset. To avoid typing them, put them in `e2e.local.mk` beside the `Makefile`, which git ignores:
+
+```make
+MEGA_E2E_CLAUDE_FIXTURE ?= /path/to/claude-rt1
+MEGA_E2E_CODEX_FIXTURE ?= /path/to/codex-rt1
+```
+
+A value in the environment still wins over the file.
 
 Configuration is optional, in `~/.config/mega/mega.yaml`:
 

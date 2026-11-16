@@ -118,11 +118,17 @@ await p.run(async () => {
   await p.turnEnd(id, seq, 'the resumed turn')
   await p.expectReply(id, 'ROUNDHOUSE-MARKER-7f3a', 'ALPHA-1a2b', 'DELTA-7a8b', 'SDK-RETURN-c3d4')
   await p.sameSession(id, session, 'the exact-id resume')
-  // an import here is reported, not failed: after an interrupt, Claude
-  // writes "No response requested." to its transcript, and the next resume
-  // imports it at every build seen (capability report, 2026-11-14).
+  // after the interrupt, claude writes "No response requested." to its
+  // transcript when the next prompt reaches a resumed run, and the live
+  // stream never delivers it, so this resume imports it at every build seen.
+  // mega maps it as a native event, "assistant/synthetic", never a reply
+  // (capability report, 2026-11-15): anything but native events here is a
+  // finding.
   const resumeImports = await p.imports(id, seq)
-  check(true, `the exact-id resume imported ${resumeImports.length}${resumeImports.length ? `: ${resumeImports.map((e) => `${e.kind} "${e.text}"`).join('; ')}` : ''}`)
+  check(
+    resumeImports.every((e) => e.kind === 'native'),
+    `the exact-id resume imported only native events, no reply: ${resumeImports.length}${resumeImports.length ? `: ${resumeImports.map((e) => `${e.kind} "${e.text}"`).join('; ')}` : ''}`,
+  )
   summary.imports.resume = resumeImports
 
   // every turn's line.

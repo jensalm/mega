@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/michaelquigley/mega/internal/config"
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/claude"
 	"github.com/michaelquigley/mega/internal/model"
@@ -324,18 +325,103 @@ func TestClaudeRoundTrip(t *testing.T) {
 	t.Logf("session %s", conv.NativeID)
 }
 
-// newClaudeHarness runs the real shim and the pinned claude code.
+// TestClaudeInterruptedTurnImportsNoReply interrupts a turn with an approval
+// pending, which is never answered, then releases, prompts a resumed run and
+// releases again. claude writes "No response requested." to its transcript
+// for the interrupted turn in that resumed run, and the live stream never
+// delivers it, so the next resume's import meets it: it must come in as a
+// native event, not a reply, and raise no unread output.
+func TestClaudeInterruptedTurnImportsNoReply(t *testing.T) {
+	fixture := fixture(t, "MEGA_E2E_CLAUDE_FIXTURE")
+	h := newClaudeHarness(t)
+	svc := newE2EService(t, h)
+	project, err := svc.RegisterProject("claude-rt1", fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv, err := svc.StartConversation(project.ID, model.HarnessClaude, "e2e interrupt", markerPrompt, service.LaunchChoice{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &session{t: t, svc: svc, id: conv.ID}
+	s.idle()
+	s.expectReply("ROUNDHOUSE-MARKER-7f3a", "ALPHA-1a2b")
+
+	// the approval is asserted, never answered, and the turn interrupted.
+	s.prompt(approvalPrompt)
+	approval := s.expectApproval(approvalWant{tool: "Bash", command: "sleep 3"})
+	if err := svc.Interrupt(s.id); err != nil {
+		t.Fatal(err)
+	}
+	s.waitFor("the turn to end", func(v service.ConversationView) bool { return !v.TurnActive && len(v.Pending) == 0 })
+	if code := s.answer(approval.ID, "allow"); code != service.CodeNotPending {
+		t.Errorf("an answer after the interrupt: %q", code)
+	}
+	if err := svc.Release(s.id); err != nil {
+		t.Fatal(err)
+	}
+	s.waitFor("the runtime to exit", func(v service.ConversationView) bool { return v.State == model.RuntimeNone })
+
+	// claude writes its bookkeeping for the interrupted turn into the
+	// transcript when the next prompt reaches a run that resumed the session,
+	// and the live stream never delivers it. a prompt resumes the session
+	// here, and a release ends that run.
+	s.prompt("Reply with the word BETA-START-9e1f. Nothing else.")
+	s.idle()
+	s.expectReply("BETA-START-9e1f")
+	if err := svc.Release(s.id); err != nil {
+		t.Fatal(err)
+	}
+	s.waitFor("the runtime to exit again", func(v service.ConversationView) bool { return v.State == model.RuntimeNone })
+
+	// read to here, so any unread output is the import's.
+	before, err := svc.Events(s.id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Read(s.id, before[len(before)-1].Seq); err != nil {
+		t.Fatal(err)
+	}
+	outputBefore := s.view().OutputSeq
+	if err := svc.Resume(s.id); err != nil {
+		t.Fatal(err)
+	}
+	after, err := svc.Events(s.id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	synthetic := 0
+	for _, ev := range after[len(before):] {
+		t.Logf("imported: %s %s %q", ev.Kind, ev.NativeID, ev.Text)
+		switch {
+		case ev.Kind == model.EventAssistant:
+			t.Errorf("the import brought in a reply: %s %q", ev.NativeID, ev.Text)
+		case ev.Kind == model.EventNative && ev.Text == "assistant/synthetic":
+			synthetic++
+		}
+	}
+	if synthetic != 1 {
+		t.Errorf("the import brought in %d synthetic events, want claude's one for the interrupted turn", synthetic)
+	}
+	if v := s.view(); v.OutputSeq != outputBefore {
+		t.Errorf("the import raised unread output: %d, was %d", v.OutputSeq, outputBefore)
+	}
+	shutdown(t, svc, s)
+}
+
+// newClaudeHarness runs the real shim and the claude code mega runs by
+// default (config.DefaultClaudeExecutable), found as mega finds it, or the
+// one MEGA_E2E_CLAUDE names.
 func newClaudeHarness(t *testing.T) *claude.Harness {
 	t.Helper()
 	shim, err := filepath.Abs(filepath.Join("..", "..", "shim", "claude"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	home, _ := os.UserHomeDir()
 	return claude.New(claude.Config{
 		Node:       env("MEGA_E2E_NODE", "node"),
 		Shim:       shim,
-		Executable: env("MEGA_E2E_CLAUDE", filepath.Join(home, ".local", "share", "claude", "versions", "2.1.318")),
+		Executable: env("MEGA_E2E_CLAUDE", config.DefaultClaudeExecutable),
 	})
 }
 

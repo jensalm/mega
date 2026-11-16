@@ -1,5 +1,4 @@
 building:
-  - harness-version-tolerance.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -19,10 +18,10 @@ horizon:
   - container-environments.md
   - codex-live-attach.md
 researching:
+  - an-interrupted-turn-imports-no-response-requested.md
   - harness-configuration-backups.md
   - pi-adapter.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
-  - an-interrupted-turn-imports-no-response-requested.md
   - hotkey-for-allow.md
   - action-view-improvements.md
   - conversation-timestamps.md
@@ -38,6 +37,7 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - harness-version-tolerance.md
   - a-send-from-above-sometimes-stays-where-it-was.md
   - the-newest-line-hides-under-the-dock.md
   - an-external-operator-can-install-mega.md

@@ -98,7 +98,7 @@ func start(cfg *config.Config) (*instance, error) {
 		listener.Close()
 		return nil, err
 	}
-	claudeHarness := claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where()})
+	claudeHarness := claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where(), FileRead: cfg.FileRead})
 	svc, err := service.New(reg, service.Options{
 		IsUntrusted:  untrustedChecker(),
 		EventLogPath: cfg.EventLogPath,

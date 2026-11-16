@@ -55,7 +55,7 @@ func shimHarness(t *testing.T, executable string) *Harness {
 	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return New(Config{Node: "/bin/true", Shim: shim, Executable: executable, Where: "in '/c/mega.yaml', the config file mega read"})
+	return New(Config{Node: "/bin/true", Shim: shim, Executable: executable, Where: "in '/c/mega.yaml', the config file mega read", FileRead: true})
 }
 
 // the default, the bare name claude, is found on the PATH mega uses, as the
@@ -142,6 +142,18 @@ func TestAPrunedVersionedPathNamesTheBuildsBesideIt(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "install Claude Code") {
 		t.Errorf("says to install what is installed: %v", err)
+	}
+	// with no config file read, nothing named the path there to remove: the
+	// refusal says only what to use in its place.
+	unread := shimHarness(t, pinned)
+	unread.cfg.Where, unread.cfg.FileRead = "in '/c/mega.yaml', a config file mega looked for and did not find, so create it", false
+	err = unread.Check(os.Environ())
+	if !stdErrors.As(err, &missing) {
+		t.Fatalf("pruned, no file: %v", err)
+	}
+	want = fmt.Sprintf("'%s' is not installed; the builds installed beside it are 2.1.325, 2.1.322. to follow the installed Claude Code, use claude in its place; or name one of those builds", pinned)
+	if missing.Reason != want {
+		t.Errorf("no file: got  %q\nwant %q", missing.Reason, want)
 	}
 	// with nothing beside it, installing is the advice.
 	alone := filepath.Join(t.TempDir(), "versions", "2.1.318")

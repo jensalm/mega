@@ -51,6 +51,7 @@ type harnessStatusView struct {
 	Name     string
 	Found    bool
 	Where    string `dd:",+omitempty"`
+	Path     string `dd:",+omitempty"`
 	Reason   string `dd:",+omitempty"`
 	Version  string `dd:",+omitempty"`
 	Tested   string `dd:",+omitempty"`
@@ -59,7 +60,7 @@ type harnessStatusView struct {
 }
 
 func newHarnessStatusView(h service.HarnessStatus) *harnessStatusView {
-	return &harnessStatusView{Name: h.Name, Found: h.Found, Where: h.Where, Reason: h.Reason, Version: h.Version, Tested: h.Tested, Standing: h.Standing, Note: h.Note}
+	return &harnessStatusView{Name: h.Name, Found: h.Found, Where: h.Where, Path: h.Path, Reason: h.Reason, Version: h.Version, Tested: h.Tested, Standing: h.Standing, Note: h.Note}
 }
 
 // shutdownView is the "shut down when idle" gate: whether it is armed, since

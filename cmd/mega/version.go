@@ -46,7 +46,7 @@ func printHarnesses() {
 	harnesses := []harness.Harness{}
 	if err == nil {
 		harnesses = append(harnesses,
-			claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where()}),
+			claude.New(claude.Config{Node: cfg.Claude.Node, Shim: cfg.Claude.Shim, Executable: cfg.Claude.Executable, Where: cfg.Where(), FileRead: cfg.FileRead}),
 			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}))
 	}
 	fmt.Println("harnesses, as tested and as found in mega's own environment:")
@@ -81,8 +81,11 @@ func found(h harness.Harness) string {
 		version, _ = v.Version(context.Background(), find)
 	}
 	standing, note := harness.Stand(h.Name(), version)
-	if standing == harness.StandingTested {
+	switch standing {
+	case harness.StandingTested:
 		return fmt.Sprintf("found '%s', %s", version, where)
+	case harness.StandingNewer:
+		return fmt.Sprintf("found '%s', newer, %s", version, where)
 	}
 	return fmt.Sprintf("found %s; %s", where, note)
 }
