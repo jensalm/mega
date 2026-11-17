@@ -1,6 +1,6 @@
 ---
 title: an external operator can install mega
-state: researching
+state: evaluating
 created: 2026-11-13
 tags: [epic]
 ---

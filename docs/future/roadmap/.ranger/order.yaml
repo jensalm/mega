@@ -18,11 +18,8 @@ horizon:
   - container-environments.md
   - codex-live-attach.md
 researching:
-  - the-demo.md
   - agent-hand-off-turns.md
   - imported-turns-carry-their-own-times.md
-  - remote-access-through-zrok.md
-  - an-external-operator-can-install-mega.md
   - clean-machine-rehearsal.md
   - mega-on-macos-and-windows.md
   - mega-on-twentytwo.md
@@ -32,6 +29,7 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - an-external-operator-can-install-mega.md
   - readme-for-newcomers.md
   - which-mega-is-this.md
   - a-large-named-directory-starves-the-path-search.md
