@@ -1,6 +1,6 @@
 ---
 title: mega on macos and windows
-state: building
+state: researching
 created: 2026-11-13
 tags: [story, spike]
 ---

@@ -1,5 +1,4 @@
 building:
-  - mega-on-macos-and-windows.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -27,6 +26,7 @@ researching:
   - codex-approval-policy.md
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
+  - mega-on-macos-and-windows.md
 evaluating:
   - agent-hand-off-turns.md
   - an-external-operator-can-install-mega.md
