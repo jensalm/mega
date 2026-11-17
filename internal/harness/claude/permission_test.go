@@ -162,7 +162,7 @@ func launchArgsFor(t *testing.T, h *Harness, spec harness.Spec) []string {
 	if err := os.WriteFile(node, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+out+".tmp && mv "+out+".tmp "+out+"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	h.cfg.Node, h.cfg.Shim, h.cfg.Executable = node, shim, "/bin/true"
+	h.cfg.Node, h.cfg.Shim, h.cfg.Executable = node, shim, truePath(t)
 	if _, err := h.Launch(spec, &recordingSink{}); err != nil {
 		t.Fatal(err)
 	}
