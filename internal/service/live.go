@@ -34,6 +34,10 @@ type ConversationView struct {
 	// TurnStartedAt is when the turn in flight began, from memory; zero when
 	// no turn is active.
 	TurnStartedAt time.Time
+	// InstructedAt is when the operator last instructed the conversation,
+	// the time of the newest prompt mega sent it; zero when none was. it is
+	// a fact about the operator, never attention.
+	InstructedAt time.Time
 	// PendingAt is when each pending request was recorded, by request id: its
 	// request event's own time, held in memory beside the pending set.
 	PendingAt map[string]time.Time
@@ -131,6 +135,21 @@ type live struct {
 
 	// outputAt is when the conversation's OutputSeq event was recorded.
 	outputAt time.Time
+
+	// instructedAt is when the operator last instructed the conversation:
+	// the time of the newest prompt mega sent it, a launch's opening one or
+	// any after. the prompt's own event is the record; this is read from the
+	// log as it is opened (instructs) and moved as send records a prompt.
+	// zero when none was ever sent through mega.
+	instructedAt time.Time
+}
+
+// instructs reports whether an event in the log is a prompt mega sent: a
+// user event mega recorded itself, which carries no harness payload. a
+// prompt a harness reported, live or imported, carries its own and does not
+// count; an imported one's time is when mega imported it.
+func instructs(ev *model.Event) bool {
+	return ev.Kind == model.EventUser && ev.Origin == model.OriginManaged && ev.Raw == nil
 }
 
 // incarnation tells one runtime's callbacks from a later runtime's, so a late
@@ -183,6 +202,9 @@ func (s *Service) liveLocked(conversationID string) (*live, error) {
 		}
 		if ev.Seq == outputSeq {
 			l.outputAt = ev.At
+		}
+		if instructs(ev) {
+			l.instructedAt = ev.At
 		}
 	}
 	s.live[conversationID] = l
@@ -311,6 +333,7 @@ func (s *Service) viewLocked(conv model.Conversation) ConversationView {
 	if l.turnActive {
 		view.TurnStartedAt = l.turnStartedAt
 	}
+	view.InstructedAt = l.instructedAt
 	// a copy, so a reader of the view can never change the service's facts.
 	view.Facts = cloneFacts(l.facts)
 	if l.runtime != nil && view.Facts != nil {

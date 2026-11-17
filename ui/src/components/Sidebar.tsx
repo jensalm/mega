@@ -8,6 +8,8 @@ import { waitingLabel, type Waiting } from '../waiting'
 import { treeGroups } from '../tree'
 import type { About, Conversation, Project, ShutdownGate } from '../types'
 import { AttentionMark, BackgroundLabel, Elapsed, ProjectMark } from './AttentionMark'
+import { LastInstructed } from './LastInstructed'
+import { lastInstructed } from '../instructed'
 import { FooterGate } from './Gate'
 import { Icon, IconButton } from './Icon'
 import { missingReason } from '../checkout'
@@ -97,6 +99,8 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
+  // where the operator left off in each project; not attention.
+  const leftOff = lastInstructed(conversations)
   const projectItem = (project: Project) => {
     const inProject = conversations.filter((conversation) => conversation.project_id === project.id)
     const folded = isFolded(foldState, project)
@@ -144,6 +148,7 @@ export function Sidebar(props: SidebarProps) {
                 >
                   <AttentionMark conversation={conversation} stale={stale} />
                   <span className="tree-label">{conversation.name}</span>
+                  {leftOff.has(conversation.id) && <LastInstructed conversation={conversation} />}
                   <Elapsed conversation={conversation} />
                   <BackgroundLabel conversation={conversation} />
                   {conversation.label && <span className="tag">{conversation.label}</span>}

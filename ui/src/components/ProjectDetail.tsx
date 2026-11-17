@@ -4,6 +4,8 @@ import { removeProject, renameProject } from '../api'
 import type { Conversation, Project } from '../types'
 import { AttentionMark } from './AttentionMark'
 import { EnvironmentSection } from './EnvironmentSection'
+import { LastInstructed } from './LastInstructed'
+import { lastInstructed } from '../instructed'
 import { IconButton } from './Icon'
 
 interface ProjectDetailProps {
@@ -28,6 +30,8 @@ export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt
   // conversations whose runtime is in any state other than none; the service
   // refuses the removal while any remains.
   const unsettled = conversations.filter((conversation) => conversation.state !== 'none')
+  // where the operator left off here; not attention.
+  const leftOff = lastInstructed(conversations)
 
   const attempt = async (action: () => Promise<unknown>) => {
     setError(null)
@@ -97,6 +101,7 @@ export function ProjectDetail({ project, conversations, stale, onLaunch, onAdopt
                 >
                   <AttentionMark conversation={conversation} stale={stale} />
                   <span className="tree-label">{conversation.name}</span>
+                  {leftOff.has(conversation.id) && <LastInstructed conversation={conversation} />}
                   <span className="muted">{conversation.harness}</span>
                 </button>
               </li>

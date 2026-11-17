@@ -20,7 +20,11 @@
 // carried over; the build's label and panel, with each harness's tested
 // range and the version found, and when the newest configuration snapshot
 // was taken and where, and a page older than the
-// service saying so without reloading; and every control named. and the
+// service saying so without reloading; and every control named. and where
+// the operator left off: the glyph on the conversation last instructed in
+// each project, moved by a prompt and by nothing an agent does, titled with
+// when, on the project page too, never on the rail, and passed on when its
+// conversation is removed; saved as shots/last-instructed.png. and the
 // mega's name: in the tab title, the footer beside the connection status,
 // the rail's title and the version panel, first as the config names it,
 // side-check, then by default, the machine's hostname, which the steps
@@ -31,7 +35,7 @@ import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
 
 const t = await suite('side', { megaName: 'side-check' })
-const { url, check, until, api, convOf, workspace } = t
+const { url, check, must, until, api, convOf, workspace } = t
 
 // projects whose names test the order: two that differ only in case, and one
 // whose checkout goes missing.
@@ -371,6 +375,77 @@ await page.unroute('**/api/workspace')
 await api('PATCH', `/api/projects/${Alpha.id}`, { starred: false })
 await until('Live again', async () => (await status.textContent()) === 'Live')
 check(true, 'a read with the same interface as the page says Live again')
+
+// where the operator left off: in each project, the conversation he last
+// instructed carries a small muted glyph after its name. a prompt moves it;
+// an agent's own reply and an answered request do not. its title says when,
+// in the service's zone. it is not on the rail, which is attention only.
+// when the marked conversation is removed, the next most recently
+// instructed one in its project takes it.
+if ((await rail.count()) === 1) await page.getByRole('button', { name: /^Expand the side panel/ }).click()
+const one = await reg('left-off-one')
+const two = await reg('left-off-two')
+const asker = (await t.launch(one.id, 'claude', 'ask', { name: 'planner' })).id
+const helper = (await t.launch(one.id, 'claude', 'echo\nhello', { name: 'helper' })).id
+const waker = (await t.launch(one.id, 'claude', 'background 1 6000', { name: 'implementer' })).id
+const reviewer = (await t.launch(two.id, 'claude', 'echo\nhello', { name: 'reviewer' })).id
+await until('the four launched', async () => (await convOf(asker)).pending.length === 1)
+for (const id of [helper, waker, reviewer]) await t.idle(id)
+// where the implementer's history stood before its background job wakes it.
+const wakerBefore = (await convOf(waker)).last_seq
+for (const name of ['left-off-one', 'left-off-two']) {
+  if ((await row(name).locator('.fold').getAttribute('aria-expanded')) === 'false') await row(name).locator('.fold').click()
+}
+const marked = async (name) => children(name).filter({ has: page.locator('.last-instructed') }).locator('.tree-label').allTextContents()
+await until('the markers', async () => (await marked('left-off-one')).length === 1 && (await marked('left-off-two')).length === 1)
+check(
+  (await marked('left-off-one')).join() === 'implementer' && (await marked('left-off-two')).join() === 'reviewer',
+  `one marker in each project, on the conversation last instructed: ${JSON.stringify([await marked('left-off-one'), await marked('left-off-two')])}`,
+)
+const helperRow = children('left-off-one').filter({ hasText: 'helper' })
+check((await api('POST', `/api/conversations/${helper}/prompt`, { text: 'echo\nagain' })).status === 202, 'another conversation in the project is prompted')
+await until('the marker moved', async () => (await marked('left-off-one')).join() === 'helper')
+check((await marked('left-off-two')).join() === 'reviewer', 'the marker moves to it, and the other project keeps its own')
+const glyph = helperRow.locator('.last-instructed')
+const order = await helperRow.evaluate((r) => [...r.children].map((e) => e.className.split(' ')[0]))
+check(order.indexOf('last-instructed') === order.indexOf('tree-label') + 1, `the glyph follows the name: ${JSON.stringify(order)}`)
+// an agent's own turn, nobody's prompt: the implementer's background job
+// finishes and wakes it; and the planner's request answered. neither moves
+// the marker. the request is denied: allowing it is not what this is about.
+await until('the implementer woke on its own', async () => (await convOf(waker)).last_seq > wakerBefore && !(await convOf(waker)).turn_active, 20000)
+const plannerAsk = (await convOf(asker)).pending[0]
+must(plannerAsk.kind === 'permission' && plannerAsk.payload.input?.command === 'echo fake', 'the planner waits on the fake\'s Bash call')
+await api('POST', `/api/conversations/${asker}/answer`, { request_id: plannerAsk.id, decision: 'deny' })
+await until('the planner answered', async () => (await convOf(asker)).pending.length === 0)
+await page.waitForTimeout(500)
+check((await marked('left-off-one')).join() === 'helper', 'an agent\'s own turn and an answered request leave the marker where it was')
+const ws = await workspace()
+const helperAt = (await convOf(helper)).instructed_at
+const want = await page.evaluate(([at, zone]) => new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', timeZone: zone }).format(new Date(at)), [helperAt, ws.time_zone])
+check(
+  (await glyph.getAttribute('title')) === `You last instructed this conversation in its project, at ${want}` && (await glyph.getAttribute('aria-label')) === (await glyph.getAttribute('title')),
+  `its title says when, in the service's zone: "${await glyph.getAttribute('title')}"`,
+)
+await row('left-off-one').locator('xpath=..').screenshot({ path: `${t.dir}/shots/last-instructed.png` })
+// the project's page lists the same marker.
+await page.evaluate((id) => {
+  location.hash = `#/p/${id}`
+}, one.id)
+const listed = page.locator('.conversation-list .tree-item', { has: page.locator('.last-instructed') })
+await until('the project page', async () => (await listed.count()) === 1)
+check((await listed.locator('.tree-label').textContent()) === 'helper', 'the project page marks the same conversation')
+// not on the rail.
+await page.getByRole('button', { name: /^Collapse the side panel/ }).click()
+await rail.waitFor()
+check((await rail.locator('.last-instructed').count()) === 0, 'the rail shows no marker: it is attention only')
+await page.getByRole('button', { name: /^Expand the side panel/ }).click()
+// the marked conversation removed: the next most recently instructed one
+// in the project, the implementer, takes the marker.
+await api('POST', `/api/conversations/${helper}/release`)
+await until('the helper released', async () => (await convOf(helper)).state === 'none')
+check((await api('DELETE', `/api/conversations/${helper}`)).status === 204, 'the marked conversation is removed')
+await until('the marker passed on', async () => (await marked('left-off-one')).join() === 'implementer')
+check(true, 'the next most recently instructed conversation in the project takes the marker')
 
 // every control in the panel and on the rail, past the tree's own rows,
 // names itself in a title and a label.

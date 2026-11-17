@@ -1,4 +1,5 @@
 building:
+  - agent-hand-off-turns.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -18,7 +19,6 @@ horizon:
   - container-environments.md
   - codex-live-attach.md
 researching:
-  - agent-hand-off-turns.md
   - imported-turns-carry-their-own-times.md
   - clean-machine-rehearsal.md
   - mega-on-macos-and-windows.md

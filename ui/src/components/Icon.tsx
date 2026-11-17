@@ -38,6 +38,7 @@ import verticalAlignTop from '@material-design-icons/svg/filled/vertical_align_t
 import visibility from '@material-design-icons/svg/filled/visibility.svg?raw'
 import refresh from '@material-design-icons/svg/filled/refresh.svg?raw'
 import taskAlt from '@material-design-icons/svg/filled/task_alt.svg?raw'
+import west from '@material-design-icons/svg/filled/west.svg?raw'
 import visibilityOff from '@material-design-icons/svg/filled/visibility_off.svg?raw'
 import save from '@material-design-icons/svg/filled/save.svg?raw'
 import info from '@material-design-icons/svg/outlined/info.svg?raw'
@@ -53,6 +54,7 @@ const icons = {
   visibility_off: visibilityOff,
   task_alt: taskAlt,
   refresh,
+  west,
   add_comment: addComment,
   arrow_downward: arrowDownward,
   arrow_upward: arrowUpward,

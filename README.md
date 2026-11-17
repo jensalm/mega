@@ -11,7 +11,7 @@ build your constellation. mega is where a solo operator runs an orienteering pra
 ### What you need
 
 - **Linux.** It is what mega is built and used on; see [Platforms](#platforms).
-- **git, Go 1.27.1 or later, and Node 24**, to build mega. Go's and Node's own pages say how to install them: [go.dev/doc/install](https://go.dev/doc/install), [nodejs.org/en/download](https://nodejs.org/en/download).
+- **git, Go 1.27.4 or later, and Node 24**, to build mega. Go's and Node's own pages say how to install them: [go.dev/doc/install](https://go.dev/doc/install), [nodejs.org/en/download](https://nodejs.org/en/download).
 - **At least one harness**, installed and logged in as you:
   - **Claude Code**, tested with 2.1.318 to 2.1.325. It updates itself, and a newer build is the normal state.
   - **Codex**, tested with 0.163.0 to 0.169.0, installed whole.
@@ -157,7 +157,6 @@ The launcher runs `mega daemon` through your interactive shell, from wherever th
 
 ## More
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md): building and testing mega, the browser checks, the harness round trips and the probes.
 - [`docs/current/mega.md`](docs/current/mega.md) describes the system as built, in full.
 - [`docs/future/mega.md`](docs/future/mega.md) is the design it grows toward, and `docs/future/roadmap/` holds the items on the way.
 - [`docs/research/harness-capabilities.md`](docs/research/harness-capabilities.md) records what each harness was observed to do, with versions.

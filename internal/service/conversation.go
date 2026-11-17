@@ -537,6 +537,7 @@ func (s *Service) send(conversationID, text string) error {
 		return err
 	}
 	s.beginTurnLocked(l, ev.At)
+	l.instructedAt = ev.At
 	s.changed()
 	rt := l.runtime
 	s.mu.Unlock()

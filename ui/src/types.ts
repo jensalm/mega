@@ -140,6 +140,9 @@ export interface Conversation {
   // when the turn in flight began, from the service's memory; absent when no
   // turn is in flight.
   turn_started_at?: string
+  // when the operator last instructed it, with a prompt sent through mega;
+  // absent when none was. a fact about the operator, never attention.
+  instructed_at?: string
   attention: Attention
   read_seq: number
   last_seq: number

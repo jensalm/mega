@@ -623,3 +623,23 @@ func TestPreflightOnTheWire(t *testing.T) {
 		t.Errorf("prompt: %d %v", status, body)
 	}
 }
+
+// instructed_at is when the operator last sent the conversation a prompt
+// through mega, on every read of it, and stays after the turn ends.
+func TestInstructedAtOnTheWire(t *testing.T) {
+	f := start(t)
+	_, project := f.do(t, http.MethodPost, "/api/projects", createBody("p", f.checkout))
+	_, conv := f.do(t, http.MethodPost, "/api/projects/"+project["id"].(string)+"/conversations", jsonBody(map[string]string{"harness": "claude", "prompt": "one"}))
+	id := conv["id"].(string)
+	rt := f.fake.Last()
+	rt.Emit(&model.Event{Kind: model.EventRuntime, Status: model.StatusStarted, Facts: &model.RuntimeFacts{Session: rt.NativeID()}})
+	got := f.conversation(t, id)
+	at, _ := got["instructed_at"].(string)
+	if parsed, err := time.Parse(time.RFC3339Nano, at); err != nil || time.Since(parsed) > time.Minute {
+		t.Fatalf("after the launch: instructed_at %v (%v)", got["instructed_at"], err)
+	}
+	rt.Emit(&model.Event{Kind: model.EventTurnEnd, Status: model.TurnSuccess})
+	if got := f.conversation(t, id); got["instructed_at"] != at || got["turn_active"] == true {
+		t.Errorf("after the turn: instructed_at %v, was %v; turn active %v", got["instructed_at"], at, got["turn_active"])
+	}
+}

@@ -25,10 +25,13 @@ type conversationView struct {
 	TurnActive bool
 	// TurnStartedAt is when the turn in flight began; absent when none is.
 	TurnStartedAt time.Time `dd:",+omitempty"`
-	Attention     string
-	ReadSeq       int64
-	LastSeq       int64
-	OutputSeq     int64
+	// InstructedAt is when the operator last instructed the conversation,
+	// with a prompt sent through mega; absent when none was.
+	InstructedAt time.Time `dd:",+omitempty"`
+	Attention    string
+	ReadSeq      int64
+	LastSeq      int64
+	OutputSeq    int64
 	// Model, Version and PermissionMode are what the running harness last
 	// reported; absent with no runtime.
 	Model          string `dd:",+omitempty"`
@@ -93,6 +96,7 @@ func newConversationView(conv service.ConversationView) *conversationView {
 		State:         conv.State,
 		TurnActive:    conv.TurnActive,
 		TurnStartedAt: conv.TurnStartedAt,
+		InstructedAt:  conv.InstructedAt,
 		Attention:     conv.Attention,
 		ReadSeq:       conv.ReadSeq,
 		LastSeq:       conv.LastSeq,

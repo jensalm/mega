@@ -2,13 +2,15 @@
 
 ## Unreleased
 
+FEATURE: **The side panel marks where you left off in each project.** (2026-11-17) In each project, the conversation you last sent a prompt to carries a small muted arrow after its name, pointing at it, in the side panel and on the project's page. Pointing at it says when. A new prompt moves it. Nothing an agent does moves it, and nor does answering a request, starting a runtime or changing a mode. It is not attention: it raises nothing, counts nothing and reorders nothing, and the rail does not show it. It survives a restart, and a conversation you already had shows it from its last prompt through mega.
+
 CHANGE: **The README is written for someone trying mega for the first time.** (2026-11-16) It opens with what mega is and a picture of a workspace. It then walks from what you need to a first conversation:
 - installing and logging in to each harness, by its vendor's own instructions;
 - Claude Code's trust dialog;
 - the Go bin directory on your `PATH`, and keeping the clone where it was built;
 - registering a project.
 
-It says plainly what to expect, which platforms have been tried, and what mega shows when something is wrong and what to do. Its configuration example is safe to copy whole. What only someone working on mega needs (the browser checks, the harness round trips, the probes, `make clean`'s details and the dependency audit notes) moved to `CONTRIBUTING.md`.
+It says plainly what to expect, which platforms have been tried, and what mega shows when something is wrong and what to do. Its configuration example is safe to copy whole. What only someone working on mega needs (the browser checks, the harness round trips, the probes, `make clean`'s details and the dependency audit notes) left the README. The browser checks are described in `checks/README.md` and each probe beside its own code.
 
 FIX: **The mega's name stays whole in the side panel's footer.** (2026-11-16) With a long status such as "Shut down from here, retrying", the name was the first thing cut short. Now the status wraps and the version gives way first.
 

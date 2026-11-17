@@ -921,6 +921,20 @@ dialog .actions {
 }
 
 /* how long a turn in flight has run, beside a name. */
+/* where the operator left off in a project: a small muted glyph after the
+   name of the conversation he last instructed, at the row's text size. it
+   is not attention, so it takes nothing from the attention marks. */
+.last-instructed {
+  color: var(--muted);
+  display: inline-flex;
+  flex: none;
+}
+
+.last-instructed .icon svg {
+  height: 1.05em;
+  width: 1.05em;
+}
+
 .elapsed {
   color: var(--muted);
   flex: none;

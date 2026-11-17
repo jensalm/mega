@@ -165,7 +165,7 @@ Where things go:
   - with the footer's longest status, "Shut down from here, retrying", the mega's name beside it shown whole, saved as `shots/foot-shut-down.png`;
   - both pages recovering when the service returns.
 
-- **`side.mjs`** (57 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
+- **`side.mjs`** (68 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
   - projects sorted by name ignoring case, the id breaking a tie, and starred first in their own group;
   - project rows bolder than their conversations;
   - folds: a starred project unfolded and any other folded until the operator chooses; his choice kept across a reload and outlasting a star or an unstar; navigation by the needs-you list or Ctrl+/ unfolding without recording a choice; the old folded list carried over as folded choices; a removed project's choice forgotten; a folded project keeping its rollup mark;
@@ -177,6 +177,13 @@ Where things go:
   - project removal refused while a runtime lives and naming it, then deleting the project's logs;
   - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, with each harness's tested range and the version found (the fake Codex's inside its range, the stand-in Claude Code's unknown and said so, in the notice colour), and when the newest configuration snapshot was taken and where the snapshots are, with nothing of what one holds, the rail's control, and a page older than the service saying so where the connection status is, without reloading;
   - every control in the panel and on the rail with a title and a label;
+  - where the operator left off, in two new projects:
+    - the glyph on the conversation last instructed in each, one per project, after its name;
+    - moved by a prompt to another conversation in the same project, and not by that project's agent waking on its own, nor by a request answered;
+    - its title saying when, in the service's zone;
+    - the same marker on the project's page, and none on the rail;
+    - passed to the next most recently instructed conversation when its own is removed;
+    - the project's rows with the marker saved as `shots/last-instructed.png`;
   - the mega's name, `side-check`, as the config sets it: on `GET /api/version` with where it came from, in the tab title, in the footer beside the connection status, in the version panel, and in the rail's title;
   - then, restarted with no name in the config, the machine's hostname in the same places. These steps compare it without printing it, and nothing is saved after them.
 
