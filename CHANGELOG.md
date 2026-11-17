@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+CHANGE: **mega builds on macOS.** (2026-11-17) Two Linux-only names kept it from compiling on darwin: the inode change time `Stat_t.Ctim`, which darwin spells `Ctimespec`, and the terminal-attributes request `unix.TCGETS`, which darwin spells `TIOCGETA`. Each now sits behind a small per-OS file (`ctime_linux.go`, `ctime_darwin.go`, `termios_linux.go`, `termios_darwin.go`), so Linux behaves as before.
+
 CHANGE: **The README is written for someone trying mega for the first time.** (2026-11-16) It opens with what mega is and a picture of a workspace. It then walks from what you need to a first conversation:
 - installing and logging in to each harness, by its vendor's own instructions;
 - Claude Code's trust dialog;
