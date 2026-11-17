@@ -72,7 +72,7 @@ func TestAnActivationCannotChooseMegasPrograms(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	svc := newService(t, filepath.Join(work, "data", "registry.yaml"), allTrusted, claude.New(claude.Config{Node: "node", Shim: shim, Executable: "/bin/true"}))
+	svc := newService(t, filepath.Join(work, "data", "registry.yaml"), allTrusted, claude.New(claude.Config{Node: "node", Shim: shim, Executable: truePath(t)}))
 	// the base has real node and git; the activation puts the planted ones
 	// first.
 	svc.resolver = &environ.Resolver{Shell: "/bin/bash", Base: []string{"HOME=" + t.TempDir(), "PATH=" + filepath.Dir(node) + ":/usr/local/bin:/usr/bin:/bin"}, Timeout: 5 * time.Second, SkipProfile: true}

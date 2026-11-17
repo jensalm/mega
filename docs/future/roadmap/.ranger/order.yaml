@@ -1,5 +1,5 @@
 building:
-  - agent-hand-off-turns.md
+  - mega-on-macos-and-windows.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -21,7 +21,6 @@ horizon:
 researching:
   - imported-turns-carry-their-own-times.md
   - clean-machine-rehearsal.md
-  - mega-on-macos-and-windows.md
   - mega-on-twentytwo.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
   - project-mcp-servers-and-hooks-run-without-approval.md
@@ -29,6 +28,7 @@ researching:
   - codex-discovery-e2e-reads-its-own-thread.md
   - reads-after-the-service-closes.md
 evaluating:
+  - agent-hand-off-turns.md
   - an-external-operator-can-install-mega.md
   - readme-for-newcomers.md
   - which-mega-is-this.md

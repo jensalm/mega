@@ -18,30 +18,25 @@ Michael presents his toolset in under a week from 2026-11-13, with a live demo o
 - **pi is slipstreamed in.** The spec deferred it; Michael pulled it forward.
 - **The work is sequential.** One story at a time, in the order below. Running two implementers at once on one repository is coordination that falls on Michael, and helping with that is something mega has yet to grow into.
 
-## stories, as of the night of 2026-11-16
+## stories, as of 2026-11-17
 
 **Built, in evaluating**
 
-- `clean-machine-rehearsal`, the agent's pass, and the first-run batch it produced: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`.
+- The first-run batch, from the agent's pass of `clean-machine-rehearsal`: `a-missing-claude-is-named`, `dialog-focus-and-a-stale-model-list` and `first-run-explains-itself`.
 - `harness-version-tolerance`: Claude Code is found on the `PATH`, each harness has a tested range, and a lone Codex binary is named.
 - `harness-configuration-backups`: configuration snapshots under mega's data directory, with `mega snapshots` to list and compare them.
-
 - `pi-adapter`: the third harness, built against pi 1.5.2 and the local model.
-- The conversation polish: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `conversation-timestamps`, `action-view-improvements` and `path-search-beyond-the-checkout`.
-
-- `a-large-named-directory-starves-the-path-search`: a defect the last of those showed within minutes of being switched on, fixed the same day.
+- The conversation polish: `the-version-shown-goes-stale-after-an-update`, `hotkey-for-allow`, `conversation-timestamps`, `action-view-improvements`, `path-search-beyond-the-checkout` and the defect it showed, `a-large-named-directory-starves-the-path-search`.
 - `which-mega-is-this`: each page names its mega.
-- `readme-for-newcomers`: the README rewritten for someone who has just seen the demo, with a contributor document beside it.
+- `readme-for-newcomers`: the README rewritten for someone who has just seen the demo. The contributor document written with it was left out by Michael for now.
+- `agent-hand-off-turns`: the agent last instructed is marked in each project.
 
-**Next, in order**
+**Done and closed**
 
-1. `the-demo`: mega installed on Michael's laptop from the new README, which is that README's first test on a second machine. Everything else before the demo is built.
+- The demo's own card and the card for reaching a mega through a zrok share. Michael removed both once the laptop was set up and the share was in daily use.
 
-Michael, 2026-11-16: with everything up to `the-demo` handled, mega is in good shape for the demo.
+**Still open**
 
-**After the demo**
-
-- `agent-hand-off-turns` and `remote-access-through-zrok`.
 - `clean-machine-rehearsal`, Michael's own pass under WSL2, which is also the Windows half of `mega-on-macos-and-windows`.
 - `mega-on-macos-and-windows`, the macOS half, when a volunteer has a Mac.
 - `mega-on-twentytwo`: the first tagged release, delivered by `push`.

@@ -4,6 +4,8 @@
 
 FEATURE: **The side panel marks where you left off in each project.** (2026-11-17) In each project, the conversation you last sent a prompt to carries a small muted arrow after its name, pointing at it, in the side panel and on the project's page. Pointing at it says when. A new prompt moves it. Nothing an agent does moves it, and nor does answering a request, starting a runtime or changing a mode. It is not attention: it raises nothing, counts nothing and reorders nothing, and the rail does not show it. It survives a restart, and a conversation you already had shows it from its last prompt through mega.
 
+CHANGE: **mega builds on macOS.** (2026-11-17) Two Linux-only names kept it from compiling on darwin: the inode change time `Stat_t.Ctim`, which darwin spells `Ctimespec`, and the terminal-attributes request `unix.TCGETS`, which darwin spells `TIOCGETA`. Each now sits behind a small per-OS file (`ctime_linux.go`, `ctime_darwin.go`, `termios_linux.go`, `termios_darwin.go`), so Linux behaves as before.
+
 CHANGE: **The README is written for someone trying mega for the first time.** (2026-11-16) It opens with what mega is and a picture of a workspace. It then walks from what you need to a first conversation:
 - installing and logging in to each harness, by its vendor's own instructions;
 - Claude Code's trust dialog;

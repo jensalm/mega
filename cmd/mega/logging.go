@@ -39,7 +39,7 @@ var logsToFile bool
 // onTerminal is whether f is a terminal. a character device is not enough:
 // /dev/null is one, and a launcher often hands a daemon exactly that.
 func onTerminal(f *os.File) bool {
-	_, err := unix.IoctlGetTermios(int(f.Fd()), unix.TCGETS)
+	_, err := unix.IoctlGetTermios(int(f.Fd()), getTermios)
 	return err == nil
 }
 

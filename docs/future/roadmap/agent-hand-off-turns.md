@@ -1,6 +1,6 @@
 ---
 title: agent hand-off turns
-state: building
+state: evaluating
 created: 2026-11-14
 tags: [enhancement]
 ---
