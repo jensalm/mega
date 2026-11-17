@@ -75,7 +75,8 @@ func programIdentity(path string) string {
 	}
 	id := fmt.Sprintf("%s:%d:%d", resolved, info.Size(), info.ModTime().UnixNano())
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		id += fmt.Sprintf(":%d:%d:%d.%d", st.Dev, st.Ino, st.Ctim.Sec, st.Ctim.Nsec)
+		csec, cnsec := changeTime(st)
+		id += fmt.Sprintf(":%d:%d:%d.%d", st.Dev, st.Ino, csec, cnsec)
 	}
 	return id
 }

@@ -174,11 +174,12 @@ func TestModelsReadsTheShimsCatalog(t *testing.T) {
 	}
 	node := filepath.Join(t.TempDir(), "node")
 	line := `{"version":"2.1.318","models":[{"value":"default","resolvedModel":"claude-opus-5-5","displayName":"Default","supportedEffortLevels":["low","high"]},{"value":"haiku","resolvedModel":"claude-haiku-4-5-20251001","displayName":"Haiku"}]}`
-	script := "#!/bin/sh\ncase \"$*\" in *\"models --cwd " + cwd + " --exec /bin/true\"*) printf '%s\\n' '" + line + "' ;; *) exit 3 ;; esac\n"
+	trueBin := truePath(t)
+	script := "#!/bin/sh\ncase \"$*\" in *\"models --cwd " + cwd + " --exec " + trueBin + "\"*) printf '%s\\n' '" + line + "' ;; *) exit 3 ;; esac\n"
 	if err := os.WriteFile(node, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	h.cfg.Node, h.cfg.Shim, h.cfg.Executable = node, shim, "/bin/true"
+	h.cfg.Node, h.cfg.Shim, h.cfg.Executable = node, shim, trueBin
 	catalog, err := h.Models(t.Context(), harness.Place{Cwd: cwd, Env: os.Environ(), Find: os.Environ()})
 	if err != nil {
 		t.Fatal(err)

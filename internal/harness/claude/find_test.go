@@ -55,7 +55,7 @@ func shimHarness(t *testing.T, executable string) *Harness {
 	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return New(Config{Node: "/bin/true", Shim: shim, Executable: executable, Where: "in '/c/mega.yaml', the config file mega read", FileRead: true})
+	return New(Config{Node: truePath(t), Shim: shim, Executable: executable, Where: "in '/c/mega.yaml', the config file mega read", FileRead: true})
 }
 
 // the default, the bare name claude, is found on the PATH mega uses, as the
