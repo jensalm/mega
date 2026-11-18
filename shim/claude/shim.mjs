@@ -123,6 +123,8 @@ export async function run(opt, sdk, io) {
     if (o.signal.aborted) onAbort();
   });
 
+  // replayUserMessages stays off: the service treats every isReplay user
+  // message as Claude's own echo, never a prompt (internal/harness/claude/mapping.go).
   const options = {
     cwd: opt.cwd,
     pathToClaudeCodeExecutable: opt.exec,

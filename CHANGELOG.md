@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+FIX: **Switching a Claude conversation's model no longer leaves it spinning.** (2026-11-18) Claude Code 2.1.327 answers a model switch with a "Set model to …" message on its stream, outside any turn. mega took it for the start of a turn that never ended: the conversation showed as working until released, Interrupt did nothing, and "shut down when idle" waited on it. Such an echo is now kept as a native event and opens no turn. A conversation already stuck this way is cleared by Release or a restart.
+
 FEATURE: **Registering a project has a folder picker.** (2026-11-18) The checkout field completes as you type, from mega's own machine, and accepts `~` for your home directory. Below it is the folder you are looking at, to click through, with a way up.
 - **What it lists:** folders only. Git checkouts are marked, and a folder already registered says so and cannot be picked again.
 - **Where it looks:** only inside your projects root, `projects_root` in the config, your home directory by default.

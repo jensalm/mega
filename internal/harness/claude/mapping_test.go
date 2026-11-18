@@ -82,6 +82,16 @@ func TestMetaUserMessageIsNativeNotAPrompt(t *testing.T) {
 	}
 }
 
+// claude code 2.1.327 echoes a model switch's local command output on the live
+// stream, outside any turn, as a user message marked isReplay.
+func TestReplayedUserMessageIsNativeNotAPrompt(t *testing.T) {
+	frame := `{"type":"user","uuid":"r-1","session_id":"s-1","parent_tool_use_id":null,"isReplay":true,"timestamp":"2026-11-18T14:20:16.053Z","message":{"role":"user","content":"<local-command-stdout>Set model to ` + "`fable (claude-fable-5-2)`" + `</local-command-stdout>"}}`
+	evs := mapOne(t, decode(t, frame))
+	if len(evs) != 1 || evs[0].Kind != model.EventNative || evs[0].Text != "user/replay" || evs[0].NativeID != "r-1" || evs[0].Raw == nil {
+		t.Fatalf("replayed user message mapped to %+v", evs)
+	}
+}
+
 // a prompt typed ahead while a turn ran is queued but is the operator's own.
 func TestQueuedCommandWithoutMetaIsStillAPrompt(t *testing.T) {
 	evs := mapOne(t, decode(t, `{"type":"user","uuid":"q-1","isQueuedCommand":true,"message":{"content":"and then run the tests"}}`))
