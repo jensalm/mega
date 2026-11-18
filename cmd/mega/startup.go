@@ -49,12 +49,12 @@ type instance struct {
 	url      string
 }
 
-// start brings mega up to the point of serving: the data directory guard (in
-// config.Load), the port, the lock, the registry and the service. it binds
-// before touching the data directory, so a second instance on the same port
-// fails without writing anything the running one owns, then holds the
-// directory, so one on another port cannot become a second writer. either
-// refusal names the mega already running where it can.
+// start brings mega up to the point of serving: the port, the lock, the
+// registry and the service. it binds before touching the data directory, so
+// a second instance on the same port fails without writing anything the
+// running one owns, then holds the directory, so one on another port cannot
+// become a second writer. either refusal names the mega already running
+// where it can.
 func start(cfg *config.Config) (*instance, error) {
 	// every harness and every command an agent runs inherits this PATH, so it
 	// is worth seeing when a tool cannot be found.

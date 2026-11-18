@@ -1,6 +1,6 @@
 ---
 title: default port
-state: building
+state: evaluating
 created: 2026-11-18
 tags: [enhancement]
 ---
