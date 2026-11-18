@@ -734,7 +734,7 @@ Both harnesses can report a conversation's servers as plain data: name, status, 
 
 ## Follow-up (2026-11-14): harness versions other than the pinned ones
 
-What mega, as built on 2026-11-14, does with a Claude Code and a Codex other than 2.1.318 and 0.166.0, for the `harness-version-tolerance` card.
+What mega, as built on 2026-11-14, does with a Claude Code and a Codex other than 2.1.318 and 0.166.0, for the harness version work.
 
 **How it was run.** Each build ran through a scratch mega: its own port, scratch data and XDG directories, and a scratch config file naming the build. The fixture was `claude-rt1` or `codex-rt1`. A scratch driver made the e2e round trips' calls over the HTTP API, logged in as the operator with his real configuration. The scripts and every run's output are under `/tmp/mega-harness-spike/`; the journal of 2026-11-14 is the running log.
 - **The configuration was backed up first,** to `~/Sandbox/harness-config-backup-2026-11-14/`, with the 2.1.318 build. No credential, transcript or session store was copied.
@@ -821,7 +821,7 @@ Fetched from OpenAI's GitHub releases into scratch. The control is the operator'
 
 ## Follow-up (2026-11-15): Claude's bookkeeping after an interrupted turn
 
-For the card `an-interrupted-turn-imports-no-response-requested`: how Claude Code marks the "No response requested." it writes after an interrupted turn, so mega can map it by a mark rather than by its sentence.
+For the fix of 2026-11-15 to what an interrupted turn imports: how Claude Code marks the "No response requested." it writes after an interrupted turn, so mega can map it by a mark rather than by its sentence.
 
 **How it was read.** The fixture `claude-rt1`'s own sessions, written during the version spike, were read two ways: the transcript files under `~/.claude/projects/`, and through the shim's `messages` command, which is the SDK's history reader and what an import reads. Across every local transcript, only the flags of messages written by no model were tallied, never their text beyond Claude's own fixed sentences.
 

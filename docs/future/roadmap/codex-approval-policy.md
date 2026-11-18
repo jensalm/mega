@@ -13,7 +13,7 @@ The Claude side got this in the permission-mode batch, and daily use showed it m
 
 ## shape
 
-Follow the Claude pattern exactly: a stored choice on the conversation, inherit as the default and a real choice, passed at every launch, changeable from the control bar, the header showing what the harness reports beside what was asked. Mega never selects a policy on its own and never offers the policies that remove the sandbox or approvals altogether; the canon's `permissions-never-weakened` is amended the same way it was for Claude, to forbid a policy mega chose and allow one the operator chose.
+Follow the Claude pattern as it now stands, which changed on 2026-11-13: the conversation's request is concrete from creation, copied once from the operator's own Codex config, passed at every launch and changeable from the control bar. The panel shows the request and each turn's line shows what ran. There is no unset or inherited state. Mega never selects a policy on its own and never offers the policies that remove the sandbox or approvals altogether; the canon's `permissions-never-weakened` is amended the same way it was for Claude, to forbid a policy mega chose and allow one the operator chose.
 
 ## spike
 

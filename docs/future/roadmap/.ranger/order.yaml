@@ -3,24 +3,20 @@ horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
   - mega-as-the-development-hub.md
-  - agents-roles-and-lifecycles-in-a-project.md
-  - review-codeaf.md
-  - hand-off-between-conversations.md
-  - re-entry-briefing.md
-  - project-suspension.md
-  - per-turn-runtime-mode.md
-  - updating-harnesses-from-mega.md
-  - claude-shim-distribution.md
+  - the-orchestration-framework-is-extracted.md
+  - central-application.md
   - a-workspace-that-can-be-rebuilt-elsewhere.md
   - relocate-a-projects-checkout.md
   - moving-conversations-between-hosts.md
-  - central-application.md
-  - container-environments.md
-  - codex-live-attach.md
+  - sandboxed-ephemeral-environments.md
+  - change-digestion.md
+  - agents-roles-and-lifecycles-in-a-project.md
+  - hand-off-between-conversations.md
+  - re-entry-briefing.md
+  - updating-harnesses-from-mega.md
 researching:
   - imported-turns-carry-their-own-times.md
-  - clean-machine-rehearsal.md
-  - mega-on-twentytwo.md
+  - first-tagged-release.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
   - project-mcp-servers-and-hooks-run-without-approval.md
   - codex-approval-policy.md
@@ -28,25 +24,7 @@ researching:
   - reads-after-the-service-closes.md
   - mega-on-macos-and-windows.md
 evaluating:
-  - agent-hand-off-turns.md
-  - an-external-operator-can-install-mega.md
-  - readme-for-newcomers.md
-  - which-mega-is-this.md
   - a-large-named-directory-starves-the-path-search.md
-  - action-view-improvements.md
   - path-search-beyond-the-checkout.md
-  - conversation-timestamps.md
-  - hotkey-for-allow.md
-  - the-version-shown-goes-stale-after-an-update.md
   - pi-adapter.md
-  - harness-configuration-backups.md
-  - an-interrupted-turn-imports-no-response-requested.md
-  - harness-version-tolerance.md
-  - a-send-from-above-sometimes-stays-where-it-was.md
-  - the-newest-line-hides-under-the-dock.md
-  - first-run-explains-itself.md
-  - dialog-focus-and-a-stale-model-list.md
-  - a-missing-claude-is-named.md
-  - the-panel-shows-the-request-the-turn-shows-what-ran.md
-  - the-header-holds-what-belongs-on-the-input-panel.md
   - version-metadata-in-web-ui.md

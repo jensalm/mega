@@ -15,4 +15,4 @@ we need some place in the web ui to see the output of `mega version`.
 
 ## still soaking
 
-Michael, 2026-11-14: this stays in evaluating until automated builds are in place, since a real version, in place of the developer build's `v0.0.x`, is what the panel exists to show. That arrives with the release story, `mega-on-twentytwo`.
+Michael, 2026-11-14: this stays in evaluating until automated builds are in place, since a real version, in place of the developer build's `v0.0.x`, is what the panel exists to show. That arrives with the release story, `first-tagged-release`.

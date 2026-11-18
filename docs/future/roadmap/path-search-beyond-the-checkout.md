@@ -9,7 +9,7 @@ The reply box's `@` search can also reach directories outside the conversation's
 
 ## why
 
-Michael, 2026-11-14, on `path-search-in-the-input-panel`: "i would like to make this less restrictive. ideally it would allow me to reference paths in `~/Sandbox`, using `~` notation. maybe we could include optional external directories like that?" His habit is to drop a screenshot or a scratch file in `~/Sandbox` or `~/Screenshots` and point an agent at it. The search stops at the checkout by design, so those paths are typed by hand, and they are the ones with names nobody remembers.
+Michael, 2026-11-14, on the reply box's path search: "i would like to make this less restrictive. ideally it would allow me to reference paths in `~/Sandbox`, using `~` notation. maybe we could include optional external directories like that?" His habit is to drop a screenshot or a scratch file in `~/Sandbox` or `~/Screenshots` and point an agent at it. The search stops at the checkout by design, so those paths are typed by hand, and they are the ones with names nobody remembers.
 
 ## shape
 

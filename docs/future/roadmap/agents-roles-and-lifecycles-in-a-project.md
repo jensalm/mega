@@ -28,6 +28,25 @@ Michael, 2026-11-13, after a week on two hosts: mega "has removed a couple of di
 
 One concrete case from the same day. With a demo a week out and two independent pieces of work ready, an adapter and a round of polish, he chose to run them one after the other: "parallelism is one of the things mega needs to grow to help with." Two implementers on one repository meant coordination that fell on him: who has which files, whose review is running, what order things land in. Mega could show both conversations and did nothing to make running them together safe or legible.
 
+## per-turn runtime mode, folded in on 2026-11-18
+
+This was a card of its own from 2026-11-06, and it is a lifecycle question, so it lives here now.
+
+Make runtime mode a real per-conversation setting with a per-harness default and a global switch. In per-turn mode the harness process exits when a turn ends and the next prompt resumes by exact id. An idle conversation then has no managed writer, needs no release before a terminal handoff, and holds no memory. It depends on mercurius and terminus being restartable first, with session state rebuilt from disk and reviewer rounds detached, before conversations that drive them can opt in; that work lives in those repositories.
+
+Why it matters more as a project grows: every idle conversation today keeps a harness process and the MCP servers it started. A project with a planner and several implementers pays for all of them while only one works.
+
+## the sixth direction, 2026-11-18
+
+From Michael's presentation of mega: "collaborative agent flows in mega. today we manually move work around between agents. future mega potentially auto-coordinates. as quality management and change digestion get better, attention scales wider."
+
+This is the direction this card exists to design. Two things it adds:
+
+- **Coordination is now named as a possibility,** where the hub epic's principle says mega carries and never decides. The epic records that tension. This conversation is where it gets settled.
+- **It is conditional.** Wider attention comes from better quality management and better change digestion, not from automation first. `change-digestion` and reviews as first-class things come before anything coordinates itself.
+
+A concrete piece from the CodeAF review of the same day, recorded on the hub epic: each agent working in its own copy of the repository, on its own branch, is what lets two of them work one project without colliding.
+
 ## questions for the conversation
 
 - Is a role a property of a conversation, of a position in a project, or only a label the operator reads?

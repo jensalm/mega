@@ -14,8 +14,8 @@ Michael, 2026-11-14: "could we have mega also take care of updating the harnesse
 ## what mega is well placed to do
 
 - It knows when nothing is running: the shutdown gate already computes idle across every conversation.
-- It knows which versions it was tested against, once `harness-version-tolerance` gives a range.
-- It can take a configuration snapshot first, once `harness-configuration-backups` exists.
+- It knows which versions it was tested against, now that each harness has a tested range.
+- It can take a configuration snapshot first, now that configuration snapshots exist.
 - It can say what changed afterwards: the version each harness now reports, and whether it is inside the tested range.
 
 ## the planning agent's recommendation
@@ -37,7 +37,7 @@ What each harness offers: an update command that can be run on demand, a way to 
 
 ## depends on
 
-`harness-version-tolerance` and `harness-configuration-backups`.
+The harness version work and configuration snapshots, both built on 2026-11-15.
 
 ## where Michael thinks this may land
 
@@ -62,4 +62,4 @@ Three observations that bear on this card:
 
 ## where this stands, 2026-11-16
 
-Both things this depends on are built: `harness-version-tolerance` on 2026-11-15 and `harness-configuration-backups` the same day. A version snapshot is already taken whenever mega meets a harness version it has not seen, which is the "snapshot first" step of an update, done after the fact.
+Both things this depends on are built, on 2026-11-15: the tested ranges and configuration snapshots. A version snapshot is already taken whenever mega meets a harness version it has not seen, which is the "snapshot first" step of an update, done after the fact.

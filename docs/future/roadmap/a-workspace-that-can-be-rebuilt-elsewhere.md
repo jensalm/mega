@@ -9,7 +9,7 @@ Everything short of credentials that an operator needs to stand their mega works
 
 ## why
 
-Michael, 2026-11-14, widening `harness-configuration-backups`: "it might also be useful to back up conversations and anything short of credentials that would allow a user to reconstruct a harness environment on a different host. this would close a workflow resiliency gap... and it could also serve as the foundation for moving sessions between hosts."
+Michael, 2026-11-14, widening the card for configuration snapshots: "it might also be useful to back up conversations and anything short of credentials that would allow a user to reconstruct a harness environment on a different host. this would close a workflow resiliency gap... and it could also serve as the foundation for moving sessions between hosts."
 
 The gap is real. A week of work now lives in three places per conversation: mega's registry, mega's event log, and the harness's own session store, which mega neither owns nor copies. Lose the disk, or a harness migration goes wrong, and the conversations are gone. And the two hosts mega runs on are two islands.
 
@@ -23,7 +23,7 @@ One conversation, complete and self-describing: its registry entry, its event lo
 
 ## layers, smallest first
 
-1. `harness-configuration-backups`: configuration snapshots. Small, and built soon.
+1. Configuration snapshots. Built on 2026-11-15.
 2. The bundle: export and import of one conversation on one host, with the path rewrite. The shared spike.
 3. Routine backup of the whole workspace as bundles, to a place the operator names.
 4. Restore on another host, and a move between two running megas.
@@ -34,7 +34,7 @@ One conversation, complete and self-describing: its registry entry, its event lo
 - **Privacy.** A transcript holds whatever an agent saw: file contents, command output, anything pasted. Excluding credential files does not make a bundle free of secrets. A bundle is as private as the store it came from, stays on the machine by default, and wants encrypting before it leaves.
 - **Copying a store that is being written.** Claude's session files are appended to, and Codex keeps threads in databases. A copy has to be taken at a moment that is whole. Mega knows when a conversation is idle and when a turn ends.
 - **Paths.** Claude keys its store by the checkout's path. A session restored where the checkout lives elsewhere is not found without a rewrite. The capability report's follow-up of 2026-11-11 recorded this.
-- **Versions.** A session written by one harness version and restored under another. `harness-version-tolerance` is finding out how forgiving the stores are.
+- **Versions.** A session written by one harness version and restored under another. The harness version work of 2026-11-15 found that nearby builds read each other's stores in both directions.
 - **Two writers.** A conversation restored on a second host while still live on the first is the hazard every harness has. A move has to end the conversation where it left.
 
 ## what does not travel

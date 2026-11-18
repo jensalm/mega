@@ -26,7 +26,7 @@ Michael has no Mac and expects to find a volunteer among them. Until then CI is 
 ## windows
 
 - WSL2 is a Linux machine, so the expectation is that mega works there as it does on `fortyfive`, with Claude Code and Codex installed inside WSL and the browser on Windows reaching `127.0.0.1:8470`. That is an expectation, not an observation.
-- Michael has a Windows machine, which also serves as the cleanest clean machine there is for `clean-machine-rehearsal`. To establish on it: that loopback forwarding reaches the page, that the harnesses' logins work inside WSL, and that checkouts kept on the Windows side of the filesystem are usable or should be advised against.
+- Michael has a Windows machine, which is also the cleanest clean machine there is. To establish on it: that loopback forwarding reaches the page, that the harnesses' logins work inside WSL, and that checkouts kept on the Windows side of the filesystem are usable or should be advised against.
 - The README gets a short Windows section that says WSL2 is the supported way and native Windows is not.
 
 Native Windows would mean replacing the file lock, the process-group handling, the shell-based environment resolution and the launcher. That is a separate card when someone needs it.
@@ -91,3 +91,13 @@ What stands when it is picked up again:
 - **What only a person with a Mac can do:** a real conversation with each harness, a trust dialog, the tray, their own shell, daily use.
 
 The README says what is true meanwhile: macOS builds, its tests do not all pass, it has not been used, and mega cannot yet see a process that outlives its runtime there.
+
+
+## the clean-machine rehearsal, closed into this card on 2026-11-18
+
+The rehearsal had its own card. It did what it was for and is closed:
+
+- **The agent's pass,** 2026-11-13, followed the README in a scratch home with no harnesses. It found that a missing Claude Code showed as "internal error" and that the first page explained nothing. Both were fixed the same week.
+- **A second machine.** Michael installed mega on his laptop, another Ubuntu 24 system, from the rewritten README, and it is in daily use there. External operators have built it from source since.
+
+What it never reached is the pass under a fresh WSL2 on Michael's Windows machine, with real logins through to a working conversation. That is the Windows half of this card, and it is still to do.
