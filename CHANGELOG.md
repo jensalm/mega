@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+FEATURE: **Registering a project has a folder picker.** (2026-11-18) The checkout field completes as you type, from mega's own machine, and accepts `~` for your home directory. Below it is the folder you are looking at, to click through, with a way up.
+- **What it lists:** folders only. Git checkouts are marked, and a folder already registered says so and cannot be picked again.
+- **Where it looks:** only inside your projects root, `projects_root` in the config, your home directory by default.
+- **A path typed in full** is still registered wherever it is.
+- **The name** fills in from the folder until you change it.
+- **The keyboard** works throughout: arrows, Enter to go in, Left to go up.
+
+CHANGE: **The adopt-a-session dialog is larger, and shows a session before you adopt it.** (2026-11-18) The list and a look at the session you pick sit side by side, in a dialog most of the window's height.
+- **The harness control** shows each harness's mark and how many sessions it has, or that it cannot run here.
+- **A filter box** narrows the list by first prompt.
+- **What the list leaves out** is said: how many sessions a conversation already holds.
+- **Picking a session** shows how it began and how it left off: its first prompt, its last, and the end of its last reply. Each harness reads its own session for this, changing nothing.
+- **pi's warning** says it has no lock.
+
+FIX: **The adopt dialog's rows no longer wrap strangely.** (2026-11-18) Each session's date and id took two lines, the id split at its hyphens, at every window width. Each row now lays out the same everywhere: the first prompt on up to two lines, how long ago in words, and the id small on its own line, newest first.
+
 FEATURE: **The side panel marks where you left off in each project.** (2026-11-17) In each project, the conversation you last sent a prompt to carries a small muted arrow after its name, pointing at it, in the side panel and on the project's page. Pointing at it says when. A new prompt moves it. Nothing an agent does moves it, and nor does answering a request, starting a runtime or changing a mode. It is not attention: it raises nothing, counts nothing and reorders nothing, and the rail does not show it. It survives a restart, and a conversation you already had shows it from its last prompt through mega.
 
 CHANGE: **mega builds on macOS.** (2026-11-17) Two Linux-only names kept it from compiling on darwin: the inode change time `Stat_t.Ctim`, which darwin spells `Ctimespec`, and the terminal-attributes request `unix.TCGETS`, which darwin spells `TIOCGETA`. Each now sits behind a small per-OS file (`ctime_linux.go`, `ctime_darwin.go`, `termios_linux.go`, `termios_darwin.go`), so Linux behaves as before.

@@ -50,6 +50,8 @@ The words mega's documents, cards and interface use, and what each one means her
   - the **request**: the mode, model and effort, each shown closed as a short value;
   - an environment that needs attention;
   - the More menu, with the MCP servers.
+- **Projects root.** Where the register dialog's folder picker starts, `projects_root` in the config, else the home directory. The picker lists and completes only folders inside it, and never goes above it; a path typed in full is registered wherever it is.
+- **Look.** How a session not yet adopted began and how it left off: its first prompt, its last, and the end of its last reply, read by its harness's adapter when the operator picks it in the adopt dialog. It is a read of a private transcript, bounded, shown only there, and it changes nothing.
 - **Named directories.** The directories the operator names in the config, `path_search.directories`, such as `~/Sandbox`, that the reply box's `@` search reaches beyond the checkout, for an `@` word starting with `~/` or `/`. Nothing outside them is ever listed.
 - **Activity line.** The line above the input panel that says what the conversation is doing and for how long.
 - **Request.** What a conversation asks its harness to run with: a model, an effort, and for Claude a permission mode. It is always concrete, copied once from the harness's settings when the conversation is created, and passed on every launch; only the operator changes it after that. The control bar shows the request; there is no inherit.

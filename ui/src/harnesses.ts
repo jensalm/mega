@@ -22,6 +22,8 @@
 // turn without a result has run, so none is shown as running. pi raises an
 // extension's dialog before the tool it gates executes, and runs nothing
 // else of that batch until it is settled (pi 1.5.2, agent-loop.js).
+// noLock: the harness takes no lock on a session, so mega cannot tell
+// whether a terminal has it open (pi).
 // notice: what the launch dialog and the conversation say about how the
 // harness asks, where it differs from the others.
 // terminal: the command that continues a released session in a terminal,
@@ -37,6 +39,7 @@ export interface Harness {
   listsMcp?: boolean
   loneEffort?: boolean
   dialogsHoldActions?: boolean
+  noLock?: boolean
   notice?: string
   terminal?: string
 }
@@ -52,6 +55,7 @@ export const harnesses: Harness[] = [
     iconScale: 1.6,
     loneEffort: true,
     dialogsHoldActions: true,
+    noLock: true,
     notice:
       'pi asks for nothing unless an extension asks: it runs its tools without asking, as it does in its own terminal. It runs its own MCP servers, which mega cannot list.',
     terminal: 'pi --session',

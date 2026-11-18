@@ -53,6 +53,24 @@ export const getAbout = () => request<About>('GET', '/api/version')
 export const createProject = (name: string, checkout: string) =>
   request<Project>('POST', '/api/projects', { name, checkout })
 
+// Folders is one folder as the register dialog's picker shows it: its
+// folders, each marked a git checkout or registered, the way up (absent at
+// the projects root) and whether the listing stopped at its bound. paths
+// are shown with ~ for the home directory.
+export interface Folders {
+  path: string
+  full: string
+  parent?: string
+  root: string
+  entries: { name: string; git: boolean; registered?: string }[]
+  stopped: boolean
+  // note says why nothing is listed: outside the root, missing, unreadable.
+  note?: string
+}
+
+// getFolders lists a folder inside the projects root; '' is the root.
+export const getFolders = (path: string) => request<Folders>('GET', `/api/folders?path=${encodeURIComponent(path)}`)
+
 export const renameProject = (id: string, name: string) =>
   request<Project>('PATCH', `/api/projects/${encodeURIComponent(id)}`, { name })
 
@@ -186,10 +204,29 @@ export interface DiscoveredSession {
   updated_at?: string
 }
 
+// discoverSessions lists the sessions in the checkout no conversation holds,
+// and how many it left out because one does.
 export const discoverSessions = (projectId: string, harness: string) =>
-  request<{ sessions: DiscoveredSession[] }>(
+  request<{ sessions: DiscoveredSession[]; held: number }>(
     'GET',
     `/api/projects/${encodeURIComponent(projectId)}/discover?harness=${encodeURIComponent(harness)}`,
+  )
+
+// Look is how a session began and left off, bounded, read when a row is
+// picked in the adopt dialog and shown nowhere else. cut names the parts cut
+// short: first, last or reply.
+export interface Look {
+  first_prompt: string
+  last_prompt?: string
+  last_reply?: string
+  prompts: number
+  cut?: string[]
+}
+
+export const getLook = (projectId: string, harness: string, session: string) =>
+  request<Look>(
+    'GET',
+    `/api/projects/${encodeURIComponent(projectId)}/look?harness=${encodeURIComponent(harness)}&session=${encodeURIComponent(session)}`,
   )
 
 export const adoptSession = (projectId: string, harness: string, nativeId: string, name: string) =>

@@ -65,10 +65,10 @@ Where things go:
     - an action from the generated history, with nothing its adapter reads, showing the one line it has.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, the start lines as `shots/start-{tested,newer,older}.png`, and each harness's expanded command and input as `shots/action-{claude,codex,pi}{,-input}.png`.
-- **`firstrun.mjs`** (57 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
+- **`firstrun.mjs`** (58 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
   - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
-  - the register dialog opening with the focus in its checkout field, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
+  - the register dialog opening with the focus in its checkout field, which starts at the home directory with no projects root configured, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
   - the project page before any dialog: all three harnesses listed as missing, from the resolution registering started; Claude Code's reason saying `claude` was not found and naming the versions folder, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
   - the new-conversation dialog opening with the focus in the opening prompt, all three harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
   - the API refusing Claude Code's model list and a launch of either harness as `executable_missing`, with the reason, and making no conversation;
@@ -81,6 +81,30 @@ Where things go:
     - **an update behind the same path, with mega running:** Claude Code found through `bin/claude`, a link the check moves to a new build, and Codex and pi as packages whose programs the check replaces in place with the modification time npm's tarballs carry. The open version panel follows all three within seconds, with no restart and no reload, and so does the first page.
 
   It prints the words each step showed, so its output is a record of what a newcomer reads. It saves `shots/{empty,empty-dark,register,register-refused,project,launch-missing,restarted,versions-newer,versions-older}.png`.
+- **`dialogs.mjs`** (58 steps): the project page's two dialogs. Its config names `~/Repos`, in its scratch `HOME`, as the projects root. It checks the following:
+  - the register dialog's folder picker:
+    - the field starting at the root;
+    - folders only, a git checkout marked, and no dot-folder, file or link leading out;
+    - a registered folder saying so;
+    - no way up at the root;
+    - completion as it is typed, and Tab completing it, the name following;
+    - a click going in and the Up control coming back;
+    - a registered folder not gone into, and refused when named;
+    - a folder outside the root listing nothing and saying why;
+    - the keyboard: Down into the list, arrows, Enter in, Left up;
+    - a name changed by hand kept;
+    - a picked folder registered with its name, and a path outside the root typed in full registered too.
+  - the adopt dialog, over sessions of each harness's fake, made by launching and removing conversations, with one still held. At 700, 1280 and 1920 pixels:
+    - the dialog wide and most of the window's height;
+    - each harness's control with its mark and count;
+    - the held session counted;
+    - every row laid out the same, newest first: the first prompt on up to two lines, how long ago on one line with the exact time as its title, the id on one line;
+    - the filter;
+    - the look at a picked session for each harness, beside the list, or below it when narrow;
+    - the terminal warning, pi's saying it has no lock;
+    - adopting.
+
+  It saves `shots/register.png` and `shots/adopt-{narrow,1280,wide}.png`.
 - **`environment.mjs`** (32 steps): a project's environment on its page. It checks the following:
   - the unapproved state, and its refusal on New conversation and Adopt;
   - approval, and the names it records;
@@ -211,7 +235,7 @@ t.check(true, 'the reply is shown')
 await t.done()
 ```
 
-`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. `suite(name, { searchDirs })` names directories beyond the checkout for the `@` search, `path_search.directories`, `~` being the suite's scratch `HOME`. Every suite's mega is named `mega-check` in its config, or `{ megaName }`, so no machine's hostname lands in a screenshot or a step; `{ megaName: false }` leaves the name out, for a step about the default. It returns the following:
+`suite(name)` empties the suite's scratch directory and makes its directories, its config and its `HOME`, then starts the service and launches the browser. Its `HOME` has a `.profile` that puts the check's own `node` on `PATH`, since project environments resolve through a login shell from it. The operator's shell start-up files and Claude settings are never read. `suite(name, { bare: true })` sets up a newcomer's machine instead: no fakes and no Claude settings, a config naming no harness path so mega looks where its defaults say, and `node` alone, in a directory of its own, ahead of the system directories on mega's `PATH` and the project's. A bare suite can start no harness, real or fake. `suite(name, { tz })` runs the service in the zone `tz` names, with `TZ`, so a suite can give its pages another and check that times are the service's. `suite(name, { projectsRoot })` sets the register dialog's projects root, `projects_root`. `suite(name, { searchDirs })` names directories beyond the checkout for the `@` search, `path_search.directories`, `~` being the suite's scratch `HOME`. Every suite's mega is named `mega-check` in its config, or `{ megaName }`, so no machine's hostname lands in a screenshot or a step; `{ megaName: false }` leaves the name out, for a step about the default. It returns the following:
 
 - `check(ok, what)` records a step. `must(ok, what)` records one the suite cannot go past: a suite checks with it, before any Allow, that the request is exactly the one the fake raised, so nothing unexpected is approved. `until(what, pred, ms)` waits on a condition, checking every 50 ms, and fails saying what it waited for.
 - `api(method, path, body)`, `workspace()`, `projectOf(id)` and `convOf(id)` read and call the service.

@@ -67,3 +67,30 @@ export function parse(at: string | undefined): Date | undefined {
   const d = new Date(at)
   return Number.isNaN(d.getTime()) ? undefined : d
 }
+
+const relative = new Intl.RelativeTimeFormat([], { numeric: 'auto' })
+
+// ago says how long ago, in words: "just now", "5 minutes ago", "yesterday",
+// "3 weeks ago".
+export function ago(at: number, now = Date.now()): string {
+  const seconds = Math.round((at - now) / 1000)
+  const steps: [number, Intl.RelativeTimeFormatUnit][] = [
+    [60, 'second'],
+    [60, 'minute'],
+    [24, 'hour'],
+    [7, 'day'],
+    [4.35, 'week'],
+    [12, 'month'],
+  ]
+  if (Math.abs(seconds) < 45) {
+    return 'just now'
+  }
+  let value = seconds
+  for (const [size, unit] of steps) {
+    if (Math.abs(value) < size) {
+      return relative.format(Math.round(value), unit)
+    }
+    value /= size
+  }
+  return relative.format(Math.round(value), 'year')
+}

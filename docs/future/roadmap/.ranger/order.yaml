@@ -1,4 +1,6 @@
 building:
+  - improve-the-new-project-dialog.md
+  - improve-the-adopt-a-session-dialog.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -15,6 +17,7 @@ horizon:
   - re-entry-briefing.md
   - updating-harnesses-from-mega.md
 researching:
+  - default-port.md
   - imported-turns-carry-their-own-times.md
   - first-tagged-release.md
   - the-checks-run-in-a-browser-michael-does-not-use.md

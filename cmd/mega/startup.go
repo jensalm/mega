@@ -110,8 +110,9 @@ func start(cfg *config.Config) (*instance, error) {
 			codex.New(codex.Config{Binary: cfg.Codex.Binary, Where: cfg.Where()}),
 			pi.New(pi.Config{Binary: cfg.Pi.Binary, Where: cfg.Where()}),
 		},
-		Snapshots:  snapshotStore(cfg),
-		SearchDirs: cfg.PathSearch.Directories,
+		Snapshots:    snapshotStore(cfg),
+		SearchDirs:   cfg.PathSearch.Directories,
+		ProjectsRoot: cfg.ProjectsRoot,
 	})
 	if err != nil {
 		lock.Release()

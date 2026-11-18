@@ -30,6 +30,11 @@
 // kept for later turns and reported with thread/settings/updated before the
 // turn, as codex-cli 0.166.0 does.
 //
+// threads: each thread, its turns and their completed items are kept in
+// threads.json in $CODEX_HOME, else ~/.fake-codex, never codex's own
+// ~/.codex, so thread/list lists a checkout's threads and thread/read reads
+// one back, in a later process, as codex's own store does.
+//
 // MCP servers: thread/start and thread/resume announce each server's
 // startup with mcpServer/startupStatus/updated, and mcpServerStatus/list,
 // asked with the thread's id, gives three, shaped as codex-cli 0.166.0
@@ -37,6 +42,9 @@
 // tools and their descriptions; docs, which needs signing in until an
 // mcp-sign-in turn; and broken, which failed to start.
 import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 // --version answers as codex-cli does, with the version its manifest,
@@ -53,7 +61,39 @@ if (process.argv[2] !== 'app-server') {
 }
 
 const send = (msg) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n')
-const notify = (method, params) => send({ method, params })
+
+// the thread store, read and written whole: it is small.
+const storeDir = process.env.CODEX_HOME || join(homedir(), '.fake-codex')
+const storeFile = join(storeDir, 'threads.json')
+const loadThreads = () => (existsSync(storeFile) ? JSON.parse(readFileSync(storeFile, 'utf8')) : {})
+const saveThreads = (threads) => {
+  mkdirSync(storeDir, { recursive: true })
+  writeFileSync(storeFile, JSON.stringify(threads))
+}
+const now = () => Math.floor(Date.now() / 1000)
+const keepThread = (tid, cwd) => {
+  const threads = loadThreads()
+  threads[tid] ??= { id: tid, cwd, preview: '', createdAt: now(), updatedAt: now(), turns: [] }
+  saveThreads(threads)
+}
+const keepItem = (tid, turnId, item) => {
+  const threads = loadThreads()
+  const t = threads[tid]
+  if (!t) return
+  let turn = t.turns.find((x) => x.id === turnId)
+  if (!turn) {
+    turn = { id: turnId, status: 'completed', items: [] }
+    t.turns.push(turn)
+  }
+  turn.items.push(item)
+  if (!t.preview && item.type === 'userMessage') t.preview = (item.content ?? []).map((c) => c.text ?? '').join('')
+  t.updatedAt = now()
+  saveThreads(threads)
+}
+const notify = (method, params) => {
+  if (method === 'item/completed' && params?.item && params.threadId) keepItem(params.threadId, params.turnId, params.item)
+  send({ method, params })
+}
 const id = () => randomUUID()
 let threadID = null
 let activeTurn = null
@@ -227,12 +267,14 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       runModel = p.model ?? inherited.model
       runEffort = inherited.model_reasoning_effort
       threadID = id()
+      keepThread(threadID, p.cwd ?? process.cwd())
       send({ id: msg.id, result: started(threadID) })
       announceStartup()
       break
     case 'thread/resume':
       if (p.model) runModel = p.model
       threadID = p.threadId
+      keepThread(threadID, p.cwd ?? process.cwd())
       send({ id: msg.id, result: started(threadID) })
       announceStartup()
       break
@@ -243,12 +285,19 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       }
       send({ id: msg.id, result: { data: mcpServers(), nextCursor: null } })
       break
-    case 'thread/read':
-      send({ id: msg.id, result: { thread: thread(p.threadId) } })
+    case 'thread/read': {
+      const kept = loadThreads()[p.threadId]
+      send({ id: msg.id, result: { thread: { ...thread(p.threadId), ...(kept ? { cwd: kept.cwd, preview: kept.preview, createdAt: kept.createdAt, updatedAt: kept.updatedAt, turns: p.includeTurns ? kept.turns : [] } : {}) } } })
       break
-    case 'thread/list':
-      send({ id: msg.id, result: { data: [] } })
+    }
+    case 'thread/list': {
+      const data = Object.values(loadThreads())
+        .filter((t) => !p.cwd || t.cwd === p.cwd)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map(({ turns, ...t }) => t)
+      send({ id: msg.id, result: { data, nextCursor: null } })
       break
+    }
     case 'turn/start': {
       const turn = id()
       activeTurn = turn

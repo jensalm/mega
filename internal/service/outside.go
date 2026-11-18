@@ -316,6 +316,9 @@ func readDir(dir string, n int) ([]os.DirEntry, bool, error) {
 // shownPath is an absolute path as the list shows it: with ~ for the home
 // directory when it is under it.
 func shownPath(home, full string) string {
+	if home != "" && full == home {
+		return "~"
+	}
 	if home != "" && (full == home+"/" || strings.HasPrefix(full, home+"/")) {
 		return "~" + strings.TrimPrefix(full, home)
 	}

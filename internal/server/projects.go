@@ -85,6 +85,41 @@ type blockerView struct {
 	Settling       string `dd:",+omitempty"`
 }
 
+// foldersView is one folder as the register dialog's picker shows it
+// (service.Folders): its folders by name, each marked a git checkout or
+// registered, the way up (absent at the projects root), and whether the
+// listing stopped at its bound.
+type foldersView struct {
+	Path    string
+	Full    string
+	Parent  string `dd:",+omitempty"`
+	Root    string
+	Entries []*folderView
+	Stopped bool
+	Note    string `dd:",+omitempty"`
+}
+
+type folderView struct {
+	Name       string
+	Git        bool
+	Registered string `dd:",+omitempty"`
+}
+
+// folders lists a folder inside the projects root for the register dialog's
+// picker; path empty is the root itself.
+func (s *Server) folders(w http.ResponseWriter, r *http.Request) {
+	found, err := s.svc.Folders(r.URL.Query().Get("path"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	view := &foldersView{Path: found.Path, Full: found.Full, Parent: found.Parent, Root: found.Root, Stopped: found.Stopped, Note: found.Note, Entries: make([]*folderView, 0, len(found.Entries))}
+	for _, f := range found.Entries {
+		view.Entries = append(view.Entries, &folderView{Name: f.Name, Git: f.Git, Registered: f.Registered})
+	}
+	writeJSON(w, r, http.StatusOK, view)
+}
+
 type createProjectRequest struct {
 	Name     string
 	Checkout string

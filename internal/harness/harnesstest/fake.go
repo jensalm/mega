@@ -380,6 +380,16 @@ func (h *Harness) History(_ context.Context, place harness.Place, nativeID strin
 	return out, nil
 }
 
+// Look is the look at a scripted history (SetHistory), as an adapter reads
+// one through its own history; it counts as a read of that session.
+func (h *Harness) Look(ctx context.Context, place harness.Place, nativeID string) (harness.Look, error) {
+	history, err := h.History(ctx, place, nativeID)
+	if err != nil {
+		return harness.Look{}, err
+	}
+	return harness.LookOf(history.Events), nil
+}
+
 // Prompt is one prompt a fake runtime received.
 type Prompt struct {
 	UUID string

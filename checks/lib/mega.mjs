@@ -78,7 +78,9 @@ const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 // mega-check by default, so the machine's own hostname never lands in a
 // screenshot or a step; false leaves it out of the config, for a step about
 // the default, which must print and save nothing that shows it.
-export async function suite(name, { bare = false, tz, searchDirs = [], megaName = 'mega-check' } = {}) {
+// { projectsRoot } is where the register dialog's folder picker starts,
+// projects_root, written as given, ~ for the suite's scratch HOME.
+export async function suite(name, { bare = false, tz, searchDirs = [], megaName = 'mega-check', projectsRoot } = {}) {
   const port = Number(process.env.MEGA_CHECK_PORT || 18470)
   if (port === 8470) {
     cannotRun('port 8470 is the operator’s mega; checks use another (MEGA_CHECK_PORT)')
@@ -155,6 +157,7 @@ export async function suite(name, { bare = false, tz, searchDirs = [], megaName 
         'environment:',
         '  shell: /bin/bash',
         ...(searchDirs.length > 0 ? ['path_search:', '  directories:', ...searchDirs.map((d) => `    - ${d}`)] : []),
+        ...(projectsRoot ? [`projects_root: ${projectsRoot}`] : []),
         '',
       ].join('\n'),
     )

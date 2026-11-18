@@ -2235,3 +2235,289 @@ hr.turn {
   list-style: none;
 }
 
+
+/* text for a screen reader alone, such as a group's legend the layout
+   already says. */
+.visually-hidden {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* the adopt dialog: wide enough for the list and the look side by side, and
+   most of the window's height. the list and the look scroll inside; the
+   heading, the controls and Adopt stay put. other dialogs keep their size. */
+dialog.adopt-dialog {
+  height: min(880px, calc(100dvh - 32px));
+  overflow: hidden;
+  width: min(1120px, calc(100vw - 32px));
+}
+
+dialog.adopt-dialog form {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.adopt-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+/* one harness at a time: each with its mark and how many sessions it has,
+   or that it cannot run here. */
+.harness-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.harness-choice {
+  align-items: center;
+  background: var(--bg);
+  display: inline-flex;
+  gap: 6px;
+  padding: 3px 10px;
+}
+
+.harness-choice.chosen {
+  background: var(--selected);
+  border-color: var(--accent);
+}
+
+.harness-choice .count {
+  color: var(--muted);
+  font: calc(11px * var(--fs)) var(--mono);
+}
+
+.harness-choice.cannot .count {
+  color: var(--error);
+}
+
+.adopt-filter {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.adopt-counts {
+  margin: 0;
+}
+
+.adopt-body {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+/* a narrow window: the look below the list. */
+@media (max-width: 760px) {
+  .adopt-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+.session-list {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+/* a session's row lays out the same at every width: the choice, the first
+   prompt on up to two lines and how long ago on the first line, the id small
+   on its own line below, cut short rather than wrapped. */
+dialog label.session-row {
+  align-items: baseline;
+  border-radius: 4px;
+  column-gap: 8px;
+  cursor: pointer;
+  display: grid;
+  grid-template-areas:
+    'pick preview ago'
+    '. id id';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 6px 8px;
+  row-gap: 2px;
+}
+
+.session-row:hover {
+  background: color-mix(in srgb, var(--selected) 55%, transparent);
+}
+
+.session-row.chosen {
+  background: var(--selected);
+}
+
+.session-row input {
+  align-self: start;
+  grid-area: pick;
+  margin: 3px 0 0;
+}
+
+.session-preview {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  grid-area: preview;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.session-ago {
+  color: var(--muted);
+  font-size: calc(12px * var(--fs));
+  grid-area: ago;
+  white-space: nowrap;
+}
+
+.session-id {
+  color: var(--muted);
+  font-size: calc(11px * var(--fs));
+  grid-area: id;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the look at the session picked, beside the list. */
+.session-look {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.session-look h3 {
+  color: var(--muted);
+  font-size: calc(11px * var(--fs));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 10px 0 4px;
+  text-transform: uppercase;
+}
+
+.session-look h3:first-child {
+  margin-top: 0;
+}
+
+.look-text {
+  margin: 0;
+  max-height: none;
+}
+
+.adopt-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adopt-foot p {
+  margin: 0;
+}
+
+dialog.adopt-dialog .actions {
+  bottom: auto;
+  margin: 0;
+  padding: 0;
+  position: static;
+}
+
+/* the register dialog's folder picker: the folder being looked at, with a
+   way up, and its folders to click through. */
+.folder-picker {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.folder-head {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+.folder-at {
+  font: calc(12px * var(--fs)) var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-list {
+  list-style: none;
+  margin: 0;
+  max-height: min(320px, 40vh);
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.folder-list li {
+  align-items: center;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+}
+
+.folder-list li:hover {
+  background: color-mix(in srgb, var(--selected) 55%, transparent);
+}
+
+/* the row the keys act on, shown while the list has the focus. */
+.folder-list:focus li.selected {
+  background: var(--selected);
+}
+
+.folder-list:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.folder-list li.registered {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-registered {
+  font-size: calc(12px * var(--fs));
+  margin-left: auto;
+}
+
+.folder-note {
+  margin: 0;
+  padding: 6px 10px;
+}
+
+/* a note inside the folder list: nothing to pick. */
+.folder-list li[role='presentation'] {
+  cursor: default;
+}
+
+.folder-list li[role='presentation']:hover {
+  background: none;
+}

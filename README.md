@@ -126,6 +126,7 @@ path_search:              # directories @~/ in the reply box reaches beyond the 
 | `snapshots.keep` | `10` | Ordinary configuration snapshots kept; `0` takes none. |
 | `snapshots.keep_at_version` | `20` | Snapshots taken at a harness's new version, kept longer. |
 | `path_search.directories` | none | Directories `@~/` or `@/` lists beyond the checkout, a folder's own files first, newest first, and nothing outside them. |
+| `projects_root` | your home directory | Where the register dialog's folder picker starts, and all it lists. A path typed in full is registered wherever it is. |
 
 `mega --config FILE` reads another config file. `mega version` says what this mega is called, where it logs, each harness's tested range and the version it finds, and where the snapshots are.
 

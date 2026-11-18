@@ -223,8 +223,21 @@ type sessionView struct {
 	UpdatedAt time.Time `dd:",+omitempty"`
 }
 
+// sessionsView is what discovery found: the sessions no conversation holds,
+// and how many it left out because a conversation already holds them.
 type sessionsView struct {
 	Sessions []*sessionView
+	Held     int
+}
+
+// lookView is how a session began and left off, bounded, for the adopt
+// dialog alone (harness.Look). cut names the parts cut short.
+type lookView struct {
+	FirstPrompt string
+	LastPrompt  string `dd:",+omitempty"`
+	LastReply   string `dd:",+omitempty"`
+	Prompts     int
+	Cut         []string `dd:",+omitempty"`
 }
 
 type adoptRequest struct {
@@ -234,16 +247,28 @@ type adoptRequest struct {
 }
 
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
-	sessions, err := s.svc.Discover(r.PathValue("id"), r.URL.Query().Get("harness"))
+	found, err := s.svc.DiscoverHeld(r.PathValue("id"), r.URL.Query().Get("harness"))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	view := &sessionsView{Sessions: make([]*sessionView, 0, len(sessions))}
-	for _, session := range sessions {
+	view := &sessionsView{Sessions: make([]*sessionView, 0, len(found.Sessions)), Held: found.Held}
+	for _, session := range found.Sessions {
 		view.Sessions = append(view.Sessions, &sessionView{NativeID: session.NativeID, Preview: session.Preview, CreatedAt: session.CreatedAt, UpdatedAt: session.UpdatedAt})
 	}
 	writeJSON(w, r, http.StatusOK, view)
+}
+
+// look reads how one session began and left off, for the adopt dialog. it
+// is the operator's private transcript, so it is answered and never logged.
+func (s *Server) look(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	look, err := s.svc.Look(r.PathValue("id"), query.Get("harness"), query.Get("session"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, &lookView{FirstPrompt: look.FirstPrompt, LastPrompt: look.LastPrompt, LastReply: look.LastReply, Prompts: look.Prompts, Cut: look.Cut})
 }
 
 func (s *Server) adopt(w http.ResponseWriter, r *http.Request) {

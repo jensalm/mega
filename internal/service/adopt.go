@@ -19,38 +19,97 @@ const discoverTimeout = time.Minute
 // Discover lists the native sessions stored for a project's checkout that no
 // conversation holds yet, for the operator to choose from.
 func (s *Service) Discover(projectID, harnessName string) ([]harness.Session, error) {
+	found, err := s.DiscoverHeld(projectID, harnessName)
+	return found.Sessions, err
+}
+
+// Discovered is what discovery found in a checkout for one harness: the
+// sessions no conversation holds, and how many more it found that a
+// conversation already holds, which are left out.
+type Discovered struct {
+	Sessions []harness.Session
+	Held     int
+}
+
+// DiscoverHeld is Discover, with the count of the sessions it left out
+// because a conversation already holds them.
+func (s *Service) DiscoverHeld(projectID, harnessName string) (Discovered, error) {
 	s.mu.Lock()
 	project, err := s.projectLocked(projectID)
 	if err != nil {
 		s.mu.Unlock()
-		return nil, err
+		return Discovered{}, err
 	}
 	h, ok := s.harnesses[harnessName]
 	if !ok {
 		s.mu.Unlock()
-		return nil, newError(CodeInvalid, fmt.Sprintf("harness '%s' is not available", harnessName))
+		return Discovered{}, newError(CodeInvalid, fmt.Sprintf("harness '%s' is not available", harnessName))
 	}
 	held := s.heldLocked(harnessName)
 	s.mu.Unlock()
 	// a checkout that cannot be worked in has nothing to offer for adoption;
 	// the project's own notice says why.
 	if checkoutProblem(project.Checkout) != "" {
-		return []harness.Session{}, nil
+		return Discovered{Sessions: []harness.Session{}}, nil
 	}
 	// discovery runs the harness in the project's environment, which must be
 	// one mega may run.
 	place, err := s.placeFor(projectID)
 	if err != nil {
-		return nil, err
+		return Discovered{}, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), discoverTimeout)
 	defer cancel()
 	sessions, err := h.Discover(ctx, place)
 	if err != nil {
-		return nil, s.explain(harnessName, place.Find, fmt.Errorf("discovering sessions for '%s': %w", projectID, harnessFault(harnessName, err)))
+		return Discovered{}, s.explain(harnessName, place.Find, fmt.Errorf("discovering sessions for '%s': %w", projectID, harnessFault(harnessName, err)))
 	}
-	return slices.DeleteFunc(sessions, func(session harness.Session) bool { return held[session.NativeID] }), nil
+	before := len(sessions)
+	sessions = slices.DeleteFunc(sessions, func(session harness.Session) bool { return held[session.NativeID] })
+	return Discovered{Sessions: sessions, Held: before - len(sessions)}, nil
+}
+
+// Look reads how a session in the project's checkout began and how it left
+// off, for the operator choosing which to adopt: the harness's adapter reads
+// its own store, as discovery and an import do, in the project's
+// environment. it changes nothing: nothing is imported, no conversation or
+// registry entry is made, no attention moves, and nothing of what it read is
+// logged. what it returns is bounded (harness.LookOf) and goes only to the
+// caller.
+func (s *Service) Look(projectID, harnessName, nativeID string) (harness.Look, error) {
+	if strings.TrimSpace(nativeID) == "" {
+		return harness.Look{}, newError(CodeInvalid, "a session id is required")
+	}
+	s.mu.Lock()
+	project, err := s.projectLocked(projectID)
+	if err != nil {
+		s.mu.Unlock()
+		return harness.Look{}, err
+	}
+	h, ok := s.harnesses[harnessName]
+	s.mu.Unlock()
+	if !ok {
+		return harness.Look{}, newError(CodeInvalid, fmt.Sprintf("harness '%s' is not available", harnessName))
+	}
+	looker, ok := h.(harness.Looker)
+	if !ok {
+		return harness.Look{}, newError(CodeInvalid, fmt.Sprintf("harness '%s' cannot show a session before it is adopted", harnessName))
+	}
+	if problem := checkoutProblem(project.Checkout); problem != "" {
+		return harness.Look{}, newError(CodeConflict, problem)
+	}
+	place, err := s.placeFor(projectID)
+	if err != nil {
+		return harness.Look{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), discoverTimeout)
+	defer cancel()
+	look, err := looker.Look(ctx, place, nativeID)
+	if err != nil {
+		return harness.Look{}, s.explain(harnessName, place.Find, fmt.Errorf("reading session '%s' for '%s': %w", nativeID, projectID, harnessFault(harnessName, err)))
+	}
+	return look, nil
 }
 
 // heldLocked is the set of native ids some conversation is bound to. callers

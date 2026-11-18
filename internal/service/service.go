@@ -32,6 +32,10 @@ type Options struct {
 	// Snapshots keeps copies of the harnesses' configuration (snapshot);
 	// nil takes none, as the tests and the harness round trips do.
 	Snapshots *snapshot.Store
+	// ProjectsRoot is where the register dialog's folder picker starts and
+	// what it confines its listing to (config projects_root); empty is the
+	// home directory.
+	ProjectsRoot string
 	// SearchDirs are the directories beyond any checkout the reply box's @
 	// search reaches (config path_search.directories), absolute. none keeps
 	// the search to the checkout.
@@ -85,7 +89,10 @@ type Service struct {
 	catalogs   catalogs      // model lists, per harness, for the service's life
 	paths      pathCache     // checkout listings, held briefly
 	outside    outsideSearch // the named directories' listings, held briefly
-	gate       shutdownGate
+	// projectsRoot is where the folder picker starts (Folders); empty is the
+	// home directory.
+	projectsRoot string
+	gate         shutdownGate
 	// resolveSlots bounds the background resolutions running at once
 	// (resolveAtOnce); background counts them, and the start-up check of the
 	// harnesses, so a test can wait for them to settle.
@@ -125,6 +132,7 @@ func New(reg *registry.Registry, opts Options) (*Service, error) {
 		resolveSlots: make(chan struct{}, resolveAtOnce),
 		snapshots:    opts.Snapshots,
 		outside:      outsideSearch{dirs: opts.SearchDirs},
+		projectsRoot: opts.ProjectsRoot,
 	}
 	if s.isUntrusted == nil {
 		s.isUntrusted = func(string) bool { return false }
@@ -374,6 +382,12 @@ func validateCheckout(checkout string) (string, error) {
 	checkout = strings.TrimSpace(checkout)
 	if checkout == "" {
 		return "", newError(CodeInvalid, "checkout is required")
+	}
+	// ~ for the home directory, as the register dialog accepts it.
+	if checkout == "~" || strings.HasPrefix(checkout, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			checkout = filepath.Join(home, strings.TrimPrefix(checkout, "~"))
+		}
 	}
 	if !filepath.IsAbs(checkout) {
 		return "", newError(CodeInvalid, fmt.Sprintf("checkout '%s' must be an absolute path", checkout))

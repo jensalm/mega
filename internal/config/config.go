@@ -53,6 +53,10 @@ type Config struct {
 	// PathSearch names directories beyond the checkout the reply box's @
 	// search reaches.
 	PathSearch PathSearch `dd:"path_search"`
+	// ProjectsRoot is where the register dialog's folder picker starts, and
+	// all it lists and completes: the home directory when empty. a path
+	// typed in full is registered wherever it is.
+	ProjectsRoot string `dd:"projects_root"`
 
 	// File is the config file mega read, or the default it looked for, and
 	// FileRead whether there was one to read. neither is configuration: they
@@ -163,7 +167,7 @@ func Load(configPath, dataOverride, listenOverride string) (*Config, error) {
 		}
 		cfg.Data = defaultData
 	}
-	paths := []*string{&cfg.Data, &cfg.Claude.Shim, &cfg.Claude.Executable}
+	paths := []*string{&cfg.Data, &cfg.Claude.Shim, &cfg.Claude.Executable, &cfg.ProjectsRoot}
 	for i := range cfg.PathSearch.Directories {
 		paths = append(paths, &cfg.PathSearch.Directories[i])
 	}
@@ -199,6 +203,9 @@ func (c *Config) Validate() error {
 	}
 	if len([]rune(c.Name)) > maxName || strings.ContainsFunc(c.Name, unicode.IsControl) {
 		return fmt.Errorf("name: at most %d characters, and none a control character", maxName)
+	}
+	if c.ProjectsRoot != "" && !filepath.IsAbs(c.ProjectsRoot) {
+		return fmt.Errorf("projects_root: '%s' is not absolute; name a directory from / or ~/", c.ProjectsRoot)
 	}
 	for _, dir := range c.PathSearch.Directories {
 		if !filepath.IsAbs(dir) {

@@ -319,3 +319,27 @@ func TestMegaName(t *testing.T) {
 		}
 	}
 }
+
+// the folder picker's root: unset by default, which the service takes as the
+// home directory; named from ~ and expanded; a relative one refused.
+func TestProjectsRoot(t *testing.T) {
+	root := isolate(t)
+	t.Setenv("HOME", "/home/someone")
+	cfg, err := Load("", "", "")
+	if err != nil || cfg.ProjectsRoot != "" {
+		t.Fatalf("default: %q, %v", cfg.ProjectsRoot, err)
+	}
+	file := filepath.Join(root, "mega.yaml")
+	if err := os.WriteFile(file, []byte("projects_root: ~/Repos\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err := Load(file, "", ""); err != nil || cfg.ProjectsRoot != "/home/someone/Repos" {
+		t.Errorf("named: %q, %v", cfg.ProjectsRoot, err)
+	}
+	if err := os.WriteFile(file, []byte("projects_root: Repos\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(file, "", ""); err == nil || !strings.Contains(err.Error(), "projects_root") {
+		t.Errorf("a relative root: %v", err)
+	}
+}
