@@ -22,7 +22,7 @@ func TestDefaultsFollowXDG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Listen != "127.0.0.1:8470" {
+	if cfg.Listen != "127.0.0.1:6342" {
 		t.Errorf("listen = %q", cfg.Listen)
 	}
 	want := filepath.Join(root, "data", "mega")
@@ -341,5 +341,24 @@ func TestProjectsRoot(t *testing.T) {
 	}
 	if _, err := Load(file, "", ""); err == nil || !strings.Contains(err.Error(), "projects_root") {
 		t.Errorf("a relative root: %v", err)
+	}
+}
+
+// the default port is 6342; a config that names a port keeps it, the old
+// default 8470 included, and --listen still wins over both.
+func TestAConfiguredPortIsKept(t *testing.T) {
+	root := isolate(t)
+	if cfg, err := Load("", "", ""); err != nil || cfg.Listen != "127.0.0.1:6342" {
+		t.Fatalf("the default: %q, %v", cfg.Listen, err)
+	}
+	file := filepath.Join(root, "mega.yaml")
+	if err := os.WriteFile(file, []byte("listen: 127.0.0.1:8470\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err := Load(file, "", ""); err != nil || cfg.Listen != "127.0.0.1:8470" {
+		t.Errorf("a config naming 8470: %q, %v", cfg.Listen, err)
+	}
+	if cfg, err := Load(file, "", "127.0.0.1:18471"); err != nil || cfg.Listen != "127.0.0.1:18471" {
+		t.Errorf("--listen over the config: %q, %v", cfg.Listen, err)
 	}
 }

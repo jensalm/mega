@@ -1,6 +1,5 @@
 building:
-  - improve-the-new-project-dialog.md
-  - improve-the-adopt-a-session-dialog.md
+  - default-port.md
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -17,7 +16,6 @@ horizon:
   - re-entry-briefing.md
   - updating-harnesses-from-mega.md
 researching:
-  - default-port.md
   - imported-turns-carry-their-own-times.md
   - first-tagged-release.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
@@ -27,6 +25,8 @@ researching:
   - reads-after-the-service-closes.md
   - mega-on-macos-and-windows.md
 evaluating:
+  - improve-the-adopt-a-session-dialog.md
+  - improve-the-new-project-dialog.md
   - a-large-named-directory-starves-the-path-search.md
   - path-search-beyond-the-checkout.md
   - pi-adapter.md

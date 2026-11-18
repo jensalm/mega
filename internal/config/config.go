@@ -18,7 +18,10 @@ const (
 	registryFile    = "registry.yaml"
 	lockFile        = "lock"
 	conversationDir = "conversations"
-	defaultListen   = "127.0.0.1:8470"
+	// 6342, MEGA on a telephone keypad, unassigned by IANA. it was 8470
+	// until 2026-11-18, which IANA assigns to another protocol and NetFoundry's
+	// Agora also uses.
+	defaultListen = "127.0.0.1:6342"
 
 	// the installed claude code, by its bare name: the one the operator's own
 	// updater links, so an update never leaves mega on a pruned build. with

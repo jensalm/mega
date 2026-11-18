@@ -11,8 +11,10 @@
 // scratch directory, MEGA_CHECKS_DIR/<suite> (default $TMPDIR/mega-checks),
 // emptied first and left afterwards for its log and screenshots. the binary
 // is MEGA_CHECK_BIN, or one built into the scratch directory. the port is
-// MEGA_CHECK_PORT, default 18470; 8470 is the operator's and is refused.
+// MEGA_CHECK_PORT, default 18470; 6342, the operator's default, and 8470, the
+// default before 2026-11-18, are refused.
 import { execFileSync, spawn } from 'node:child_process'
+import { createConnection } from 'node:net'
 import { existsSync, mkdirSync, openSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -80,10 +82,49 @@ const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 // the default, which must print and save nothing that shows it.
 // { projectsRoot } is where the register dialog's folder picker starts,
 // projects_root, written as given, ~ for the suite's scratch HOME.
+// reserved is whether a port is the operator's mega's: 6342, the default,
+// or 8470, the default before 2026-11-18, which a mega not yet restarted may
+// still serve. no suite serves on either.
+const reserved = (port) => port === 6342 || port === 8470
+
+// checkPort is the port a suite serves on: MEGA_CHECK_PORT, else 18470.
+export const checkPort = () => Number(process.env.MEGA_CHECK_PORT || 18470)
+
+// requireScratchPort ends the run, as cannotRun does, unless a port a suite
+// would start another mega on beyond its own is free to: not one of the
+// operator's, and nothing already answering there, where the scratch mega
+// would fail to bind and a step would read whatever does. call it before
+// suite() starts anything, so ending the run leaves nothing behind.
+export async function requireScratchPort(port) {
+  if (reserved(port)) {
+    cannotRun(`port ${port} is the operator’s mega, the default or the one before it; checks use others (MEGA_CHECK_PORT)`)
+  }
+  // free only when a connection is refused: a listener that answers, in any
+  // protocol, or no answer at all within a second, is not.
+  const outcome = await new Promise((done) => {
+    const socket = createConnection({ host: '127.0.0.1', port })
+    const end = (result) => {
+      socket.destroy()
+      done(result)
+    }
+    socket.setTimeout(1000)
+    socket.once('connect', () => end('taken'))
+    socket.once('timeout', () => end('no answer'))
+    socket.once('error', (error) => end(error.code === 'ECONNREFUSED' ? 'free' : (error.code ?? 'an error')))
+  })
+  if (outcome === 'taken') {
+    cannotRun(`something already listens on 127.0.0.1:${port}, which a check would start a mega on; stop it, or set MEGA_CHECK_PORT`)
+  }
+  if (outcome !== 'free') {
+    cannotRun(`127.0.0.1:${port}, which a check would start a mega on, could not be shown to be free (${outcome}); set MEGA_CHECK_PORT`)
+  }
+  return port
+}
+
 export async function suite(name, { bare = false, tz, searchDirs = [], megaName = 'mega-check', projectsRoot } = {}) {
-  const port = Number(process.env.MEGA_CHECK_PORT || 18470)
-  if (port === 8470) {
-    cannotRun('port 8470 is the operator’s mega; checks use another (MEGA_CHECK_PORT)')
+  const port = checkPort()
+  if (reserved(port)) {
+    cannotRun(`port ${port} is the operator’s mega, the default or the one before it; checks use another (MEGA_CHECK_PORT)`)
   }
   const url = `http://127.0.0.1:${port}`
   const root = resolve(process.env.MEGA_CHECKS_DIR || join(tmpdir(), 'mega-checks'))

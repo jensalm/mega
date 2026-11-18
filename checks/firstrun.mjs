@@ -55,7 +55,12 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { suite } from './lib/mega.mjs'
+import { checkPort, requireScratchPort, suite } from './lib/mega.mjs'
+
+// the other megas this suite starts take the four ports above its own, each
+// refused before anything starts if it is the operator's or something
+// already answers there.
+for (const offset of [1, 2, 3, 4]) await requireScratchPort(checkPort() + offset)
 
 const t = await suite('firstrun', { bare: true })
 const { url, check, until, api, workspace } = t

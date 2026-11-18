@@ -4,7 +4,7 @@
 # a scratch mega runs with its own data directory and XDG directories under
 # the scratch root, and with the operator's own HOME and login: the builds run
 # as the operator does, against the real configuration. it listens on the
-# port given, never 8470.
+# port given, never 6342, the default, nor 8470, the default before 2026-11-18.
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -20,7 +20,7 @@ die() { printf 'cannot run: %s\n' "$*" >&2; exit 3; }
 check_port() {
   local port=$1
   [[ $port =~ ^[0-9]+$ ]] && (( port > 1024 && port < 65536 )) || die "'$port' is not a port"
-  [[ $port != 8470 ]] || die "port 8470 is the operator's mega; use a scratch port"
+  [[ $port != 6342 && $port != 8470 ]] || die "port $port is the operator's mega, the default or the one before it; use a scratch port"
   if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$port/api/workspace"; then
     die "something already answers on port $port; stop it or use another"
   fi

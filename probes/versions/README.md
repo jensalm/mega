@@ -14,7 +14,7 @@ The probe runs real harness sessions on Michael's own login, as the builds run i
   - `MEGA_E2E_CLAUDE_FIXTURE`; Michael's is `/home/michael/Repos/q/research/roundhouse-fixtures/claude-rt1`.
   - `MEGA_E2E_CODEX_FIXTURE`; Michael's is `/home/michael/Repos/q/research/roundhouse-fixtures/codex-rt1`.
 - **A build of the UI** from `make`, which mega embeds, and `node`, `go` and `curl`.
-- **A scratch port.** Port 8470 is refused, and so is a port something already answers on.
+- **A scratch port.** Port 6342, the default, and 8470, the default before 2026-11-18, are refused, and so is a port something already answers on.
 
 ## Running it
 

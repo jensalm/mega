@@ -1,6 +1,6 @@
 ---
 title: improve the new project dialog
-state: building
+state: evaluating
 created: 2026-11-18
 tags: [enhancement]
 ---

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470, is registered with IANA to another protocol and is also used by NetFoundry's Agora. 6342 is unassigned. Nothing else about the listener changes: it is loopback only, and `listen` in the config or `--listen` still names another port. What an operator has to do:
+- **With no `listen` in your config,** mega moves to `http://127.0.0.1:6342` at its next start.
+- **Bookmarks, shares and tunnels that name 8470** need changing to 6342. Or keep the old port by putting `listen: 127.0.0.1:8470` in `~/.config/mega/mega.yaml`; a config that names a port keeps it.
+- **The page's per-browser settings,** such as the side panel's width and which projects are folded, start fresh once, because a browser keeps them per port.
+- **A new mega started while an old one still serves 8470** on the same data directory does not start a second one beside it. It is refused by the data directory's lock, which names the running mega at 8470, and `mega daemon` opens that one's page instead.
+
 FEATURE: **Registering a project has a folder picker.** (2026-11-18) The checkout field completes as you type, from mega's own machine, and accepts `~` for your home directory. Below it is the folder you are looking at, to click through, with a way up.
 - **What it lists:** folders only. Git checkouts are marked, and a folder already registered says so and cannot be picked again.
 - **Where it looks:** only inside your projects root, `projects_root` in the config, your home directory by default.

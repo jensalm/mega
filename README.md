@@ -39,10 +39,10 @@ git clone https://github.com/michaelquigley/mega.git
 cd mega
 make                                      # builds the page, installs the Claude bridge's dependencies, installs mega
 export PATH="$PATH:$(go env GOPATH)/bin"  # where make put mega; add this to your shell profile to keep it
-mega                                      # serves http://127.0.0.1:8470
+mega                                      # serves http://127.0.0.1:6342
 ```
 
-Then open <http://127.0.0.1:8470>.
+Then open <http://127.0.0.1:6342>.
 
 - **If `GOBIN` is set,** `make` installs into it instead, and that is the directory to put on your `PATH`.
 - **Keep the clone where it is.** mega runs its Claude bridge, `shim/claude`, from the checkout it was built in. If you move the clone, run `make` again from the new place.
@@ -96,7 +96,8 @@ Each of these is what mega, or your shell, says, and what to do.
 - **A build outside the tested range.** A newer build is said plainly: "version 2.1.330, … newer than the 2.1.318 to 2.1.325 mega was tested with". An older one is marked: "Claude Code '2.1.300' is older than the builds mega was tested with, '2.1.318 to 2.1.325'; the Agent SDK mega runs expects Claude Code '2.1.318' or later, so some calls may fail". Update the harness.
 - **"Claude has not been trusted in this checkout, so it ignores the project's permission rules. Run claude here once and accept the trust dialog; mega will not accept it for you."** Do as it says, in that checkout. For pi: "pi has not been trusted in this checkout, so its project extensions, settings and MCP servers did not load…": run `pi` there once.
 - **"Claude Code cannot run: claude shim: stat …/shim/claude/shim.mjs: no such file or directory"** after moving or deleting the clone mega was built from. Put it back, or run `make` again where it is now.
-- **"another mega is already running at 'http://127.0.0.1:8470'; open it there, or stop it (Quit in its tray, or Ctrl+C where it runs) before starting this one"**, or the port being in use by another program. Open that one, stop it, or serve on another port with `--listen`.
+- **"another mega is already running at 'http://127.0.0.1:6342'; open it there, or stop it (Quit in its tray, or Ctrl+C where it runs) before starting this one"**, or the port being in use by another program. Open that one or stop it, or serve this one on another port with `--listen`.
+- **"another mega is running on the data directory '…', at 'http://127.0.0.1:8470'; open it there, or stop it before starting this one".** A mega already holds your workspace, such as one started before the default port moved to 6342 and still serving 8470. Another port does not help: one workspace has one mega. Open the one it names, or stop it and start again. A second, separate mega needs its own `--data` directory.
 - **A project's `.mega/environment.yaml` not yet approved.** If a repository defines how its environment is activated, nothing starts in it until you approve that file on the project's page. See [Project environments](#project-environments).
 
 ## Configuration
@@ -104,7 +105,7 @@ Each of these is what mega, or your shell, says, and what to do.
 Configuration is optional, in `~/.config/mega/mega.yaml`. This example is safe to copy whole; change what you need and leave out the rest:
 
 ```yaml
-listen: 127.0.0.1:8470    # loopback only; anything else is refused
+listen: 127.0.0.1:6342    # loopback only; anything else is refused
 name: my-laptop           # what the tab and side panel call this mega; the hostname by default
 path_search:              # directories @~/ in the reply box reaches beyond the checkout; none by default
   directories:
@@ -113,7 +114,7 @@ path_search:              # directories @~/ in the reply box reaches beyond the 
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `listen` | `127.0.0.1:8470` | Where mega serves; loopback only. `--listen` overrides it. |
+| `listen` | `127.0.0.1:6342` | Where mega serves; loopback only. `--listen` overrides it. Before 2026-11-18 the default was 8470. |
 | `data` | `~/.local/share/mega` | The workspace. `--data` overrides it. |
 | `name` | the hostname | What the tab title, the side panel and `mega version` call this mega. |
 | `claude.executable` | `claude` on your `PATH` | Another Claude Code, as a native build's path. |

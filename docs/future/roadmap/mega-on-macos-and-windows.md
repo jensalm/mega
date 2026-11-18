@@ -25,7 +25,7 @@ Michael has no Mac and expects to find a volunteer among them. Until then CI is 
 
 ## windows
 
-- WSL2 is a Linux machine, so the expectation is that mega works there as it does on `fortyfive`, with Claude Code and Codex installed inside WSL and the browser on Windows reaching `127.0.0.1:8470`. That is an expectation, not an observation.
+- WSL2 is a Linux machine, so the expectation is that mega works there as it does on `fortyfive`, with Claude Code and Codex installed inside WSL and the browser on Windows reaching `127.0.0.1:6342`. That is an expectation, not an observation.
 - Michael has a Windows machine, which is also the cleanest clean machine there is. To establish on it: that loopback forwarding reaches the page, that the harnesses' logins work inside WSL, and that checkouts kept on the Windows side of the filesystem are usable or should be advised against.
 - The README gets a short Windows section that says WSL2 is the supported way and native Windows is not.
 

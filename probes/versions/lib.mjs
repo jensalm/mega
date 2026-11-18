@@ -32,7 +32,7 @@ export function probe(harness) {
   if (!url) cannotRun('MEGA_PROBE_URL is not set; run the driver through its runner, or set it to the scratch mega')
   const parsed = new URL(url)
   if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') cannotRun(`${url} is not on loopback`)
-  if (parsed.port === '8470' || parsed.port === '') cannotRun('port 8470 is the operator’s mega; the probe uses a scratch port')
+  if (parsed.port === '6342' || parsed.port === '8470' || parsed.port === '') cannotRun(`port ${parsed.port || 'the default'} is the operator’s mega, the default or the one before it; the probe uses a scratch port`)
 
   const begun = Date.now()
   const steps = { passed: 0, failed: [] }

@@ -19,7 +19,7 @@ Where things go:
 - The scratch root is `$TMPDIR/mega-checks` (`/tmp/mega-checks` without `TMPDIR`). Set `CHECKS_DIR` to put it elsewhere.
 - Each suite gets `<root>/<suite>/`, emptied when the suite starts and left afterwards. It holds the suite's service log, `service.log`, its screenshots under `shots/`, its checkouts and data.
 - Each suite's printed output is also kept in `<root>/<suite>.out`.
-- The port is 18470, or `MEGA_CHECK_PORT`. A suite refuses 8470, the operator's, and refuses to start while something else answers on its port.
+- The port is 18470, or `MEGA_CHECK_PORT`. A suite refuses 6342, the operator's default, and 8470, the default before 2026-11-18, which a mega not yet restarted may still serve. It refuses to start while something else answers on its port. The firstrun suite also starts megas on the four ports above its own, and refuses those the same way, before anything starts (`requireScratchPort`).
 
 ## What each suite covers
 

@@ -1,6 +1,6 @@
 ---
 title: improve the adopt-a-session dialog
-state: building
+state: evaluating
 created: 2026-11-18
 tags: [enhancement]
 ---

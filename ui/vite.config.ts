@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const service = 'http://127.0.0.1:8470'
+const service = 'http://127.0.0.1:6342'
 
 export default defineConfig({
   plugins: [react()],
