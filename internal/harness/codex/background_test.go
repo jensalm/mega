@@ -17,6 +17,7 @@ import (
 // and is one native event, opening no turn, with the list emptied.
 func TestCommandOutlivingItsTurnIsBackgroundUntilItCompletes(t *testing.T) {
 	r, sink, _ := testRuntime()
+	r.threadID = "01a1c72f-8830-7942-99a5-530465cd001b" // the recording's own thread
 	data, err := os.ReadFile("testdata/background.jsonl")
 	if err != nil {
 		t.Fatal(err)

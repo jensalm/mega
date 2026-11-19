@@ -678,6 +678,13 @@ func (r *runtime) event(raw map[string]any) {
 // request asks the service for an id while holding r.mu, so an answer cannot
 // arrive before the mapping to the sdk's requestId exists.
 func (r *runtime) request(frame *shimFrame) {
+	// after a frame named another session, nothing more is passed on.
+	r.mu.Lock()
+	wrong := r.wrongSession
+	r.mu.Unlock()
+	if wrong {
+		return
+	}
 	payload := map[string]any{"tool": frame.Tool}
 	if frame.Kind == model.RequestQuestion {
 		if input, ok := frame.Input.(map[string]any); ok {

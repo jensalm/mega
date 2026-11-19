@@ -127,10 +127,11 @@ type live struct {
 	answering    map[string]string    // requests an answer reached or is reaching: still listed until recorded, never answerable again
 	interrupting bool                 // an interrupt has begun and the turn has not ended
 
-	// fault is whether the last runtime ended badly: an error, an exit during a
-	// turn, or a launch that did not start. a runtime that starts or stops
-	// cleanly clears it.
-	fault bool
+	// fault is whether the last runtime ended badly (an error, an exit during
+	// a turn, or a launch that did not start: runFault), or the last history
+	// read failed (readFault), as noteRuntime follows them. reading is a
+	// resume or an adoption under way, whose error is the read's.
+	fault, runFault, readFault, reading bool
 
 	// turnOutput is the newest agent output recorded in the turn in flight. it
 	// becomes the conversation's OutputSeq only when the turn ends, so output
@@ -280,14 +281,32 @@ func (s *Service) transition(l *live, ev *model.Event, state string, apply func(
 	return nil
 }
 
-// noteRuntime follows how the last runtime ended, for the error attention.
+// noteRuntime follows how the last runtime ended, and whether the last
+// history read failed, for the error attention, from the runtime events in
+// the order recorded: live, and as the log is read back. an error recorded
+// while a resume or an adoption reads history is the read's, and a read that
+// succeeds clears it (resumed); any other error or a launch that did not
+// start is the runtime's, cleared only by a runtime that starts or stops
+// cleanly, which also means history was read.
 func (l *live) noteRuntime(status string) {
 	switch status {
+	case model.StatusResuming:
+		l.reading = true
+	case model.StatusResumed:
+		l.reading, l.readFault = false, false
 	case model.StatusStarted, model.StatusStopped:
-		l.fault = false
+		l.reading, l.runFault, l.readFault = false, false, false
 	case model.StatusError, model.StatusNotStarted:
-		l.fault = true
+		if l.reading {
+			l.readFault = true
+		} else {
+			l.runFault = true
+		}
+		l.reading = false
+	case model.StatusUnsupervised, model.StatusStarting:
+		l.reading = false
 	}
+	l.fault = l.runFault || l.readFault
 }
 
 // failedLaunch records a launch that failed. only a failure proven to come

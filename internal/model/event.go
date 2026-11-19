@@ -96,8 +96,9 @@ type Event struct {
 	// AfterTurn marks agent output a runtime reports after the turn it
 	// belongs to has ended, such as a codex background command finishing.
 	// the service records it without opening a turn and counts it as unread
-	// at once. it is a signal through the sink, never written to the log.
-	AfterTurn bool `dd:"-"`
+	// at once. it is written to the log, since the start-up that rebuilds
+	// the unread marker from the log needs it.
+	AfterTurn bool `dd:",+omitempty"`
 }
 
 // RuntimeFacts are what a runtime reported about itself when it started.

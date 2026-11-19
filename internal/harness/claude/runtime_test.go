@@ -413,3 +413,15 @@ func TestAnAPIErrorStaysAReply(t *testing.T) {
 		}
 	}
 }
+
+// once a frame has named another session, nothing more the shim reports is
+// passed on, a request as well as an event.
+func TestNoRequestIsRaisedAfterAnotherSession(t *testing.T) {
+	r, sink, _ := testRuntime()
+	r.nativeID, r.started = "s", true
+	r.handle([]byte(`{"type":"event","msg":{"type":"system","subtype":"status","session_id":"another"}}`))
+	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{"command":"echo"}}`))
+	if len(sink.requests) != 0 {
+		t.Errorf("a request was raised after another session was reported: %v", sink.requests)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -74,9 +75,14 @@ func (s *recordingSink) Exited(error) {}
 type wire struct {
 	mu    sync.Mutex
 	lines chan string
+	// onWrite, when set, runs as a frame is written, before it is taken.
+	onWrite func()
 }
 
 func (w *wire) Write(p []byte) (int, error) {
+	if w.onWrite != nil {
+		w.onWrite()
+	}
 	for _, line := range strings.Split(strings.TrimSpace(string(p)), "\n") {
 		w.lines <- line
 	}
@@ -525,5 +531,34 @@ func TestStopDuringAnswerTurnStartInterruptsIt(t *testing.T) {
 	}
 	if err := <-result; !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("answer: %v", err)
+	}
+}
+
+// a resolution codex reports while an answer is on its way is not lost: one
+// read before the answer is written settles the request, and the answer is
+// not pending, as claude's shim says when it rejects one.
+func TestAResolutionReadBeforeTheAnswerIsWrittenSettlesIt(t *testing.T) {
+	r, sink, w := testRuntime()
+	r.feed(`{"id":1,"method":"item/fileChange/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"f-1","startedAtMs":1}}`)
+	if len(sink.requests) != 1 {
+		t.Fatalf("requests = %v", sink.requests)
+	}
+	early := false
+	w.onWrite = func() {
+		w.onWrite = nil
+		done := make(chan struct{})
+		go func() {
+			r.feed(`{"method":"serverRequest/resolved","params":{"threadId":"thread-1","requestId":1}}`)
+			close(done)
+		}()
+		select {
+		case <-done:
+			early = true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny})
+	if early && err == nil && !slices.Contains(sink.resolved, "svc-1:aborted") {
+		t.Error("a resolution read before the answer was written was lost, and the answer reported delivered")
 	}
 }

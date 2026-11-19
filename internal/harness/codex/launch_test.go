@@ -75,6 +75,19 @@ func fakeAppServer(mode string) {
 			}
 			fmt.Printf(`{"id":%v,"result":%s}`+"\n", frame["id"], strings.Join(strings.Fields(string(reply)), " "))
 		case "thread/start", "thread/resume":
+			if mode == "wrong-thread" || mode == "stray" {
+				// a frame of another thread, before the reply: in wrong-thread
+				// the reply is that other thread too, in stray it is the one
+				// asked for.
+				fmt.Println(`{"method":"item/completed","params":{"threadId":"t-other","turnId":"turn-9","item":{"type":"agentMessage","id":"x-1","text":"from another thread"}}}`)
+				params, _ := frame["params"].(map[string]any)
+				thread, _ := params["threadId"].(string)
+				if mode == "wrong-thread" {
+					thread = "t-other"
+				}
+				fmt.Printf(`{"id":%v,"result":{"thread":{"id":%q,"cliVersion":"0.166.0"},"model":"gpt-a","reasoningEffort":"high","cwd":"/f"}}`+"\n", frame["id"], thread)
+				continue
+			}
 			if mode == "start" || mode == "mcp" {
 				// the thread runs the model passed, or "unset" when none was.
 				params, _ := frame["params"].(map[string]any)
@@ -177,5 +190,28 @@ func TestCheckNamesAMissingBinary(t *testing.T) {
 	// a binary that exists, installed whole (helpers_test.go).
 	if err := New(Config{Binary: codexPackage(t, t.TempDir(), true)}).Check(os.Environ()); err != nil {
 		t.Errorf("a binary that exists: %v", err)
+	}
+}
+
+// nothing a thread reports reaches the conversation unless it is the thread
+// asked for: a frame of another thread, before thread/resume's reply or
+// after it, is never mapped, as claude checks every frame's session.
+func TestNothingOfAnotherThreadIsRecorded(t *testing.T) {
+	for _, mode := range []string{"wrong-thread", "stray"} {
+		sink := &recordingSink{}
+		rt, err := fakeHarness(t, mode).Launch(harness.Spec{Env: os.Environ(), Find: os.Environ(), Cwd: t.TempDir(), NativeID: "t-1"}, sink)
+		if mode == "wrong-thread" && err == nil {
+			t.Errorf("%s: a resume that opened another thread launched", mode)
+		}
+		if rt != nil {
+			_ = rt.Close()
+		}
+		sink.mu.Lock()
+		for _, ev := range sink.events {
+			if ev.NativeID == "x-1" {
+				t.Errorf("%s: another thread's message was recorded: %q", mode, ev.Text)
+			}
+		}
+		sink.mu.Unlock()
 	}
 }

@@ -58,8 +58,11 @@ type runtime struct {
 	conn *conn
 	sink harness.Sink
 
-	mu          sync.Mutex
-	threadID    string
+	mu       sync.Mutex
+	threadID string
+	// expected is the thread a resume asked for, known before codex confirms
+	// it: until then only frames of that thread are taken.
+	expected    string
 	activeTurn  string
 	requests    map[string]*serverRequest  // service request id -> server request
 	byNative    map[string]string          // server request id -> service request id
@@ -159,10 +162,15 @@ func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 		return harness.ErrNotPending
 	}
 	if req, ok := r.requests[requestID]; ok {
+		// the mapping goes and the answer is written in one step under the
+		// lock, as claude's adapter sends its answer: a resolution codex
+		// reported, read before this, settled the request already, and one
+		// read after finds nothing left to settle.
 		delete(r.requests, requestID)
 		delete(r.byNative, nativeKey(req.id))
+		err := r.conn.respond(req.id, responseFor(req, answer))
 		r.mu.Unlock()
-		return r.conn.respond(req.id, responseFor(req, answer))
+		return err
 	}
 	q, ok := r.questions[requestID]
 	if !ok {
@@ -386,7 +394,35 @@ func (r *runtime) watch() {
 	r.sink.Exited(err)
 }
 
+// forThread is whether a frame belongs to this runtime's thread: one that
+// names a thread is taken only when it is the thread confirmed, or, before
+// codex has confirmed one, the thread a resume asked for. a fresh thread's
+// frames before thread/start's reply are left, as nothing has asked for them
+// yet. this is the per-frame check claude makes of every frame's session.
+func (r *runtime) forThread(method string, params map[string]any) bool {
+	named, ok := params["threadId"].(string)
+	if !ok {
+		return true
+	}
+	r.mu.Lock()
+	want := r.threadID
+	if want == "" {
+		want = r.expected
+	}
+	r.mu.Unlock()
+	if want != "" && named == want {
+		return true
+	}
+	if want != "" {
+		dl.Warnf("codex thread '%s': '%s' for another thread '%s' was left", want, method, named)
+	}
+	return false
+}
+
 func (r *runtime) notify(method string, params map[string]any) {
+	if !r.forThread(method, params) {
+		return
+	}
 	switch method {
 	case "turn/started":
 		n := &turnNotification{}
@@ -612,6 +648,9 @@ func (r *runtime) itemCompleted(params map[string]any) {
 }
 
 func (r *runtime) request(id any, method string, params map[string]any) {
+	if !r.forThread(method, params) {
+		return
+	}
 	req := &serverRequest{id: id, method: method}
 	kind := model.RequestPermission
 	var payload map[string]any

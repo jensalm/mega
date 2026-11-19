@@ -248,12 +248,17 @@ func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 		r.mu.Unlock()
 		return err
 	}
+	// the dialog goes and the answer is written in one step under the lock,
+	// as claude's adapter sends its answer: a settlement handled before this
+	// (an aborted run's, or the deadline's) took the dialog already, and one
+	// handled after finds nothing left to settle.
 	delete(r.dialogs, requestID)
 	if d.timer != nil {
 		d.timer.Stop()
 	}
+	err = r.conn.write(response)
 	r.mu.Unlock()
-	if err := r.conn.write(response); err != nil {
+	if err != nil {
 		return fmt.Errorf("%w: %w", harness.ErrNotPending, err)
 	}
 	return nil

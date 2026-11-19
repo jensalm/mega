@@ -10,7 +10,13 @@ CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470,
 
 FIX: **Nothing starts once a shutdown has begun, or in an environment file that changed while it was read.** (2026-11-19) A start, a resume or an adoption now checks again immediately before the harness runs, after the version check and any history import. A shutdown that began meanwhile refuses it, and a shutdown waits for a launch already under way. An environment file changed meanwhile refuses it with `environment_changed`, as an edit before the start always did.
 
-FIX: **A conversation's unread output is no longer lost to a failed registry write.** (2026-11-19) When a turn's end could not record its output as unread, the output stayed read for good. mega now counts it from the conversation's log at its next start. A request left by a runtime that ended, whose abort could not be recorded, now takes no further answer, so none reaches the runtime that replaces it, and a history read back from Claude Code, Codex or pi is refused if it holds another session than the one asked for.
+FIX: **A conversation's unread output is no longer lost to a failed registry write.** (2026-11-19) When a turn's end could not record its output as unread, the output stayed read for good. mega now counts it from the conversation's log at its next start, including the output of a Codex background command that finishes after its turn.
+
+FIX: **An answer to a request whose runtime has ended is refused.** (2026-11-19) A request left by a runtime that ended, whose abort could not be recorded, now takes no further answer, so none reaches the runtime that replaces it. A request Codex or pi settles while its answer is on the way is now shown as settled, not answered.
+
+FIX: **Another session's history or output never reaches a conversation.** (2026-11-19) A history read back from Claude Code, Codex or pi is refused if it holds another session than the one asked for, and Codex output for another thread is left, even before Codex has confirmed which thread it opened.
+
+FIX: **A resume that succeeds clears the error of one that failed.** (2026-11-19) A resume or an adoption whose history read failed shows the conversation as an error. A later resume that reads it now clears that error, so its unread output shows in Needs you. An error from the runtime itself still waits for a runtime to start.
 
 FIX: **The shutdown banner says only what the page heard.** (2026-11-19) mega now tells the page when a shutdown has finished, as the last thing it sends. A page that heard it says mega was shut down, as before. A page that asked for a shutdown and then lost contact without hearing it says a shutdown was asked for and contact was lost, in the banner, the footer ("Shutdown asked, contact lost, retrying") and the rail.
 

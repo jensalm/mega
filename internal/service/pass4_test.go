@@ -234,3 +234,73 @@ func TestAnUnreadMarkerTheRegistryRefusedIsReconciledAtStart(t *testing.T) {
 		t.Errorf("after the restart: output seq %d (want %d), attention %q", view.OutputSeq, out, view.Attention)
 	}
 }
+
+// the fifth full review: what start-up rebuilds must be in the log, and an
+// error a retry has made good is cleared.
+
+// output an adapter marks as after its turn, a codex background command
+// finishing, is counted from the log at the next start: that it came after
+// its turn is in the log, not only in memory.
+func TestLateOutputsMarkerIsRebuiltFromTheLog(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	finishTurn(rt, "a-1", "done")
+	r.readAll(conv.ID)
+	r.svc.failUpdate = func() error { return errors.New("the registry could not be written") }
+	rt.Emit(&model.Event{Kind: model.EventToolResult, Text: "the background command finished", NativeID: "late-1", AfterTurn: true})
+	r.svc.failUpdate = nil
+	late := seqOf(r.events(conv.ID), "late-1")
+	if late == 0 || r.view(conv.ID).OutputSeq == late {
+		t.Fatalf("the refused marker: late output %d, output seq %d", late, r.view(conv.ID).OutputSeq)
+	}
+	r.restart() // a crash: nothing ends the turn the late output would open
+	if view := r.view(conv.ID); view.OutputSeq != late {
+		t.Errorf("after the restart: output seq %d, want the late output's %d", view.OutputSeq, late)
+	}
+}
+
+// a resume whose history read failed shows an error; a retry that reads it
+// clears that error, live and as the log is read back at the next start.
+func TestAResumeThatSucceedsClearsItsReadError(t *testing.T) {
+	r := newRig(t)
+	conv := r.stoppedWithSession()
+	r.fake.FailHistory(errors.New("the session could not be read"))
+	if err := r.svc.Resume(conv.ID); err == nil {
+		t.Fatal("a failed read resumed")
+	}
+	if got := r.attention(conv.ID); got != model.AttentionError {
+		t.Fatalf("after the failed read: %q", got)
+	}
+	r.fake.FailHistory(nil)
+	if err := r.svc.Resume(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.attention(conv.ID); got == model.AttentionError {
+		t.Errorf("a resume that read the history still shows the read's error")
+	}
+	r.restart()
+	if got := r.attention(conv.ID); got == model.AttentionError {
+		t.Errorf("read back at the next start, the read's error is shown again")
+	}
+}
+
+// an error that came from the runtime is not cleared by a resume, which
+// reads history and starts nothing: only a runtime that starts clears it.
+func TestAResumeLeavesARuntimesError(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	rt.Exit(errors.New("the process died"))
+	if got := r.attention(conv.ID); got != model.AttentionError {
+		t.Fatalf("after the crash: %q", got)
+	}
+	if err := r.svc.Resume(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.attention(conv.ID); got != model.AttentionError {
+		t.Errorf("a resume cleared the runtime's error: %q", got)
+	}
+}

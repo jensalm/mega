@@ -17,6 +17,7 @@ horizon:
   - re-entry-briefing.md
   - updating-harnesses-from-mega.md
 researching:
+  - simplify-the-core.md
   - harden-requests-stops-and-restarts.md
   - a-model-switch-on-an-idle-runtime-is-untested.md
   - loose-ends-around-stops-and-restarts.md

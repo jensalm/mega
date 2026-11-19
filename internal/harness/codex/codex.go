@@ -57,6 +57,7 @@ func (h *Harness) Name() string {
 // returns.
 func (h *Harness) Launch(spec harness.Spec, sink harness.Sink) (harness.Runtime, error) {
 	r := newRuntime(sink)
+	r.expected = spec.NativeID
 	c, err := dial(h.cfg.Binary, harness.Place{Cwd: spec.Cwd, Env: spec.Env, Find: spec.Find}, r)
 	if err != nil {
 		// the app-server never started.

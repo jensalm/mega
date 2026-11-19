@@ -903,3 +903,46 @@ func TestTheRuntimesFileReadChecksItsSession(t *testing.T) {
 		t.Errorf("another session's file gave %d entries (%v)", len(entries), err)
 	}
 }
+
+// hookWriter runs onWrite as each frame is written to pi.
+type hookWriter struct{ onWrite func() }
+
+func (w *hookWriter) Write(p []byte) (int, error) {
+	if w.onWrite != nil {
+		w.onWrite()
+	}
+	return len(p), nil
+}
+
+func (w *hookWriter) Close() error { return nil }
+
+// a dialog pi settles while an answer is on its way, an aborted run's, is
+// not lost: one handled before the answer is written settles the dialog,
+// and the answer is not pending.
+func TestASettlementBeforeTheAnswerIsWrittenStands(t *testing.T) {
+	s := newSink()
+	r := newRuntime(s)
+	w := &hookWriter{}
+	r.conn = &conn{stdin: w, calls: map[string]chan reply{}, done: make(chan struct{})}
+	r.turnActive = true
+	r.uiRequest(map[string]any{"type": "extension_ui_request", "id": "d1", "method": "select", "title": "Which?", "options": []any{"A"}}, time.Now())
+	s.until(t, "the dialog", func() bool { return len(s.ids) == 1 })
+	early := false
+	w.onWrite = func() {
+		w.onWrite = nil
+		done := make(chan struct{})
+		go func() {
+			r.handle(map[string]any{"type": "agent_settled", "aborted": true}, time.Now())
+			close(done)
+		}()
+		select {
+		case <-done:
+			early = true
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	err := r.Answer("svc-a", harness.Answer{Answers: map[string]string{"Which?": "A"}})
+	if early && err == nil && !slices.Contains(s.resolved, "svc-a:"+model.OutcomeAborted) {
+		t.Error("a settlement handled before the answer was written was lost, and the answer reported delivered")
+	}
+}

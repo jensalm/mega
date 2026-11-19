@@ -91,3 +91,15 @@ Each was fixed where the review pointed, and its sibling turned up a pass later.
 Pass 4's six are fixed, and this was the first pass worked by kind and not by instance. For each finding the implementer asked the same question of the other harnesses and callers, and fixed what it found that the review had not named: every environment resolution checked as it finishes, shutdown waiting for a launch already under way, a failed launch's request settled, pi's runtime and Claude's history each checking whose session they read, and about thirty tests that answered a request without looking. Pass 5 returned five, four blocking, the first fall: five, five, five, six, five. One of the five is a hole in pass 4's own fix for the unread marker.
 
 One thing left as it is, by the planning agent's recommendation: if the registry write of a runtime's state fails after a stop the log recorded, the next start shows the conversation as unsupervised. That is the safe side, and it is what `honest-runtime-state` asks of a state the service cannot vouch for.
+
+## after five passes, 2026-11-19
+
+Pass 5's five are fixed; the race detector is clean on the three adapters. Pass 6 returned five, four blocking. The counts are five, five, five, six, five, five.
+
+**What is in the count now.** The findings have moved from the common paths to the corners, and about a third of each pass is a hole in an earlier pass's fix. One fix in particular has now needed three passes: rebuilding the unread marker from the event log at start-up. It was added in pass 4, found to depend on a fact not in the log in pass 5, and found in pass 6 to treat every runtime error as the end of a turn.
+
+**The planning agent's reading of that one.** It keeps failing because it works out, from other events, what the service had decided. Each pass finds another event it reads wrongly. Recording the decision itself would end that: when the service counts output as unread, it logs that it did, and start-up takes the last such record. Nothing is inferred, so there is nothing to infer wrongly.
+
+**A decision for Michael, as recommended.** When mega itself stops a runtime because of an error, such as a runtime on the wrong session, the stop ends as stopped and that clears the error. A stop mega forced because something was wrong is not a clean stop. The error should keep showing until a runtime starts, so the operator learns that something was wrong. A stop the operator asked for still clears it. `docs/current/mega.md` says an error shows "until a runtime starts or stops cleanly"; it wants the difference stated.
+
+Michael's direction the same day: simplify the core where it can be, instead of covering every corner. That is the card `simplify-the-core`. The hardening passes continue to be the measure, on a core with fewer corners in it.
