@@ -17,6 +17,7 @@ import { HarnessIcon } from './HarnessIcon'
 import { McpPanel } from './Mcp'
 import { mcpSummaryText, mcpTrouble, mcpTroubleText } from '../mcp'
 import { environmentReason } from '../checkout'
+import { dialogOpen } from '../modal'
 
 // drafts stay in the browser, per conversation, and never reach the service.
 // they survive collapsing the box, switching conversations and reconnects.
@@ -142,7 +143,7 @@ export function InputPanel(props: InputPanelProps) {
   // kept from before opens it.
   useEffect(() => {
     const box = boxRef.current
-    if (!box || document.querySelector('dialog[open]') || typingIn(document.activeElement)) {
+    if (!box || dialogOpen() || typingIn(document.activeElement)) {
       return
     }
     box.focus({ preventScroll: true })
@@ -160,7 +161,7 @@ export function InputPanel(props: InputPanelProps) {
       }
       event.preventDefault()
       const box = boxRef.current
-      if (box && box !== document.activeElement && !document.querySelector('dialog[open]')) {
+      if (box && box !== document.activeElement && !dialogOpen()) {
         setMenu(false)
         box.focus({ preventScroll: true })
       }
@@ -358,7 +359,7 @@ export function InputPanel(props: InputPanelProps) {
     if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed) {
       return
     }
-    if (document.querySelector('dialog[open]')) {
+    if (dialogOpen()) {
       return
     }
     const at = dockedAt.current.get(keyed.id)

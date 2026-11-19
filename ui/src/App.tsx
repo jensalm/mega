@@ -20,6 +20,7 @@ import { claudeCannotRun, environmentReason, missingReason } from './checkout'
 import { showTab, tabState } from './favicon'
 import { productName } from './brand'
 import { waitingLabel, type Waiting } from './waiting'
+import { dialogOpen, useDialogOpen } from './modal'
 
 // how many turns a conversation opens with, and how many more Show earlier adds.
 const TURNS = 10
@@ -367,9 +368,8 @@ export function App() {
 
   // next-waiting walks the needs-you list from the selected conversation; it
   // only moves the selection, so a reply in progress keeps its place. ctrl+/
-  // works anywhere but in a dialog: a conversation opened behind one would be
-  // marked read while the dialog still covers it. the key is taken either
-  // way.
+  // works anywhere but in a dialog, opening nothing behind one; the key is
+  // taken either way.
   const needsYouRef = useRef(needsYou)
   useEffect(() => {
     needsYouRef.current = needsYou
@@ -381,7 +381,7 @@ export function App() {
       }
       event.preventDefault()
       const list = needsYouRef.current
-      if (list.length === 0 || document.querySelector('dialog[open]')) {
+      if (list.length === 0 || dialogOpen()) {
         return
       }
       const at = list.indexOf(selectedRef.current ?? '')
@@ -394,12 +394,18 @@ export function App() {
   // opening a conversation acknowledges what is on screen: once its history is
   // loaded and current, the reading position moves to its last event. this
   // never touches a pending request, which stays until it is answered.
+  // nothing is on screen while the tab is hidden, or while a modal dialog
+  // covers the conversation: then the read is held, and posted once the last
+  // dialog closes, if the conversation is still open, loaded and current and
+  // the tab visible. covered is the page's one test for a dialog (modal.ts),
+  // so a dialog added later holds the read without being named here.
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   useEffect(() => {
     const onVisibility = () => setVisible(document.visibilityState === 'visible')
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
+  const covered = useDialogOpen()
   const posted = useRef<{ id: string; seq: number } | null>(null)
   const openConversation = conversations.find((c) => c.id === selectedConversationId)
   const openReadSeq = openConversation?.read_seq ?? 0
@@ -411,7 +417,10 @@ export function App() {
   const loggedSeq = log && log.id === selectedConversationId && log.loaded ? log.through : 0
   useEffect(() => {
     const id = selectedConversationId
-    if (!id || !visible || stale || loggedSeq <= openReadSeq) {
+    // covered is the render's view; a dialog a child opened in this same
+    // commit has called showModal before this effect runs, so the page is
+    // asked again at the moment of posting.
+    if (!id || !visible || covered || dialogOpen() || stale || loggedSeq <= openReadSeq) {
       return
     }
     if (posted.current && posted.current.id === id && posted.current.seq >= loggedSeq) {
@@ -421,7 +430,7 @@ export function App() {
     readConversation(id, loggedSeq).catch(() => {
       posted.current = null
     })
-  }, [selectedConversationId, loggedSeq, openReadSeq, visible, stale])
+  }, [selectedConversationId, loggedSeq, openReadSeq, visible, covered, stale])
   // a selected conversation that leaves the workspace, removed here or from
   // another browser, hands the selection to its project. the project is taken
   // from the last workspace that listed the conversation.

@@ -38,7 +38,9 @@
 // shots/path-search-{outside,second}.png.
 // and the focus: the cursor in the reply box, at one line, after a pick in
 // the side panel or the needs-you list, Ctrl+/, launching and adopting;
-// never with a dialog open, nor from a field being typed in; Ctrl+Space from
+// never with a dialog open, nor from a field being typed in; nothing read
+// behind a dialog, after a switch by the address or on output arriving, and
+// read once it closes; Ctrl+Space from
 // the history and the side panel, and nothing with a dialog open or the
 // cursor already there; Escape leaving the box for the history, whose keys
 // then scroll, and closing the path list first; Page Up and Page Down
@@ -752,10 +754,20 @@ check(await atRest('adopting'), 'adopting puts the cursor in the adopted convers
 
 // never while a dialog is open. Ctrl+/ does nothing there, so nothing is
 // opened, and marked read, behind it; a switch by the address, the one way
-// left, leaves the focus in the dialog; and so does Ctrl+Space.
+// left, leaves the focus in the dialog; and so does Ctrl+Space. and nothing
+// is read behind a dialog: a conversation switched to by the address, or
+// given output while it is open, stays unread until the last dialog closes,
+// and is read then.
 const inDialog = () => page.evaluate(() => document.activeElement?.closest('dialog[open]') !== null)
+const unread = async (id) => {
+  const c = await convOf(id)
+  return c.read_seq < c.output_seq
+}
 await go(H)
 await until('H shown for the dialog', async () => (await heading()) === 'dock')
+check((await api('POST', `/api/conversations/${C}/prompt`, { text: 'echo\nC has news while H is open' })).status === 202, 'C, not open, is given output')
+await t.idle(C)
+await until('C unread', () => unread(C))
 must((await t.workspace()).needs_you.length > 0, 'something waits, for Ctrl+/ to move to')
 await page.locator('.side-foot .version-label').click()
 await page.locator('dialog[open]').waitFor()
@@ -769,8 +781,27 @@ check(await inDialog(), `a switch by the address behind the dialog (to "${await 
 await page.keyboard.press('Control+Space')
 await settled()
 check(await inDialog(), 'and Ctrl+Space does nothing while a dialog is open')
+// the page has C's history, loaded and current, behind the dialog.
+const shownThrough = () => page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.events [data-seq]')].map((e) => Number(e.dataset.seq))))
+await until('C’s output shown behind the dialog', async () => (await shownThrough()) >= (await convOf(C)).output_seq)
+await page.waitForTimeout(800)
+check(await unread(C), 'switched to by the address behind a dialog, its output shown behind it, C stays unread while the dialog is open')
 await page.keyboard.press('Escape')
 await until('the dialog closed', async () => (await page.locator('dialog[open]').count()) === 0)
+await until('C read once the dialog closed', async () => !(await unread(C)))
+check(true, 'and once the dialog closes, C is read')
+// output arriving in the open conversation while a dialog is open.
+await page.locator('.side-foot .version-label').click()
+await page.locator('dialog[open]').waitFor()
+check((await api('POST', `/api/conversations/${C}/prompt`, { text: 'echo\nnews while the dialog is open' })).status === 202, 'C, open behind a dialog, is given output')
+await t.idle(C)
+await until('the new output shown behind the dialog', async () => (await shownThrough()) >= (await convOf(C)).output_seq)
+await page.waitForTimeout(800)
+check(await unread(C), 'output arriving in the open conversation while a dialog is open stays unread')
+await page.keyboard.press('Escape')
+await until('the dialog closed again', async () => (await page.locator('dialog[open]').count()) === 0)
+await until('C read once the dialog closed again', async () => !(await unread(C)))
+check(true, 'and is read once the dialog closes')
 // never from a field being typed in: one the check adds to the page, outside
 // mega's own, stands in for any.
 await page.evaluate(() => {

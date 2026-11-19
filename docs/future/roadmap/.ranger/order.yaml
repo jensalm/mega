@@ -1,7 +1,6 @@
 building:
-  - focus-on-operator-input.md
+  - the-page-says-more-than-it-has-seen.md
 horizon:
-  - late-codex-output-during-a-newer-turn.md
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
   - mega-as-the-development-hub.md
@@ -17,6 +16,9 @@ horizon:
   - re-entry-briefing.md
   - updating-harnesses-from-mega.md
 researching:
+  - a-model-switch-on-an-idle-runtime-is-untested.md
+  - reviewing-changes-from-outside.md
+  - darklight-mode-toggle.md
   - imported-turns-carry-their-own-times.md
   - first-tagged-release.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
@@ -26,6 +28,8 @@ researching:
   - reads-after-the-service-closes.md
   - mega-on-macos-and-windows.md
 evaluating:
+  - read-behind-a-dialog.md
+  - focus-on-operator-input.md
   - a-large-named-directory-starves-the-path-search.md
   - path-search-beyond-the-checkout.md
   - pi-adapter.md

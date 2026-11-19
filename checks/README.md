@@ -116,13 +116,14 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (120 steps): the input panel. Its config names `~/Sandbox` and `~/Screenshots`, in its scratch `HOME`, beyond the checkout. It checks the following:
+- **`panel.mjs`** (126 steps): the input panel. Its config names `~/Sandbox` and `~/Screenshots`, in its scratch `HOME`, beyond the checkout. It checks the following:
   - the reply box resting at one line with the cursor in it when the page loads on a conversation, and its title naming Ctrl+Space;
   - focus alone leaving it at one line, the first character opening it to its height, and a draft opening it on focus;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
   - a control in the bar keeping the box open, and a press outside closing it;
   - a draft kept across a switch of conversation, the box open on return with the cursor at its end;
   - the focus following the switch: the cursor in the reply box, at one line, after a pick in the side panel or the needs-you list, Ctrl+/, launching and adopting; never with a dialog open, nor from a field being typed in; and Ctrl+/ doing nothing while a dialog is open;
+  - nothing read behind a dialog: a conversation switched to by the address behind one, and output arriving in the open conversation while one is open, staying unread until the dialog closes and read then;
   - Ctrl+Space from the history and from the side panel, and nothing with a dialog open or with the cursor already there;
   - Escape leaving the box for the history, whose keys then scroll it, and closing the path list first;
   - Page Up and Page Down scrolling the history from an empty box and ending following as a wheel does, and the box's own with a draft;

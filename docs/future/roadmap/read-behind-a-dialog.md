@@ -1,6 +1,6 @@
 ---
 title: read behind a dialog
-state: inbox
+state: evaluating
 created: 2026-11-18
 tags: [defect]
 ---
