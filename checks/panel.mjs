@@ -40,7 +40,9 @@
 // the side panel or the needs-you list, Ctrl+/, launching and adopting;
 // never with a dialog open, nor from a field being typed in; nothing read
 // behind a dialog, after a switch by the address or on output arriving, and
-// read once it closes; Ctrl+Space from
+// read once it closes; nothing read while the view is scrolled up, nor when a
+// dialog closes over a view scrolled up, and read on return to the newest
+// output; and a failed read tried again; Ctrl+Space from
 // the history and the side panel, and nothing with a dialog open or the
 // cursor already there; Escape leaving the box for the history, whose keys
 // then scroll, and closing the path list first; Page Up and Page Down
@@ -802,6 +804,61 @@ await page.keyboard.press('Escape')
 await until('the dialog closed again', async () => (await page.locator('dialog[open]').count()) === 0)
 await until('C read once the dialog closed again', async () => !(await unread(C)))
 check(true, 'and is read once the dialog closes')
+
+// a read waits for the view: output arriving while the view is scrolled up,
+// "Newer activity below" showing, stays unread, and is read once the view is
+// back at the newest output; the same when a dialog closes over a view still
+// scrolled up. a read that fails is tried again, after a wait.
+const offered = () => page.locator('.newer button').isVisible()
+const outputFor = async (text) => {
+  check((await api('POST', `/api/conversations/${C}/prompt`, { text: `echo\n${text}` })).status === 202, `C is given output: "${text}"`)
+  await t.idle(C)
+  await until(`"${text}" on the page`, async () => (await shownThrough()) >= (await convOf(C)).output_seq)
+}
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('C at the bottom and read', async () => (await fromBottom()) <= 1 && !(await unread(C)))
+await wheel(-600)
+await outputFor('news below the view')
+await until('newer activity offered', offered)
+await page.waitForTimeout(800)
+check(await unread(C), 'scrolled up, with "Newer activity below" showing, new output stays unread')
+await page.locator('.newer button').click()
+await until('read on return to the newest output', async () => !(await unread(C)))
+check(true, 'back at the newest output, it is read')
+await wheel(-600)
+await page.locator('.side-foot .version-label').click()
+await page.locator('dialog[open]').waitFor()
+await outputFor('news under a dialog, below the view')
+await page.keyboard.press('Escape')
+await until('the dialog closed over the scrolled-up view', async () => (await page.locator('dialog[open]').count()) === 0)
+await page.waitForTimeout(800)
+check(await unread(C), 'a dialog closing over a view still scrolled up reads nothing')
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('read at the bottom after the dialog', async () => !(await unread(C)))
+check(true, 'and the view brought back to the newest output reads it')
+// the one read the return makes fails, once; the page tries again.
+await wheel(-600)
+await outputFor('news whose first read fails')
+const readCalls = []
+await page.route('**/api/conversations/*/read', (route) => {
+  readCalls.push(Date.now())
+  return readCalls.length === 1
+    ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"code":"internal","message":"refused by the check"}' })
+    : route.continue()
+})
+await page.locator('.newer button').click()
+await until('the first read refused', async () => readCalls.length >= 1)
+await page.waitForTimeout(500)
+check(await unread(C), 'a read that fails leaves the conversation unread')
+await until('the failed read tried again and read', async () => !(await unread(C)))
+await page.waitForTimeout(800)
+const retryAfter = readCalls.length === 2 ? readCalls[1] - readCalls[0] : 0
+check(readCalls.length === 2 && retryAfter >= 1500, `a read that fails once is tried again, once, after a wait: ${readCalls.length} reads, ${retryAfter}ms apart`)
+await page.unroute('**/api/conversations/*/read')
 // never from a field being typed in: one the check adds to the page, outside
 // mega's own, stands in for any.
 await page.evaluate(() => {
@@ -909,9 +966,16 @@ await outside()
 // Ctrl+Enter allows the oldest docked approval; from the history, where
 // Escape leaves it, it allows as from the page itself.
 const pendingOf = async (id) => (await convOf(id)).pending.length
+// the keys approve only what the fake raised: exactly one permission request,
+// Bash running echo fake, as a step the suite cannot go past.
+const isTheFakesAsk = async (id) => {
+  const listed = (await convOf(id)).pending
+  return listed.length === 1 && listed[0].kind === 'permission' && listed[0].payload?.tool === 'Bash' && listed[0].payload?.input?.command === 'echo fake'
+}
 await inProject('waiter').click()
 await until('waiter shown for the allow keys', async () => (await heading()) === 'waiter' && (await focused()))
 await page.waitForTimeout(800)
+must(await isTheFakesAsk(W), 'the request the keys will allow is the fake’s own: Bash, echo fake')
 await page.keyboard.press('Control+Enter')
 await until('the switch’s Ctrl+Enter allowed', async () => (await pendingOf(W)) === 0)
 check(true, 'with the cursor put in the box by a switch, Ctrl+Enter allows the oldest docked approval')
@@ -922,6 +986,7 @@ await box.click()
 await page.keyboard.press('Escape')
 await until('the history focused for the allow keys', async () => page.evaluate(() => document.activeElement === document.querySelector('.main')))
 await page.waitForTimeout(800)
+must(await isTheFakesAsk(W), 'again, the request the keys will allow is the fake’s own: Bash, echo fake')
 await page.keyboard.press('Control+Enter')
 await until('the history’s Ctrl+Enter allowed', async () => (await pendingOf(W)) === 0)
 check(true, 'from the history, where Escape leaves the cursor, Ctrl+Enter allows as from the page itself')

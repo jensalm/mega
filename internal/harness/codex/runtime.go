@@ -69,6 +69,7 @@ type runtime struct {
 	interrupted map[string]bool            // turns the operator interrupted; no question of theirs may wait
 	stops       int                        // interrupts and closes so far; an answer started before one never starts a turn
 	started     map[int]proc               // processes seen under the app-server, for the exit check
+	unlisted    error                      // why the processes under it could not be listed, if they could not
 	mcpCalls    []mcpCall                  // MCP tool calls in flight, oldest first, to name the tool an approval is for
 	commands    map[string]*runningCommand // shell commands started and not yet completed, by item id
 	model       string                     // the conversation's model and effort, sent on every turn/start
@@ -99,11 +100,15 @@ func newRuntime(sink harness.Sink) *runtime {
 }
 
 // remember notes the processes running under the app-server now, so the exit
-// can tell whether any outlived it.
+// can tell whether any outlived it. a listing that cannot be read is kept,
+// so the exit says it could not check rather than that nothing survived.
 func (r *runtime) remember() {
-	found := r.conn.descendants()
+	found, err := r.conn.descendants()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err != nil {
+		r.unlisted = err
+	}
 	for _, p := range found {
 		r.started[p.pid] = p
 	}
@@ -328,14 +333,22 @@ func (r *runtime) watch() {
 	for _, p := range r.started {
 		seen = append(seen, p)
 	}
+	unlisted := r.unlisted
 	r.mu.Unlock()
 	for _, id := range aborted {
 		r.sink.Resolved(id, model.OutcomeAborted)
 	}
 	r.mcpEnd()
 	err := r.conn.err
-	if pids := survivors(seen, survivorGrace); len(pids) > 0 {
+	pids, scan := survivors(seen, survivorGrace)
+	if scan == nil {
+		scan = unlisted
+	}
+	if len(pids) > 0 {
 		err = errors.Join(err, fmt.Errorf("%w: pids %v", harness.ErrLeftRunning, pids))
+	}
+	if scan != nil {
+		err = errors.Join(err, fmt.Errorf("%w: %v", harness.ErrUnchecked, scan))
 	}
 	r.sink.Exited(err)
 }

@@ -291,7 +291,9 @@ func TestStaleRequestFromEarlierRuntimeNeverMatchesNewOne(t *testing.T) {
 	if len(second.Deliveries()) != 0 || len(r.view(conv.ID).Pending) != 1 {
 		t.Fatal("the stale answer touched the new runtime's request")
 	}
-	if err := r.svc.Answer(conv.ID, fresh, harness.Answer{Decision: harness.DecisionAllow}); err != nil {
+	// a denial proves the delivery as well as an allow would, and allows
+	// nothing the test never looked at.
+	if err := r.svc.Answer(conv.ID, fresh, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Fatal(err)
 	}
 	if d := second.Deliveries(); len(d) != 1 || d[0].Native != "0" {
@@ -817,6 +819,27 @@ func TestLeftRunningIsNeverACleanStop(t *testing.T) {
 	evs := r.events(conv.ID)
 	last := evs[len(evs)-1]
 	if last.Status != model.StatusError || !strings.Contains(last.Text, "4242") {
+		t.Errorf("last event = %+v", last)
+	}
+}
+
+// a release whose runtime could not list the processes it started is not a
+// clean stop and not an error: it says what could not be checked, and asks
+// for no attention.
+func TestAReleaseThatCouldNotLookSaysSo(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	finishTurn(rt, "a-1", "done")
+	rt.HoldOnClose()
+	if err := r.svc.Release(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "input to close", rt.Closed)
+	rt.Exit(errors.Join(nil, fmt.Errorf("%w: listing processes: no /proc", harness.ErrUnchecked)))
+	evs := r.events(conv.ID)
+	last := evs[len(evs)-1]
+	if last.Status != model.StatusStopped || !strings.HasPrefix(last.Text, "released, but whether processes the runtime started are still running could not be checked") {
 		t.Errorf("last event = %+v", last)
 	}
 }

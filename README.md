@@ -86,7 +86,7 @@ Install pi as [pi.dev](https://pi.dev) says, and set up its model in pi itself. 
 ## Platforms
 
 - **Linux** is what mega is built and used on, on amd64.
-- **macOS** builds, on arm64, thanks to a contributed change. Its tests do not all pass there yet, and it has not been used for real work. One known gap: on a Mac, mega cannot yet see a process that outlives its runtime.
+- **macOS** builds, on arm64, thanks to a contributed change. Its tests do not all pass there yet, and it has not been used for real work. One known gap: on a Mac, mega cannot yet see a process that outlives its runtime, so a release there says it could not check.
 - **Windows** is expected to work under WSL2, following the Linux steps inside it, and has not been tried. Native Windows is not supported.
 
 There are no prebuilt binaries yet: you build mega from a clone, as above.

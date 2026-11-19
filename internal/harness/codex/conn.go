@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -265,12 +267,17 @@ type proc struct {
 // descendants lists the processes the app-server started, at any depth. the
 // sandbox codex runs commands in starts its own session, so after the
 // app-server exits nothing ties it back; the tree has to be read while the
-// app-server is alive.
-func (c *conn) descendants() []proc {
+// app-server is alive. an error says the processes could not be listed, or
+// some could not be read, any of which might be the app-server's: what was
+// found is still returned, but it may not be all.
+func (c *conn) descendants() ([]proc, error) {
 	if c.cmd == nil || c.cmd.Process == nil {
-		return nil
+		return nil, nil
 	}
-	stats := readStats()
+	stats, unread, err := readStats()
+	if err != nil {
+		return nil, err
+	}
 	children := make(map[int][]int)
 	for pid, st := range stats {
 		children[st.ppid] = append(children[st.ppid], pid)
@@ -285,23 +292,39 @@ func (c *conn) descendants() []proc {
 			queue = append(queue, child)
 		}
 	}
-	return found
+	if len(unread) > 0 {
+		return found, fmt.Errorf("listing processes: %d could not be read, and any might be the app-server's: pids %v", len(unread), unread)
+	}
+	return found, nil
 }
 
 // survivors waits up to grace for the given processes to go and returns the
-// pids of those still alive.
-func survivors(procs []proc, grace time.Duration) []int {
+// pids of those confirmed alive, with an error when it could not tell for
+// some: the processes could not be listed, or one of these could not be
+// read. a process it could not read that is none of these changes nothing.
+func survivors(procs []proc, grace time.Duration) ([]int, error) {
 	deadline := time.Now().Add(grace)
 	for {
-		stats := readStats()
-		var alive []int
+		stats, unread, err := readStats()
+		if err != nil {
+			return nil, err
+		}
+		var alive, unknown []int
 		for _, p := range procs {
 			if st, ok := stats[p.pid]; ok && st.start == p.start {
 				alive = append(alive, p.pid)
+			} else if slices.Contains(unread, p.pid) {
+				unknown = append(unknown, p.pid)
 			}
 		}
-		if len(alive) == 0 || time.Now().After(deadline) {
-			return alive
+		if len(alive) == 0 && len(unknown) == 0 {
+			return nil, nil
+		}
+		if time.Now().After(deadline) {
+			if len(unknown) > 0 {
+				return alive, fmt.Errorf("listing processes: pids %v could not be read", unknown)
+			}
+			return alive, nil
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
@@ -312,20 +335,34 @@ type stat struct {
 	start string
 }
 
-// readStats reads the parent and start time of every live process.
-func readStats() map[int]stat {
-	entries, err := os.ReadDir("/proc")
+// procRoot is where the processes are listed; a test points it at a
+// directory that cannot be read.
+var procRoot = "/proc"
+
+// readStats reads the parent and start time of every live process, and names
+// those that are there but could not be read; or it says the processes
+// could not be listed at all. there is a listing only where /proc is: on
+// macOS there is none yet.
+func readStats() (map[int]stat, []int, error) {
+	entries, err := os.ReadDir(procRoot)
 	if err != nil {
-		return nil
+		return nil, nil, fmt.Errorf("listing processes: %w", err)
 	}
 	stats := make(map[int]stat)
+	var unread []int
 	for _, entry := range entries {
 		pid, err := strconv.Atoi(entry.Name())
 		if err != nil {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "stat"))
+		data, err := os.ReadFile(filepath.Join(procRoot, entry.Name(), "stat"))
+		if gone(err) {
+			continue
+		}
 		if err != nil {
+			// a process that is there but cannot be read could be anything:
+			// the listing is incomplete there, not clean.
+			unread = append(unread, pid)
 			continue
 		}
 		// the command sits in parentheses and may hold spaces; after it come
@@ -344,7 +381,13 @@ func readStats() map[int]stat {
 		}
 		stats[pid] = stat{ppid: ppid, start: fields[19]}
 	}
-	return stats
+	return stats, unread, nil
+}
+
+// gone is whether reading a process's entry failed because the process went
+// while it was being listed, which is ordinary, and leaves nothing unknown.
+func gone(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
 func logStderr(pid int, stderr io.Reader) {

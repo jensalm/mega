@@ -50,6 +50,8 @@ An external operator, `ekoby`, opened pull request 2 the day after the README we
 **Two of those are the product, not the tests.**
 
 - **Descendants are found by reading `/proc`,** in the Codex adapter and the pi adapter alike. macOS has none, so on a Mac mega cannot see a child process that outlives its runtime, and would report a clean stop it has not observed. That is `honest-runtime-state`, and it needs a darwin way to list processes before macOS can be called supported.
+  - **The honest half is done** (2026-11-18, `the-page-says-more-than-it-has-seen`). A listing that cannot be read is no longer taken as "nothing survived": a release reports that leftover processes could not be checked (`harness.ErrUnchecked`). It was tested by making the listing unreadable, not on a Mac.
+  - **A real listing still waits** for someone with a Mac, and is still first on the work list below.
 - **The activation that is not killed** is unconfirmed. The resolver starts the shell in its own session and kills the process group on a timeout. A shell that runs background jobs in their own process group would leave them alive, and an interactive zsh, the macOS default, may well do that.
 
 Not yet tried on a Mac at all: a real conversation, the browser checks, the round trips.

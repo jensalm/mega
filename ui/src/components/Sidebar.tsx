@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { starProject } from '../api'
 import { folds, isFolded } from '../prefs'
 import { select, type Selection } from '../selection'
-import { connectionLabel, failing, serviceAddress, type Knowledge, type StreamState } from '../stream'
+import { connectionLabel, connectionOf, failing, serviceAddress, type Knowledge, type StreamState } from '../stream'
 import { useWallNow } from '../clock'
 import { waitingLabel, type Waiting } from '../waiting'
 import { treeGroups } from '../tree'
@@ -70,7 +70,7 @@ export function Sidebar(props: SidebarProps) {
   // the service serves says so while it is connected; it never reloads
   // itself.
   const down = shutDownAt !== null && streamState !== 'connected'
-  const showNewer = newer && !down && streamState === 'connected' && !failing(knowledge)
+  const showNewer = newer && !down && connectionOf(knowledge, streamState) === 'connected' && !failing(knowledge)
 
   // a fold choice for a project that no longer exists is forgotten, once the
   // workspace has been read and its absence means something.
@@ -223,7 +223,7 @@ export function Sidebar(props: SidebarProps) {
       {!shutDownAt && <FooterGate gate={gate} stale={stale} busy={gateBusy} onCancel={onCancelShutdown} />}
       <footer className="side-foot">
         <ConnectionStatus
-          className={`stream stream-${failing(knowledge) || down ? 'disconnected' : showNewer ? 'newer' : streamState}`}
+          className={`stream stream-${failing(knowledge) || down ? 'disconnected' : showNewer ? 'newer' : connectionOf(knowledge, streamState)}`}
           label={down ? 'Shut down from here, retrying' : showNewer ? newerLabel : connectionLabel(knowledge, streamState)}
           waiting={waitingFor}
         />

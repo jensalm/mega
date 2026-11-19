@@ -32,7 +32,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { suite } from './lib/mega.mjs'
+import { reconnectable, suite } from './lib/mega.mjs'
 
 const t = await suite('side', { megaName: 'side-check' })
 const { url, check, must, until, api, convOf, workspace } = t
@@ -460,6 +460,38 @@ await page.getByRole('button', { name: /^Collapse the side panel/ }).click()
 await rail.waitFor()
 const railUnnamed = await unnamed()
 check(openUnnamed.length === 0 && railUnnamed.length === 0, `every control has a title and a label${openUnnamed.length + railUnnamed.length ? `: ${JSON.stringify([...openUnnamed, ...railUnnamed])}` : ''}`)
+
+// after a reconnect, until the workspace read on it lands, the footer and the
+// rail say the page is catching up, never live; then live.
+// on a first load, with the stream up and the first workspace read still
+// out, it is connecting, not live, too.
+const cp = await t.page({ width: 1280, height: 900 })
+const cpStream = await reconnectable(cp)
+const firstReads = []
+await cp.route('**/api/workspace', (route) => firstReads.push(route))
+await cp.goto(url)
+const cpStatus = cp.locator('.side-foot .stream')
+await until('the first read held', async () => firstReads.length > 0)
+await cp.waitForTimeout(800)
+check(!['Live'].includes(await cpStatus.textContent()) && !(await cp.locator('.stream-connected').count()), `on a first load, before the first workspace read lands, nothing says Live: "${await cpStatus.textContent()}"`)
+const firstHeld = firstReads.splice(0)
+await cp.unroute('**/api/workspace')
+for (const route of firstHeld) await route.continue().catch(() => undefined)
+await until('the catching-up page live', async () => (await cpStatus.textContent()) === 'Live')
+await cpStream.drop()
+await until('the footer catching up', async () => (await cpStatus.textContent()) === 'Catching up' && cpStream.held() > 0)
+check((await cpStatus.getAttribute('class')).includes('stream-catching-up'), 'after a reconnect, before the workspace read lands, the footer says "Catching up", not Live')
+await cp.locator('.side-foot').screenshot({ path: `${t.dir}/shots/foot-catching-up.png` })
+await cp.keyboard.press('Control+Quote')
+const cpDot = cp.locator('nav.rail .rail-stream')
+await cpDot.waitFor()
+check((await cpDot.getAttribute('title')) === 'Catching up' && (await cpDot.getAttribute('class')).includes('stream-catching-up'), 'and so does the rail’s dot, an empty ring')
+await cpStream.catchUp()
+await until('the rail live', async () => (await cpDot.getAttribute('title')) === 'Live')
+await cp.keyboard.press('Control+Quote')
+await until('the footer live', async () => (await cpStatus.textContent()) === 'Live')
+check((await cpStatus.getAttribute('class')).includes('stream-connected'), 'once the read lands, the rail and the footer say Live')
+await cp.close()
 
 // with no name in the config, the machine's hostname, up to its first dot.
 // it is compared, never printed, and nothing from here on is saved.

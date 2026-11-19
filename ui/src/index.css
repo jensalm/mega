@@ -1975,8 +1975,10 @@ hr.turn {
   border-style: dashed;
 }
 
-/* the rail's connection dot before the first read, while connecting: an
-   empty ring. */
+/* the rail's connection dot before the first read, while connecting, and
+   while catching up after a reconnect: an empty ring, never the filled dot
+   that says live. */
+.rail-stream.stream-catching-up,
 .rail-stream.unknown.stream-connecting {
   background: transparent;
   border: 1.5px solid var(--muted);

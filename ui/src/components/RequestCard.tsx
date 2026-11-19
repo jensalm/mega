@@ -9,6 +9,10 @@ interface RequestCardProps {
   // keyed: this is the approval the reply box's keys answer (allowKeys), so
   // its Allow buttons name them.
   keyed?: boolean
+  // held: why the card cannot be answered now, or null. while the page is
+  // stale it cannot stand behind the pending set it shows, so the card
+  // waits, saying why, as the panel's other controls do.
+  held?: string | null
 }
 
 // allowKeys are the keys that answer the oldest docked approval from an
@@ -38,9 +42,11 @@ function AllowButton({ decision, keyed, sending, onAnswer }: { decision: 'allow'
 
 // RequestCard is answerable only because the service's pending set lists the
 // request. the first answer from any browser wins; a later one is refused.
-export function RequestCard({ conversationId, request, keyed = false }: RequestCardProps) {
+export function RequestCard({ conversationId, request, keyed = false, held = null }: RequestCardProps) {
   const [error, setError] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
+  const [answering, setSending] = useState(false)
+  // the forms disable their answers while one is being sent, and while held.
+  const sending = answering || held !== null
 
   const send = async (answer: Answer) => {
     setSending(true)
@@ -70,6 +76,11 @@ export function RequestCard({ conversationId, request, keyed = false }: RequestC
         />
       ) : (
         <PermissionForm request={request} keyed={keyed} sending={sending} onAnswer={(answer) => void send(answer)} />
+      )}
+      {held && (
+        <p className="muted request-held" role="status">
+          {held}
+        </p>
       )}
       {error && <p className="error">{error}</p>}
     </section>

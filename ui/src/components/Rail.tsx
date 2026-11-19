@@ -1,5 +1,5 @@
 import { select } from '../selection'
-import { connectionLabel, failing, type Knowledge, type StreamState } from '../stream'
+import { connectionLabel, connectionOf, failing, type Knowledge, type StreamState } from '../stream'
 import { treeGroups } from '../tree'
 import type { About, Conversation, Project, ShutdownGate } from '../types'
 import { RailGate } from './Gate'
@@ -44,7 +44,7 @@ export function Rail({ projects, conversations, needsYou, streamState, stale, lo
           : 'Not known yet: connecting'
   }
   const down = shutDownAt !== null && streamState !== 'connected'
-  const showNewer = newer && !down && streamState === 'connected' && !failing(knowledge)
+  const showNewer = newer && !down && connectionOf(knowledge, streamState) === 'connected' && !failing(knowledge)
   const connection = down ? 'Shut down from here, retrying' : showNewer ? newerLabel : connectionLabel(knowledge, streamState)
   return (
     <nav className="rail" aria-label="Side panel, collapsed">
@@ -77,7 +77,7 @@ export function Rail({ projects, conversations, needsYou, streamState, stale, lo
       </ul>
       <IconButton className="rail-version" icon="info" label={aboutTitle(about)} disabled={!about} onClick={onAbout} />
       <span
-        className={`rail-stream stream-${failing(knowledge) || down ? 'disconnected' : showNewer ? 'newer' : streamState}${loaded ? '' : ' unknown'}`}
+        className={`rail-stream stream-${failing(knowledge) || down ? 'disconnected' : showNewer ? 'newer' : connectionOf(knowledge, streamState)}${loaded ? '' : ' unknown'}`}
         title={connection}
         aria-label={connection}
         role="img"

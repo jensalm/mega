@@ -394,11 +394,18 @@ export function App() {
   // opening a conversation acknowledges what is on screen: once its history is
   // loaded and current, the reading position moves to its last event. this
   // never touches a pending request, which stays until it is answered.
-  // nothing is on screen while the tab is hidden, or while a modal dialog
-  // covers the conversation: then the read is held, and posted once the last
-  // dialog closes, if the conversation is still open, loaded and current and
+  // nothing is on screen while the tab is hidden, while a modal dialog
+  // covers the conversation, or while its view is scrolled up from the
+  // newest output, "Newer activity below" showing: then the read is held,
+  // and posted once the last dialog closes and the view is back at the
+  // newest output, if the conversation is still open, loaded and current and
   // the tab visible. covered is the page's one test for a dialog (modal.ts),
-  // so a dialog added later holds the read without being named here.
+  // so a dialog added later holds the read without being named here;
+  // following is the view's own reckoning (latest.ts), which opening a
+  // conversation starts at the newest output. a read that fails is tried
+  // again at the next workspace read, or after a wait that grows from two
+  // seconds to thirty, never in a tight loop, and only while all of that
+  // still holds.
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   useEffect(() => {
     const onVisibility = () => setVisible(document.visibilityState === 'visible')
@@ -406,6 +413,12 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
   const covered = useDialogOpen()
+  const [followed, setFollowed] = useState<{ id: string; following: boolean } | null>(null)
+  const following = followed !== null && followed.id === selectedConversationId && followed.following
+  const [readAgain, setReadAgain] = useState(0)
+  const readFailures = useRef(0)
+  const readTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(readTimer.current), [])
   const posted = useRef<{ id: string; seq: number } | null>(null)
   const openConversation = conversations.find((c) => c.id === selectedConversationId)
   const openReadSeq = openConversation?.read_seq ?? 0
@@ -420,17 +433,26 @@ export function App() {
     // covered is the render's view; a dialog a child opened in this same
     // commit has called showModal before this effect runs, so the page is
     // asked again at the moment of posting.
-    if (!id || !visible || covered || dialogOpen() || stale || loggedSeq <= openReadSeq) {
+    if (!id || !visible || covered || dialogOpen() || !following || stale || loggedSeq <= openReadSeq) {
       return
     }
     if (posted.current && posted.current.id === id && posted.current.seq >= loggedSeq) {
       return
     }
     posted.current = { id, seq: loggedSeq }
-    readConversation(id, loggedSeq).catch(() => {
-      posted.current = null
-    })
-  }, [selectedConversationId, loggedSeq, openReadSeq, visible, covered, stale])
+    readConversation(id, loggedSeq).then(
+      () => {
+        readFailures.current = 0
+      },
+      () => {
+        posted.current = null
+        const wait = Math.min(2000 * 2 ** readFailures.current, 30000)
+        readFailures.current++
+        window.clearTimeout(readTimer.current)
+        readTimer.current = window.setTimeout(() => setReadAgain((n) => n + 1), wait)
+      },
+    )
+  }, [selectedConversationId, loggedSeq, openReadSeq, visible, covered, following, stale, workspace, readAgain])
   // a selected conversation that leaves the workspace, removed here or from
   // another browser, hands the selection to its project. the project is taken
   // from the last workspace that listed the conversation.
@@ -476,6 +498,7 @@ export function App() {
         stale={stale}
         onRemoved={() => select({ kind: 'project', id: selectedConversation.project_id })}
         heldBy={heldBy ?? missingReason(conversationProject) ?? environmentReason(conversationProject)}
+        onFollowing={(now) => setFollowed({ id: selectedConversation.id, following: now })}
       />
     )
   } else if (selectedProject) {

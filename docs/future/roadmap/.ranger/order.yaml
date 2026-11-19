@@ -17,6 +17,7 @@ horizon:
   - updating-harnesses-from-mega.md
 researching:
   - a-model-switch-on-an-idle-runtime-is-untested.md
+  - loose-ends-around-stops-and-restarts.md
   - reviewing-changes-from-outside.md
   - darklight-mode-toggle.md
   - imported-turns-carry-their-own-times.md

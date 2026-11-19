@@ -17,17 +17,27 @@ export type Knowledge = 'connecting' | 'unreachable' | 'unreadable' | 'current' 
 // failing: the page has never read the workspace, and is retrying.
 export const failing = (knowledge: Knowledge) => knowledge === 'unreachable' || knowledge === 'unreadable'
 
+// Connection is the stream as the page can vouch for it. connected, it is
+// live only once the workspace read on that connection has landed: until
+// then it is still connecting on a first load, and, after a reconnect, when
+// the page shows only what it knew before, catching up.
+export type Connection = StreamState | 'catching-up'
+
+export const connectionOf = (knowledge: Knowledge, streamState: StreamState): Connection =>
+  streamState !== 'connected' || knowledge === 'current' ? streamState : knowledge === 'stale' ? 'catching-up' : 'connecting'
+
 // the connection, as the panel's footer and the rail's dot say it.
 export const connectionLabel = (knowledge: Knowledge, streamState: StreamState) =>
-  knowledge === 'unreachable' ? 'Unreachable, retrying' : knowledge === 'unreadable' ? 'Read failed, retrying' : streamLabels[streamState]
+  knowledge === 'unreachable' ? 'Unreachable, retrying' : knowledge === 'unreadable' ? 'Read failed, retrying' : streamLabels[connectionOf(knowledge, streamState)]
 
 // serviceAddress is where the page reaches the service: the address it was
 // served from.
 export const serviceAddress = () => window.location.host
 
-export const streamLabels: Record<StreamState, string> = {
+export const streamLabels: Record<Connection, string> = {
   connecting: 'Connecting',
   connected: 'Live',
+  'catching-up': 'Catching up',
   disconnected: 'Reconnecting',
 }
 

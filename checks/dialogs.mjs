@@ -41,7 +41,11 @@ check((await api('POST', '/api/projects', { name: 'Beta', checkout: join(home, '
 
 const page = await t.page({ width: 1280, height: 900 })
 await page.goto(url)
+// it waits for any register dialog still closing to be gone first: the
+// service can confirm a registration before the page has closed the dialog
+// that asked, and the next steps would find that one.
 const openRegister = async () => {
+  await until('no register dialog open', async () => (await page.locator('dialog[open].register-dialog').count()) === 0)
   await page.getByRole('button', { name: 'Register a project' }).click()
   const dialog = page.locator('dialog[open].register-dialog')
   await dialog.waitFor()

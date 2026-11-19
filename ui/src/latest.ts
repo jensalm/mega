@@ -63,10 +63,37 @@ function moveToLatest(scroller: HTMLElement): boolean {
 // bottom, however it got there. it is set by scrolling alone, so it still
 // holds the state from before the dock changed, which fires no scroll event,
 // and a tall docked request cannot read as having scrolled away.
-export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObject<HTMLElement | null>, loaded: boolean, activity: string) {
+//
+// onFollowing hears each change in following, and its value as the
+// conversation opens: the page reads a conversation only while its view
+// follows the newest output (App), so this one reckoning is also what says
+// the newest output is on screen.
+export function useLatest(
+  content: RefObject<HTMLElement | null>,
+  dock: RefObject<HTMLElement | null>,
+  loaded: boolean,
+  activity: string,
+  onFollowing?: (following: boolean) => void,
+) {
   const following = useRef(true)
   const seen = useRef<string | null>(null)
   const [newer, setNewer] = useState(false)
+  // the newest onFollowing, which is a new function each render.
+  const heard = useRef(onFollowing)
+  useLayoutEffect(() => {
+    heard.current = onFollowing
+  })
+  // follow sets following, and says so when it changes.
+  const follow = useCallback((now: boolean) => {
+    const was = following.current
+    following.current = now
+    if (now !== was) {
+      heard.current?.(now)
+    }
+  }, [])
+  useLayoutEffect(() => {
+    heard.current?.(following.current)
+  }, [])
 
   useLayoutEffect(() => {
     const scroller = scrollerOf(content.current)
@@ -79,15 +106,15 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
       const higher = top < (left.get(scroller) ?? top) - 1
       left.set(scroller, top)
       if (atBottom(scroller)) {
-        following.current = true
+        follow(true)
         setNewer(false)
       } else if (higher) {
-        following.current = false
+        follow(false)
       }
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [content])
+  }, [content, follow])
 
   useLayoutEffect(() => {
     const scroller = scrollerOf(content.current)
@@ -97,13 +124,13 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
     const first = seen.current === null
     seen.current = activity
     if (first) {
-      following.current = moveToLatest(scroller)
+      follow(moveToLatest(scroller))
     } else if (following.current) {
       place(scroller, scroller.scrollHeight)
     } else {
       setNewer(true)
     }
-  }, [content, loaded, activity])
+  }, [content, loaded, activity, follow])
 
   // a ResizeObserver's callbacks run after layout and before paint, so the
   // re-pin lands in the same frame as the change: no line slides under the
@@ -128,7 +155,7 @@ export function useLatest(content: RefObject<HTMLElement | null>, dock: RefObjec
   const toLatest = () => {
     const scroller = scrollerOf(content.current)
     if (content.current && scroller) {
-      following.current = moveToLatest(scroller)
+      follow(moveToLatest(scroller))
     }
     setNewer(false)
   }

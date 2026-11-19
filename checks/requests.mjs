@@ -30,7 +30,7 @@
 // where the approval itself is under test, and only once it has checked, as
 // a step it cannot go past, that the request is exactly the one the fake
 // raised; where the decision is incidental, it denies.
-import { suite } from './lib/mega.mjs'
+import { reconnectable, suite } from './lib/mega.mjs'
 
 const t = await suite('requests')
 const { url, check, must, until, api, convOf } = t
@@ -428,5 +428,39 @@ const never = rows(page, 'never answered')
 await until('its row says never answered', async () => (await never.count()) === 1)
 t.say(`  the row: "${await never.textContent()}"`)
 check((await reply(page, 'ran').count()) === 1, 'the gated command did not run')
+
+// while the page is stale, after a reconnect and before the workspace has
+// been read again, a docked request is held, saying why, and so are the
+// allow keys; once it has caught up, it is answerable again.
+await t.idle(C)
+const rp = await t.page()
+const stream = await reconnectable(rp)
+await rp.goto(`${url}/#/c/${C}`)
+await rp.locator('.panel-cluster').waitFor()
+await prompt(C, 'ask')
+const rDocked = rp.locator('.panel-cluster .docked section.request-card')
+await rDocked.waitFor()
+const rAllow = rDocked.first().getByRole('button', { name: 'Allow', exact: true })
+const rDeny = rDocked.first().getByRole('button', { name: 'Deny', exact: true })
+await until('the card answerable', async () => !(await rAllow.isDisabled()))
+await stream.drop()
+await until('the page catching up', async () => (await rp.locator('.side-foot .stream').textContent()) === 'Catching up' && stream.held() > 0)
+const heldNote = rDocked.first().locator('.request-held')
+check(
+  (await rAllow.isDisabled()) && (await rDeny.isDisabled()) && (await heldNote.textContent()).startsWith('Held until the page has caught up with mega'),
+  `while the page is stale, the docked request's answers are held, saying why: "${await heldNote.textContent()}"`,
+)
+await rp.getByRole('textbox', { name: 'Reply' }).focus()
+await new Promise((r) => setTimeout(r, 800))
+await rp.keyboard.press('Control+Enter')
+await new Promise((r) => setTimeout(r, 800))
+check((await pending(C)).length === 1, 'and Ctrl+Enter from the empty box answers nothing')
+await rDocked.first().screenshot({ path: `${t.dir}/shots/request-held.png` })
+await stream.catchUp()
+await until('caught up', async () => (await rp.locator('.side-foot .stream').textContent()) === 'Live')
+await until('the card answerable again', async () => !(await rDeny.isDisabled()) && (await heldNote.count()) === 0)
+await rDeny.click()
+await until('answered once caught up', async () => (await pending(C)).length === 0)
+check(true, 'once the page has caught up, the request is answerable again, and answered')
 
 await t.done()

@@ -76,6 +76,10 @@ function typingIn(element: Element | null): boolean {
 // to, and, like the page itself, somewhere focus goes nowhere in particular.
 const historyOf = (cluster: HTMLElement | null) => cluster?.closest<HTMLElement>('.main') ?? null
 
+// why a docked request waits while the page is stale: it shows only what it
+// last read, and cannot stand behind that pending set.
+const heldWhileStale = 'Held until the page has caught up with mega: what it shows is only last known, and an answer waits for the workspace to be read again.'
+
 // the words the header used for a runtime started in an older environment.
 const staleEnvironment = 'started in an older environment: the project’s has changed since, and the next start picks it up'
 
@@ -356,7 +360,7 @@ export function InputPanel(props: InputPanelProps) {
   // docked less than settleMs before, and one request per press, since a
   // card being answered has its buttons disabled.
   const allowByKey = (event: globalThis.KeyboardEvent) => {
-    if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed) {
+    if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed || stale) {
       return
     }
     if (dialogOpen()) {
@@ -467,7 +471,7 @@ export function InputPanel(props: InputPanelProps) {
       {docked.length > 0 && (
         <div className="docked">
           {docked.map((request) => (
-            <RequestCard key={request.id} conversationId={conversation.id} request={request} keyed={request.id === keyed?.id} />
+            <RequestCard key={request.id} conversationId={conversation.id} request={request} keyed={request.id === keyed?.id} held={stale ? heldWhileStale : null} />
           ))}
         </div>
       )}

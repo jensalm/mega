@@ -813,6 +813,14 @@ func (k *sink) Exited(err error) {
 		if err != nil {
 			ev.Text += fmt.Sprintf(": %v", err)
 		}
+	case only(err, harness.ErrUnchecked):
+		// not a clean stop, and not a leak: the processes it started could not
+		// be listed, so whether any outlived it is not known, and it says so.
+		said := "stopped"
+		if released {
+			said = "released"
+		}
+		ev.Text = fmt.Sprintf("%s, but %v", said, err)
 	case err != nil && released:
 		ev.Text = fmt.Sprintf("released; the runtime reported: %v", err)
 	case err != nil:
@@ -833,6 +841,23 @@ func (k *sink) Exited(err error) {
 	if err := s.updateConversation(l.id, func(c *model.Conversation) { c.Runtime = model.RuntimeNone }); err != nil {
 		dl.Errorf("recording that '%s' stopped: %v", l.id, err)
 	}
+}
+
+// only is whether err is target alone: target itself, or errors joined whose
+// every one is target. a runtime that could not check its processes and also
+// reported something else is told by the other.
+func only(err, target error) bool {
+	if !errors.Is(err, target) {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range joined.Unwrap() {
+			if !errors.Is(e, target) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // cloneFacts copies runtime facts with nothing mutable shared: the

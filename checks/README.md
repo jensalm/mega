@@ -65,15 +65,15 @@ Where things go:
     - an action from the generated history, with nothing its adapter reads, showing the one line it has.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, the start lines as `shots/start-{tested,newer,older}.png`, and each harness's expanded command and input as `shots/action-{claude,codex,pi}{,-input}.png`.
-- **`firstrun.mjs`** (58 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
-  - the start-up log's line for each harness, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
+- **`firstrun.mjs`** (59 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
+  - the start-up log's line for each harness, Claude Code, Codex and pi, saying it cannot run and why, Claude Code's naming the versions folder it looked in;
   - the empty workspace's first page, light and dark: each harness missing with its reason and the config file mega read, the register control named in words, and the control carrying a word;
   - the register dialog opening with the focus in its checkout field, which starts at the home directory with no projects root configured, refusing a relative path and a missing one with what is wrong, then registering a checkout and opening its page;
   - the project page before any dialog: all three harnesses listed as missing, from the resolution registering started; Claude Code's reason saying `claude` was not found and naming the versions folder, saying to install it or set `claude.executable`, and naming the config file; a resolution shown, not "Not resolved yet"; a trust notice that does not tell anyone to run a Claude that is not installed; and New conversation carrying a word;
   - the new-conversation dialog opening with the focus in the opening prompt, all three harnesses marked "(cannot run)" with their reasons, the model list reading "Models unavailable", nothing stale said, and Launch disabled and in view at 1280×900 with the notices;
   - the API refusing Claude Code's model list and a launch of either harness as `executable_missing`, with the reason, and making no conversation;
   - never "internal error" on a page, and no answer of 500, on the whole walk;
-  - a restart: the project kept, what is missing known again with nothing opened, and the start-up log's lines again;
+  - a restart: the project kept, what is missing known again with nothing opened, and the start-up log's line for each harness again;
   - `--listen`: another mega, on its own scratch data, on the port the flag names, and one refused for `0.0.0.0`, as the config value is;
   - both harnesses installed, as stand-ins that only say their versions: a native Claude Code build, built from `internal/harness/claude/fakebuild` into the versions folder, and the fake Codex package at 0.166.0 on the `PATH`, inside its range. A mega on fresh data shows them:
     - **with Claude Code 2.1.330, newer than its range:** the start-up log, at info, says it runs from the newest build installed with no `claude` on the `PATH`. The first page says each harness in one short plain sentence: its build, where it is and the range, with no node or shim and no notice colour. `/api/version` names the ranges and what each found is, a newer one with no sentence, and `mega version` says the same plainly;
@@ -116,7 +116,7 @@ Where things go:
   - the override;
   - values only on request;
   - a project with no file.
-- **`panel.mjs`** (126 steps): the input panel. Its config names `~/Sandbox` and `~/Screenshots`, in its scratch `HOME`, beyond the checkout. It checks the following:
+- **`panel.mjs`** (137 steps): the input panel. Its config names `~/Sandbox` and `~/Screenshots`, in its scratch `HOME`, beyond the checkout. It checks the following:
   - the reply box resting at one line with the cursor in it when the page loads on a conversation, and its title naming Ctrl+Space;
   - focus alone leaving it at one line, the first character opening it to its height, and a draft opening it on focus;
   - the line above the panel staying put as the box opens and closes, and a view at the bottom staying there;
@@ -128,6 +128,7 @@ Where things go:
   - Escape leaving the box for the history, whose keys then scroll it, and closing the path list first;
   - Page Up and Page Down scrolling the history from an empty box and ending following as a wheel does, and the box's own with a draft;
   - the allow keys from a box the switch focused, and from the history after Escape;
+  - a read waiting for the view: output arriving while scrolled up, "Newer activity below" showing, staying unread and read on return to the newest output; the same when a dialog closes over a view still scrolled up; and a read refused once, tried again once, after a wait;
   - Ctrl+Enter sending, closing the box and going to the end, following the reply;
   - a refused send keeping the box open, focused and with its draft;
   - Send and Start disabled with the reason while a shutdown is armed or the checkout is missing, the shutdown's first;
@@ -158,7 +159,7 @@ Where things go:
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
 - **`readme.mjs`** (5 steps): the README's picture of a workspace. A scratch workspace of three projects, with conversations on all three harnesses in the states the side panel shows: a Claude Code approval waiting, a Codex reply unread, a pi turn running, one read and idle, and one Claude Code conversation holding hand-written turns from `lib/scene.mjs`, so its history reads as real work. It checks that needs-you holds the approval and the unread reply and that the pi turn is running. It then opens the hand-written conversation, unfolds every project, opens the last action, and saves the page at 1440×900 as `shots/workspace.png`. `make readme-image` runs it and copies the picture to `docs/images/workspace.png`.
-- **`requests.mjs`** (56 steps): requests. It checks the following:
+- **`requests.mjs`** (59 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -174,6 +175,7 @@ Where things go:
     - nothing from another field, with a draft in the box, on a repeating key, on a request docked under the press, or with a dialog open;
     - neither key on a question or on a pi dialog;
     - Ctrl+Shift+Enter allowing a Codex MCP tool for the session, and doing nothing on a Claude approval, which offers no such allow;
+  - a docked request held while the page is stale, after its stream is dropped and before the workspace is read again: its answers disabled, saying why, and Ctrl+Enter answering nothing; answerable, and answered, once the page has caught up. The drop closes only the page's end of the stream (`reconnectable` in `lib/mega.mjs`), so the service keeps the request pending. It saves the held card as `shots/request-held.png`;
   - pi, on the fake pi:
     - its extension's gate docked as a "Question from a pi extension", with Dismiss and no answer of one's own or allow for the session, and answered;
     - Dismiss reaching pi as its cancel;
@@ -196,7 +198,7 @@ Where things go:
   - with the footer's longest status, "Shut down from here, retrying", the mega's name beside it shown whole, saved as `shots/foot-shut-down.png`;
   - both pages recovering when the service returns.
 
-- **`side.mjs`** (68 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
+- **`side.mjs`** (72 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
   - projects sorted by name ignoring case, the id breaking a tie, and starred first in their own group;
   - project rows bolder than their conversations;
   - folds: a starred project unfolded and any other folded until the operator chooses; his choice kept across a reload and outlasting a star or an unstar; navigation by the needs-you list or Ctrl+/ unfolding without recording a choice; the old folded list carried over as folded choices; a removed project's choice forgotten; a folded project keeping its rollup mark;
@@ -208,6 +210,7 @@ Where things go:
   - project removal refused while a runtime lives and naming it, then deleting the project's logs;
   - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, with each harness's tested range and the version found (the fake Codex's inside its range, the stand-in Claude Code's unknown and said so, in the notice colour), and when the newest configuration snapshot was taken and where the snapshots are, with nothing of what one holds, the rail's control, and a page older than the service saying so where the connection status is, without reloading;
   - every control in the panel and on the rail with a title and a label;
+  - on a first load, before the first workspace read lands, nothing saying Live; after a reconnect, before the workspace read lands, the footer saying "Catching up" and the rail's dot an empty ring, not Live; and Live once it lands. It saves the footer as `shots/foot-catching-up.png`;
   - where the operator left off, in two new projects:
     - the glyph on the conversation last instructed in each, one per project, after its name;
     - moved by a prompt to another conversation in the same project, and not by that project's agent waking on its own, nor by a request answered;

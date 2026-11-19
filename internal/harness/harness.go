@@ -42,6 +42,11 @@ var ErrEffortRefused = errors.New("the model changed but the effort was refused"
 // started were still running when the bounded check gave up.
 var ErrLeftRunning = errors.New("processes the runtime started are still running")
 
+// ErrUnchecked reports a runtime whose own process exited where the processes
+// it started could not be listed, as where /proc cannot be read: whether any
+// outlived it is not known, which is neither a clean stop nor a leak.
+var ErrUnchecked = errors.New("whether processes the runtime started are still running could not be checked")
+
 // Harness launches runtimes and reads native history for one kind of agent.
 type Harness interface {
 	// Name is the model.Harness* value conversations record.

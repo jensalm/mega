@@ -87,7 +87,9 @@ const startupLog = () =>
     .filter((f) => existsSync(f))
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n')
-const harnessLines = (log) => log.split('\n').filter((l) => /harness '(claude|codex)'/.test(l))
+const harnessLines = (log) => log.split('\n').filter((l) => /harness '(claude|codex|pi)'/.test(l))
+// each harness has its own line in a start-up's log.
+const eachHarness = (lines) => ['claude', 'codex', 'pi'].every((name) => lines.some((l) => l.includes(`harness '${name}'`)))
 
 // every answer of 500, and every "internal error" shown, on the whole walk.
 const fiveHundreds = []
@@ -102,11 +104,12 @@ const noInternal = async (p, where) => {
 }
 
 // the start-up log: one line per harness, found or missing and why.
-const atStart = await soon(async () => harnessLines(startupLog()).length >= 2, 15000)
+const atStart = await soon(async () => eachHarness(harnessLines(startupLog())), 15000)
 const lines = harnessLines(startupLog())
 for (const line of lines) shown('the start-up log', line.trim())
 check(atStart && lines.some((l) => l.includes("harness 'claude'") && l.includes('cannot run') && l.includes(claudePath)), 'the start-up log says Claude Code cannot run, naming the versions folder it looked in')
 check(lines.some((l) => l.includes("harness 'codex'") && l.includes('cannot run')), 'the start-up log says Codex cannot run')
+check(lines.some((l) => l.includes("harness 'pi'") && l.includes('cannot run')), 'the start-up log says pi cannot run')
 
 // the empty workspace: what mega needs, what is missing, and where to begin.
 const page = await t.page()
@@ -264,7 +267,7 @@ const knownAgain = await soon(async () => (await missingNames()) === 'claude,cod
 shown('what the project lists as missing after the restart, before anything is opened', await missingNames())
 check(knownAgain, 'after a restart the project lists what is missing again, with nothing opened')
 const again = harnessLines(startupLog().slice(before))
-check(again.length >= 2, `the start-up log says again what each harness is: ${again.length} lines`)
+check(eachHarness(again), `the start-up log says again what each harness is, Claude Code, Codex and pi: ${again.length} lines`)
 shown('the environment section after the restart', await text(page.locator('section.environment')))
 await noInternal(page, 'the project page after the restart')
 await shot('restarted')

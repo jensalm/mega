@@ -2,10 +2,12 @@ package pi
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -374,6 +376,69 @@ func TestAReleaseWithADialogPendingEndsPi(t *testing.T) {
 
 // discovery lists the checkout's sessions with their first prompt; a resume
 // of a session pi does not hold is refused before anything starts.
+// a listing read only in part is not a clean one: a process that cannot be
+// read could be in pi's group. what could be read still counts, so a
+// confirmed survivor is named beside it, and a process that went
+// mid-listing, its entry gone, is ordinary.
+func TestAListingReadInPartIsNotClean(t *testing.T) {
+	was := procRoot
+	procRoot = t.TempDir()
+	t.Cleanup(func() { procRoot = was })
+	if err := os.Mkdir(filepath.Join(procRoot, "456"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if found, unread, err := inGroup(123); err != nil || len(found) != 0 || len(unread) != 0 {
+		t.Fatalf("a process gone mid-listing: %v %v %v", found, unread, err)
+	}
+	write := func(pid int, mode os.FileMode) {
+		path := filepath.Join(procRoot, strconv.Itoa(pid), "stat")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(strconv.Itoa(pid)+" (sleep) S 1 123"), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(200, 0o644)
+	write(300, 0o000)
+	if _, err := os.ReadFile(filepath.Join(procRoot, "300", "stat")); err == nil {
+		t.Skip("an unreadable stat file stays readable here, as it does for root")
+	}
+	alive, err := groupSurvivors(123, 0)
+	if err == nil || !slices.Equal(alive, []int{200}) {
+		t.Errorf("a survivor in the group beside a process that cannot be read: %v %v", alive, err)
+	}
+}
+
+// a release where the processes cannot be listed, as with no /proc, says so:
+// not a clean stop, and not processes left running.
+func TestAReleaseThatCouldNotLookSaysSo(t *testing.T) {
+	h := New(Config{Binary: fake(t)})
+	p := place(t)
+	s := newSink()
+	rt, err := h.Launch(harness.Spec{Cwd: p.Cwd, Env: p.Env, Find: p.Find, Model: "fake/large", Effort: "low"}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	was := procRoot
+	procRoot = filepath.Join(t.TempDir(), "no-proc")
+	t.Cleanup(func() { procRoot = was })
+	if found, _, err := inGroup(1); err == nil {
+		t.Errorf("an unreadable listing gave %v with no error", found)
+	}
+	if err := rt.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("pi did not exit")
+	}
+	if !errors.Is(s.exit, harness.ErrUnchecked) || errors.Is(s.exit, harness.ErrLeftRunning) {
+		t.Errorf("exit = %v", s.exit)
+	}
+}
+
 func TestDiscoverAndAMissingSession(t *testing.T) {
 	h := New(Config{Binary: fake(t)})
 	p := place(t)

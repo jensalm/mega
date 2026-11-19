@@ -24,6 +24,9 @@ interface ConversationViewProps {
   onRemoved: () => void
   // why new work waits, or null: prompts and starts wait, and say so.
   heldBy: string | null
+  // onFollowing hears whether the view follows the newest output (latest.ts),
+  // which the page reads by.
+  onFollowing: (following: boolean) => void
 }
 
 const stateLabels: Record<Conversation['state'], string> = {
@@ -39,7 +42,7 @@ const stateLabels: Record<Conversation['state'], string> = {
 // what the harness reports, the history, and the input panel pinned below
 // it, where every control and every pending request lives.
 export function ConversationView(props: ConversationViewProps) {
-  const { conversation, project, log, loading, loadingEarlier, onEarlier, onShowNative, stale, onRemoved, heldBy } = props
+  const { conversation, project, log, loading, loadingEarlier, onEarlier, onShowNative, stale, onRemoved, heldBy, onFollowing } = props
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const showNative = log?.native ?? false
@@ -51,7 +54,7 @@ export function ConversationView(props: ConversationViewProps) {
   const loaded = log !== null && log.loaded && log.through >= (log.events.at(-1)?.seq ?? 0)
   const activity = `${log?.events.at(-1)?.seq ?? 0}:${delta.length}:${conversation.pending.map((request) => request.id).join(',')}`
   const dockRef = useRef<HTMLDivElement>(null)
-  const { newer, toLatest, isFollowing } = useLatest(articleRef, dockRef, loaded, activity)
+  const { newer, toLatest, isFollowing } = useLatest(articleRef, dockRef, loaded, activity, onFollowing)
 
   // loading earlier history keeps the view where it was: the first row in view
   // is noted before the read, and once the rows above it are in, the view
