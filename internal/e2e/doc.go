@@ -19,7 +19,10 @@
 //	                         once (run pi in it and accept); mega never trusts
 //	                         a checkout for pi. the pi round trips run on pi's
 //	                         own default model, and skip when it does not
-//	                         answer
+//	                         answer; the idle model switch then moves to
+//	                         MEGA_E2E_PI_MODEL, by default the hosted
+//	                         openai-codex/gpt-6-luna, and skips where pi does
+//	                         not list it
 //
 // `make e2e` also reads them from e2e.local.mk, an optional, git-ignored
 // file of make assignments beside the Makefile, and passes on only those set.

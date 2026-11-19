@@ -32,7 +32,7 @@ func (r Range) String() string { return fmt.Sprintf("%s to %s", r.Low, r.High) }
 // sdk; codex is installed whole, with its helper programs. pi's range is the
 // one build probed, 1.5.2 (probes/pi, capability report, 2026-11-16).
 var Tested = map[string]Range{
-	model.HarnessClaude: {Low: "2.1.318", High: "2.1.325"},
+	model.HarnessClaude: {Low: "2.1.318", High: "2.1.326"},
 	model.HarnessCodex:  {Low: "0.163.0", High: "0.169.0"},
 	model.HarnessPi:     {Low: "1.5.2", High: "1.5.2"},
 }

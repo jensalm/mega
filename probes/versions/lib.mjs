@@ -290,6 +290,43 @@ export function probe(harness) {
 
   // sameSession checks the conversation is still on its first session, by
   // its record and by the newest start's own report.
+  // idleSwitch switches an idle conversation's model to another the model
+  // list offers, prefer if it is one, and checks it stays idle: over a few
+  // seconds no turn opens and no message is recorded, a harness's own echo of
+  // the switch arriving only as a native event. then a prompt, whose turn must
+  // ask for the new model and run on it. claude code 2.1.327 answered such a
+  // switch with a user message marked as a replay, which mega once took for a
+  // turn that never ended (capability report, 2026-11-18).
+  const idleSwitch = async (id, models, { prefer, outcome, ask, reply }) => {
+    const c = await convOf(id)
+    must(c.state === 'running' && !c.turn_active, `idle before the model switch (state ${c.state}, turn ${c.turn_active})`)
+    const runs = (m) => m.resolved || m.id
+    const others = models.filter((m) => m.id !== 'default' && m.id !== c.model_choice && m.id !== c.model && runs(m) !== c.model)
+    const pick = others.find((m) => m.id === prefer) ?? others[0]
+    must(!!pick, `the model list offers a model besides the one running, ${c.model}`)
+    const efforts = pick.efforts ?? []
+    const effort = efforts.includes('low') ? 'low' : pick.default_effort || efforts[0] || ''
+    const seq = await lastSeq(id)
+    const r = await api('POST', `/api/conversations/${id}/model`, { model: pick.id, effort })
+    check(r.status === 200 && r.body?.outcome === outcome,
+      `an idle switch from ${c.model} to ${pick.id} at ${effort || 'no effort'} answered ${r.body?.outcome ?? `${r.status} ${JSON.stringify(r.body)}`}, want ${outcome}`)
+    await sleep(5000)
+    const after = await events(id, seq)
+    const recorded = after.filter((e) => ['user', 'assistant', 'tool_use', 'tool_result', 'turn_end'].includes(e.kind))
+    const natives = after.filter((e) => e.kind === 'native').map((e) => e.text)
+    const v = await convOf(id)
+    check(recorded.length === 0, `the idle switch recorded no message or turn${recorded.length ? `: ${recorded.map((e) => `${e.kind} "${short(e.text, 60)}"`).join('; ')}` : ''}`)
+    check(!v.turn_active && v.attention !== 'running', `after the idle switch the conversation is idle (turn ${v.turn_active}, attention ${v.attention}); native events: ${natives.length ? natives.join(', ') : 'none'}`)
+    const before = await lastSeq(id)
+    await prompt(id, ask)
+    const ended = await turnEnd(id, before, 'the turn after the idle switch')
+    await expectReply(id, reply)
+    const turn = ended.turn ?? {}
+    check(turn.asked?.model === pick.id && turn.ran?.model === runs(pick),
+      `the turn after the idle switch asked for ${turn.asked?.model} and ran on ${turn.ran?.model}, want ${pick.id} on ${runs(pick)}`)
+    return { from: c.model, to: pick.id, runs: runs(pick), effort, outcome: r.body?.outcome, natives, ran: turn.ran }
+  }
+
   const sameSession = async (id, nativeId, what) => {
     const c = await convOf(id)
     const starts = (await events(id)).filter((e) => e.kind === 'runtime' && e.status === 'started' && e.facts?.session)
@@ -347,7 +384,7 @@ export function probe(harness) {
   return {
     url, summary, say, note, check, must, until, api, workspace, projectOf, convOf, events, lastSeq, lastAssistant, short,
     startup, register, fromOverride, resolvedValues, launch, prompt, turnEnd, approval, answer, interrupt, interrupted,
-    setMode, mcpCounts, release, imports, startIdle, sameSession, expectReply, turns, started, run,
+    setMode, mcpCounts, release, imports, startIdle, idleSwitch, sameSession, expectReply, turns, started, run,
   }
 }
 

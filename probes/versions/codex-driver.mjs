@@ -28,6 +28,7 @@ const interruptCommand = 'echo EPSILON-2b9c > ../codex-rt1-interrupt.txt'
 const interruptPrompt = `Run exactly this shell command, and no other: ${interruptCommand} (it writes in the parent of the working directory). Then reply with EPSILON-2b9c. Nothing else.`
 const mcpPrompt = 'Call the echo tool from the fixture MCP server with the text MCP-E2E-7c1d, then reply with exactly what the tool returned. Nothing else.'
 const startPrompt = 'Reply with the word BETA-START-9e1f. Do not run any commands. Nothing else.'
+const switchPrompt = 'Reply with the word BETA-SWITCH-4c2d. Do not run any commands. Nothing else.'
 const returnPrompt = 'List every marker token you have seen in this conversation so far, in order, one per line, then append RESUME-SDK-c3d4 on its own line. Nothing else.'
 
 const fixture = process.env.MEGA_E2E_CODEX_FIXTURE
@@ -191,6 +192,10 @@ const roundTrip = async () => {
   await p.turnEnd(id, seq, 'the prompt in the resumed thread')
   await p.expectReply(id, 'BETA-START-9e1f')
   await p.sameSession(id, thread, 'the prompt after the start')
+
+  // a model switch while idle: codex takes a model choice with the next
+  // prompt, so it is stored for it (next_prompt), and that turn must run on it.
+  summary.idle_switch = await p.idleSwitch(id, models.body.models, { prefer: 'gpt-6-luna', outcome: 'next_prompt', ask: switchPrompt, reply: 'BETA-SWITCH-4c2d' })
 
   // a release, and an exact-id resume by a prompt that must remember.
   await p.release(id)

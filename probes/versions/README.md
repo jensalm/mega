@@ -4,7 +4,7 @@ This probe is how mega's tested ranges are extended. `harness.Tested` in `intern
 
 Each run starts a scratch mega built from this checkout. The build under test is named in the scratch config, and the run makes the e2e round trips' calls (`internal/e2e`) over mega's HTTP API. The e2e tests cannot do this themselves: a project's environment never takes mega's own, so they cannot switch Claude Code's updater off or point Codex at a scratch `CODEX_HOME`. Here the fixture project's local override does both.
 
-The probe runs real harness sessions on Michael's own login, as the builds run in his terminal, against the disposable fixtures only. A Claude Code run costs five model turns, and a Codex run six.
+The probe runs real harness sessions on Michael's own login, as the builds run in his terminal, against the disposable fixtures only. A Claude Code run costs six model turns, and a Codex run seven.
 
 ## What it needs
 
@@ -47,6 +47,7 @@ probes/versions/codex.sh /path/to/codex-0.170.0-package/bin/codex 18520 --discov
 - MCP status, by counts only;
 - a release, then a start without a prompt, which reports the build's version and imports nothing;
 - a prompt in the resumed session;
+- a model switch while idle, to another listed model, `sonnet` where it can, which Claude confirms at once. Over five idle seconds no message or turn may be recorded, and the conversation must not be running. Whether the build echoes the switch as a replayed user message, which mega records as the native "user/replay", goes in the summary's `idle_switch.echo`. The next prompt's turn must ask for the new model and run on it;
 - a release and an exact-id resume by a prompt that must remember the conversation;
 - every turn's `differs`.
 
@@ -56,7 +57,8 @@ probes/versions/codex.sh /path/to/codex-0.170.0-package/bin/codex 18520 --discov
   - the approval is for a write outside the checkout;
   - the interrupted approval is for a second write, and must leave nothing written;
   - an MCP approval for the fixture's `fixture/echo` is added: the tool must not run before Allow and must run after;
-  - there is no mode switch.
+  - there is no mode switch;
+  - the idle model switch, `gpt-6-luna` where it can, is stored for the next prompt (`next_prompt`), whose turn must run on it.
 
 **The scratch `CODEX_HOME`** is `<scratch root>/codex-home`, made on the first Codex run and shared by every later one, so each build reads what the others wrote. It holds copies of `~/.codex/config.toml`, any other `*.toml`, `AGENTS.md`, `rules/` and `skills/`. It also holds a symbolic link to `~/.codex/auth.json`, which is never copied or read. Codex warns about the location under `/tmp`, saying "Refusing to create helper binaries under temporary dir"; none of the calls needs them.
 
@@ -74,7 +76,11 @@ Each step prints `ok` or `FAIL`, and a run ends with a JSON summary, which is al
 
 A build is fit to add to a range when every step passed and the state checks found nothing changed.
 
-Claude Code's exact-id resume imports one event at every build seen: "No response requested.", which Claude writes to the transcript for the interrupted turn when the next prompt reaches a resumed run. mega maps it as a native event, "assistant/synthetic", so the step passes when the resume imports native events only. A reply imported there, or any import at the start without a prompt, is a finding.
+Claude Code's exact-id resume imports two events at every build seen since the idle switch was added:
+- "No response requested.", which Claude writes to the transcript for the interrupted turn when the next prompt reaches a resumed run. mega maps it as a native event, "assistant/synthetic".
+- The `/model` command record the switch wrote to the transcript, which is never sent live. mega maps it as "user/local-command".
+
+So the step passes when the resume imports native events only. A reply imported there, or any import at the start without a prompt, is a finding.
 
 Each run directory holds `driver.out`, `summary.json`, `version.txt`, `state-before.txt` and `state-after.txt`. It also holds mega's own output in `mega.out` and its log in `xdg/state/mega/mega.log`; a warning about versions would show there. A Codex run's `adopt/` holds the second mega's run.
 

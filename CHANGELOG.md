@@ -8,6 +8,10 @@ CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470,
 - **The page's per-browser settings,** such as the side panel's width and which projects are folded, start fresh once, because a browser keeps them per port.
 - **A new mega started while an old one still serves 8470** on the same data directory does not start a second one beside it. It is refused by the data directory's lock, which names the running mega at 8470, and `mega daemon` opens that one's page instead.
 
+FIX: **Switching the model no longer adds a prompt you did not write.** (2026-11-19) Claude Code writes the `/model` command a switch runs into its transcript and never sends it live. On the next resume, mega imported it into the history as a prompt from outside mega. Claude's records of local slash commands and their output are now kept with its own events, hidden unless you show native events.
+
+CHANGE: **Claude Code 2.1.326 is within the tested range,** now 2.1.318 to 2.1.326. Switching the model of an idle Claude conversation left it showing as working on 2.1.322 and 2.1.325 as well, not only on 2.1.327; the fix for that, the entry about switching a Claude conversation's model below, covers them too.
+
 FIX: **Output is marked read only once you have seen it.** (2026-11-18) With the history scrolled up and "Newer activity below" showing, new output was still marked read, so it could leave Needs you before it was on screen. Now it stays unread until the view is back at the newest output, by the control or by scrolling, including after a dialog closes over a scrolled-up view. Opening a conversation still goes to the newest output, so it still reads at once. A read that fails is now tried again after a short wait, where before it waited for something else to change.
 
 FIX: **The page no longer says Live before it has caught up.** (2026-11-18) After a reconnect, until the workspace has been read again, the footer says "Catching up" and the rail's dot is an empty ring. Meanwhile a docked request's buttons and the allow keys are held, saying why, since the page is showing what it knew before the reconnect.

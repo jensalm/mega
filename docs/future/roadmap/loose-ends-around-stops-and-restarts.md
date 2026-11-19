@@ -5,13 +5,13 @@ created: 2026-11-19
 tags: [defect]
 ---
 
-Six narrow faults in what mega does when a runtime stops, the service restarts or a connection returns. Each needs something to go wrong first, and none has been seen in use. They were found by review, and they are worth fixing because each is a place where mega's own rules are not kept.
+Eight narrow faults, most of them in what mega does when a runtime stops, the service restarts or a connection returns. Each needs something to go wrong first, and none has been seen in use. They were found by review, and they are worth fixing because each is a place where mega's own rules are not kept.
 
 ## why
 
 A terminus review of the last three batches' files on 2026-11-19 (`915e203707a7`) confirmed the five fixes of `the-page-says-more-than-it-has-seen` and raised five more blocking findings, all in older code. This was the third pass in a row to end that way. Michael's direction on 2026-11-18 was to clear the review before returning to pull request 3; the planning agent's recommendation on reading this pass was to card what is left and return to the pull request, which is the more urgent.
 
-## the six
+## the eight
 
 1. **A failed runtime's output can be counted late.** When a runtime exits in the middle of a turn, output it had produced in that turn is kept aside and never counted, and a later turn's end can then count it as unread. Recommended: count it at the exit. It is output the agent produced, the conversation reads as an error at that moment either way, and nothing is left over to surface later.
 2. **Old imports can be counted unread after an unclean restart.** Resuming scans the whole log, so output brought in by an earlier adoption or import can show as unread. The rule is that imported output after a release or an adoption stays read. Only what this resume brings in should count.
@@ -20,9 +20,12 @@ A terminus review of the last three batches' files on 2026-11-19 (`915e203707a7`
 5. **A reconnect can still show "Live" a moment early.** The page calls itself caught up when a workspace read lands, even if a change notice during that read has already queued another. It is caught up only when no read is waiting.
 6. **The shutdown banner can report an old shutdown as under way.** After mega is shut down from a page and started again, the page's reconnect makes the banner say "Shutting down" and that every runtime is being released, before the restarted service has confirmed its workspace. The footer beside it correctly says "Catching up". The banner should wait in the same way.
 
+7. **Claude's history does not say that a turn is still open.** Reading a session back, the adapter never marks a turn as unfinished. After an unclean restart, the harness process mega lost may still be working. A resume then imports what that turn has produced so far and counts it as a finished turn's output. Found by the review of the pull request 3 follow-up on 2026-11-19, raised twice, in older lines.
+8. **The tested range claims too much.** Its definition, in `internal/harness/versions.go`, the glossary and `docs/current/mega.md`, says the builds "whose every call mega makes was seen to work". The probe covers a fixed list of steps, which until 2026-11-19 did not include a model switch on an idle runtime, and that was broken inside the range the whole time. It should say what the probe ran.
+
 ## decisions inside it
 
-The first and the fourth each hold one: whether a failed runtime's output is counted or cleared, and whether an answer is refused once a release has begun. The recommendations above are the planning agent's.
+The first and the fourth each hold one: whether a failed runtime's output is counted or cleared, and whether an answer is refused once a release has begun. The recommendations above are the planning agent's. On the first, the review's own suggestion was to clear the output; counting it is recommended here because a turn that ends by its runtime exiting has still ended, and its output is what the operator will want to see when they open the error.
 
 ## a note on the review
 

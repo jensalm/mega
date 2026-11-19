@@ -15,6 +15,7 @@ import { cannotRun, flag, probe, sleep } from './lib.mjs'
 const markerPrompt = 'Reply with the project instruction marker token from your project instructions, followed by the word ALPHA-1a2b. Nothing else.'
 const approvalPrompt = 'Using the Bash tool, run exactly `sleep 3` and then reply DELTA-7a8b. Nothing else.'
 const startPrompt = 'Reply with the word BETA-START-9e1f. Nothing else.'
+const switchPrompt = 'Reply with the word BETA-SWITCH-4c2d. Nothing else.'
 const returnPrompt = 'List every marker token you have seen in this conversation so far, in order, one per line, then append SDK-RETURN-c3d4 on its own line. Nothing else.'
 const activation = 'export DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1'
 const updaterNames = ['DISABLE_AUTOUPDATER', 'DISABLE_UPDATES']
@@ -110,6 +111,13 @@ await p.run(async () => {
   await p.turnEnd(id, seq, 'the prompt in the resumed session')
   await p.expectReply(id, 'BETA-START-9e1f')
   await p.sameSession(id, session, 'the prompt after the start')
+
+  // a model switch while idle, which claude confirms at once, then a prompt
+  // that must run on the new model. whether the build echoes the switch as a
+  // replayed user message is recorded: mega maps it as a native event,
+  // "user/replay".
+  summary.idle_switch = await p.idleSwitch(id, models.body.models, { prefer: 'sonnet', outcome: 'confirmed', ask: switchPrompt, reply: 'BETA-SWITCH-4c2d' })
+  summary.idle_switch.echo = summary.idle_switch.natives.includes('user/replay')
 
   // a release, and an exact-id resume by a prompt that must remember.
   await p.release(id)

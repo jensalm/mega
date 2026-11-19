@@ -3,6 +3,7 @@ building:
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
+  - a-turn-is-inferred-from-a-message.md
   - mega-as-the-development-hub.md
   - the-orchestration-framework-is-extracted.md
   - central-application.md

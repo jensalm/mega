@@ -424,7 +424,7 @@ await until('C shown again', async () => (await page.locator('.events .message.a
 // updates itself, are not marked and gain no words; nothing is refused for
 // its version. the fake shim reports the version a file beside it names.
 const versionFile = join(t.dir, 'fakeshim', 'claude-version')
-const claudeTested = '2.1.318 to 2.1.325'
+const claudeTested = '2.1.318 to 2.1.326'
 const startLine = page.locator('.events p.system', { hasText: /^Runtime started/ }).first()
 const startedWith = async (version, name) => {
   writeFileSync(versionFile, version + '\n')

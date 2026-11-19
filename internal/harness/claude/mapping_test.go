@@ -92,6 +92,29 @@ func TestReplayedUserMessageIsNativeNotAPrompt(t *testing.T) {
 	}
 }
 
+// claude records the /model a model switch runs in its transcript, never
+// sending it live, and other local slash commands and their output the same
+// way; the sdk's history reader marks those records isCompletedLocalCommand.
+// a marked record is native; a prompt is a prompt whatever its text, even
+// one made only of the record's tags.
+func TestLocalCommandRecordsAreNativeNotPrompts(t *testing.T) {
+	raw := map[string]any{"type": "user", "uuid": "c-1", "isCompletedLocalCommand": true, "message": map[string]any{"role": "user", "content": "<local-command-stdout>Set model to sonnet</local-command-stdout>"}}
+	evs := mapOne(t, raw)
+	if len(evs) != 1 || evs[0].Kind != model.EventNative || evs[0].Text != "user/local-command" || evs[0].NativeID != "c-1" {
+		t.Errorf("a marked record mapped to %+v", evs)
+	}
+	for _, prompt := range []string{
+		"<command-name>/model</command-name>",
+		"<command-args>Explain why this failed.</command-args>",
+		"<local-command-stdout>Set model to sonnet</local-command-stdout>",
+	} {
+		evs := mapOne(t, map[string]any{"type": "user", "uuid": "p-1", "message": map[string]any{"content": prompt}})
+		if len(evs) != 1 || evs[0].Kind != model.EventUser || evs[0].Text != prompt {
+			t.Errorf("the unmarked prompt %.40q mapped to %+v", prompt, evs)
+		}
+	}
+}
+
 // a prompt typed ahead while a turn ran is queued but is the operator's own.
 func TestQueuedCommandWithoutMetaIsStillAPrompt(t *testing.T) {
 	evs := mapOne(t, decode(t, `{"type":"user","uuid":"q-1","isQueuedCommand":true,"message":{"content":"and then run the tests"}}`))

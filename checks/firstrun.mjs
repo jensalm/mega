@@ -313,7 +313,7 @@ check(refusedCode !== 0 && refusedCode !== 'still running' && refusal.includes("
 // with them found: first with a Claude Code newer than its range, the normal
 // state for a harness that updates itself, said plainly; then with one
 // older, which needs a look and is marked.
-const claudeTested = '2.1.318 to 2.1.325'
+const claudeTested = '2.1.318 to 2.1.326'
 const codexTested = '0.163.0 to 0.169.0'
 const codexVersion = '0.166.0'
 symlinkSync(join(t.repo, 'internal/harness/codex/fake/codex'), join(t.dir, 'bin/codex'))

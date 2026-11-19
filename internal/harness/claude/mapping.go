@@ -53,6 +53,13 @@ type sdkMessage struct {
 	// never an operator's prompt only while the shim leaves the sdk's
 	// replayUserMessages off; with it on, every prompt comes back marked too.
 	IsReplay bool `dd:"isReplay,+nullable"`
+
+	// IsCompletedLocalCommand is the sdk's own mark, in history it reads back,
+	// on claude's record of a local slash command and on its output: the
+	// records after a local command caveat, which the reader tells apart from
+	// prompts by the transcript's fields before it drops them (agent sdk
+	// 0.3.318, capability report, 2026-11-19).
+	IsCompletedLocalCommand bool `dd:"isCompletedLocalCommand,+nullable"`
 }
 
 type sdkContent struct {
@@ -132,6 +139,13 @@ func mapMessage(raw map[string]any) ([]*model.Event, error) {
 		// an echo, never a prompt: as a user event it would open a turn that
 		// no result ever ends.
 		return []*model.Event{{Kind: model.EventNative, Text: "user/replay", NativeID: msg.UUID, Raw: raw}}, nil
+	case msg.Type == "user" && msg.ParentToolUseID == "" && msg.IsCompletedLocalCommand:
+		// claude's own record of a local slash command, such as the /model a
+		// model switch runs, or its output, as the sdk marks it in history:
+		// written to the transcript, never sent live, and no prompt the model
+		// saw. as a user event, a resume would import it as a prompt from
+		// outside mega. a message's text alone never decides it.
+		return []*model.Event{{Kind: model.EventNative, Text: "user/local-command", NativeID: msg.UUID, Raw: raw}}, nil
 	case msg.Type == "user" && msg.ParentToolUseID == "":
 		if text, ok := msg.Message.text(); ok {
 			return []*model.Event{{Kind: model.EventUser, Text: text, NativeID: msg.UUID, Raw: raw}}, nil

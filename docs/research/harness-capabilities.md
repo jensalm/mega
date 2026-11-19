@@ -984,6 +984,46 @@ Claude Code 2.1.327, Agent SDK 0.3.318, seen in an operator conversation through
 - The CLI also echoes each prompt back with `isReplay` and the prompt's own `uuid`, but only when the `replayUserMessages` option is set `[source]`. The shim does not set it, so any `isReplay` message on its stream is Claude's own echo, never a prompt `[inference]`. Turning that option on would bring every prompt back marked this way.
 - Which version began sending it is not known. The model follow-up (2026-11-10, Claude Code 2.1.318) does not mention it, and its logs are not in the repository to check.
 
+## Follow-up (2026-11-19): a model switch on an idle runtime, probed
+
+The probe in `probes/versions/` and the e2e round trips gained an idle model switch. A runtime is started with no prompt, its model is switched while no turn is open, and then a prompt runs. Each run was against the disposable fixtures on `fortyfive`.
+
+### Claude Code 2.1.322, 2.1.325 and 2.1.326, Agent SDK 0.3.318
+
+- **The echo is not new in 2.1.327.** Each of the three builds answered the switch (`claude-opus-5-5` to `sonnet`, at `low`) with one top-level user message on the live stream `[observed]`:
+  - `isReplay: true`;
+  - content `<local-command-stdout>Set model to `sonnet (claude-sonnet-5-5)`</local-command-stdout>`;
+  - nothing after it.
+  
+  2.1.322 is the oldest build installed. The tested range has held builds that send it since at least 2.1.322, and no round trip switched the model of an idle runtime until now.
+- **Mapped as pull request 3 does,** it is a native event, `user/replay`. The conversation stayed idle for five seconds: no turn, no attention of a running one. The next prompt's turn asked for `sonnet` and ran on `claude-sonnet-5-5` `[observed]`.
+- **Without that rule, on 2.1.326,** the e2e round trip records the echo as a `user` event. The conversation shows `running` with a turn open, and the next prompt is refused with "a turn is in progress" `[observed]`. That is the bug pull request 3 reported, on the build Michael had installed.
+- **The transcript, on 2.1.326,** holds three records for the switch `[observed]`:
+  - a `<local-command-caveat>` message marked `isMeta`;
+  - the command, `<command-name>/model</command-name> <command-message>model</command-message> <command-args>sonnet</command-args>`, under its own `uuid`, never sent live;
+  - the output, `<local-command-stdout>…`, under the live echo's `uuid` but without `isReplay`.
+  
+  The 2026-11-18 observation of 2.1.327 says its transcript held no such message. Whether 2.1.327 differs here, or that look missed it, is not known `[inference]`.
+- **The resume.** An exact-id resume after the switch imported the command record as a `user` event, shown as a prompt from outside mega, on 2.1.325 and 2.1.326 `[observed]`. The output record shares the echo's `uuid`, so it was already held and was not imported.
+  - **Prompts and records differ in their fields** `[observed]`, on 2.1.322, 2.1.325 and 2.1.326 alike. Every prompt in the transcript carries `promptSource` (`"sdk"` for mega's), `turnOrigin`, `turnPosition` and `permissionMode`. The caveat, the command record and its output carry none of them.
+  - **The SDK's reader drops those fields** from what it gives back, `promptSource` among them, so history cannot tell a prompt from a record by them `[source: sdk.mjs, Agent SDK 0.3.318]`. It marks the records itself first. A caveat, then the command record and its output, with no `promptSource`, are given back with `isCompletedLocalCommand: true` `[source]`. The `/model` record imported on 2.1.326 carried it `[observed]`.
+  - **mega now maps** a top-level user message marked `isCompletedLocalCommand` to a native event, `user/local-command`, keeping its `uuid`. The mark alone decides it: an unmarked prompt stays a prompt whatever its text.
+  - With that rule, all three builds passed every step of the probe, 58 each.
+- **Tested range.** Claude Code 2.1.326 was added: 2.1.318 to 2.1.326.
+
+### codex-cli 0.166.0
+
+- **An idle switch is stored for the next prompt** (`next_prompt`). The adapter sends the model with the next `turn/start`, and nothing reaches the stream at the switch `[observed]`.
+- **The next turn asked for and ran on the new model,** `gpt-6-astra` to `gpt-6-luna` at `low` `[observed]`.
+- **The probe:** 67 steps, all passed; the real `~/.codex` unchanged. 0.166.0 was already in the range.
+
+### pi 1.5.2
+
+- **pi applies an idle switch at once** (RPC `set_model`, then `set_thinking_level`). The adapter reports the model it reads back with `get_state` `[observed]`.
+- **No message reaches the stream,** and no turn opens `[observed]`.
+- **The next turn ran on the new model,** `ollama/qwen3.8-27b` to `openai-codex/gpt-6-luna` at `low` `[observed]`. Since the default model is the operator's local one, the round trip switches to a hosted one.
+- **This is an e2e round trip, not a probe run:** pi has no versions probe.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

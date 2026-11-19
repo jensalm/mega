@@ -263,7 +263,7 @@ export interface About {
   // name_from says; both absent where there is none.
   name?: string
   name_from?: 'config' | 'hostname'
-  // each harness's tested range, by name ("2.1.318 to 2.1.325"), and what
+  // each harness's tested range, by name ("2.1.318 to 2.1.326"), and what
   // the service's start-up check found, with each version against it.
   tested: Record<string, string>
   harnesses?: HarnessStatus[]
