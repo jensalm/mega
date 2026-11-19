@@ -76,6 +76,26 @@ An unreachable environment is not proof its agents stopped. Its projects stay in
 
 **Terminal handoff** depends on mode, and the interface shows the mode so the rule is obvious. A long-lived conversation has a managed writer at idle, so handoff is explicit: release the runtime, open the exact session in the terminal, close the terminal, resume under mega. Idle is not closed. A per-turn conversation has no writer between turns, so the only rule is not to open a terminal mid-turn. Operator care is the accepted early mechanism; the concurrent-writer hazards in Claude and pi are real and documented, and leases or locks are deferred. Adoption of a session started in a terminal is the same path in reverse: discover it in the environment, associate it with a project conversation, and resume by exact id once the terminal has exited. Codex's shared app-server additionally allows a native TUI to attach live to a managed thread, with approvals broadcast and first answer winning; that stays available as a richer Codex-only capability, never presented as an exclusive lock. A conversation handed to a terminal keeps its place in the workspace, shown as externally operated. Nothing ever replaces native continuity with a summary-fed fresh session unless Michael explicitly asks for that.
 
+## A simpler core
+
+Proposed on 2026-11-19 and waiting on five decisions from Michael, which `docs/future/mega-simpler-core-work-order.md` lists. Until he settles them, the sections above stand where this one differs.
+
+The first slice kept a conversation's state in two places, the registry and its event log, and wrote them one after the other. Every operation then needed its own answer to what happens when the second write fails, and start-up needed its own code to work out what the service had decided before it stopped. Most of what the reviews of 2026-11-18 and 2026-11-19 found lived in those answers and that code, not in any feature. The core is to be made smaller, so those faults have nowhere to live.
+
+**One record.** The registry holds what a project is, and for a conversation only what it is and how the operator arranged it: its project, harness, name, label and mode. Everything that changes because a conversation runs is in its event log and nowhere else: its native session, its runtime state, what it requests, where it has been read to, its last error. The service changes a conversation's state in one way, by appending an event and then applying it, and a restart builds the same state by applying the same events with the same code. A decision the service makes is recorded as an event of its own and is never worked out again later.
+
+**One failure.** A write to the data directory that fails stops mega. It says on every page that it can no longer record, ends the runtimes it started, and exits. The next start treats what was running as unsupervised, as it does after a crash. There is no state in which mega runs on without being able to record, and so no rule for what it may show or accept while in one.
+
+**Unread is output beyond where you have read.** Output counts when it is recorded. A conversation with a turn in flight shows as running whatever it holds, so nothing visible changes while it works. After a resume from an unsupervised state, the reading position stays where it was and whatever lies beyond it is unread. After a release or an adoption, which the operator asked for, the reading position moves to the end. Mega does not work out which output is new. It may ask for a look more often than it strictly needs to. It never says nothing is new when something is.
+
+**A turn is what the harness says it is.** Each adapter reports where a turn starts and ends from its harness's own markers. A message outside a turn opens none.
+
+**An adapter translates and decides nothing.** Checking whose session a stream or a file belongs to, refusing what would start work once a stop has begun, finding what a runtime left running, and ordering an answer against the harness's own settlement are written once, under all three adapters.
+
+**The page has one state.** Connecting, catching up, live, lost, shutdown asked, shut down: one value, decided in one place, that everything on the page reads.
+
+None of this changes what an operator sees when nothing has gone wrong, and none of it touches the promises: a session is resumed by its exact id, permissions are never weakened, nothing is answered for the operator, and a state mega cannot vouch for is never shown as certain.
+
 ## First slice
 
 The first slice is built and in daily use, as of 2026-11-09: the environment service alone on `fortyfive`, serving its UI on localhost, with Claude and Codex at cold-handoff level, long-lived mode only, attention from native facts, and the roster surviving restarts. `docs/current/mega.md` describes it. Refinement now comes from use, in polish rounds, with workflow discoveries landing here before code.
