@@ -87,7 +87,6 @@ const systemPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 // still serve. no suite serves on either.
 const reserved = (port) => port === 6342 || port === 8470
 
-// checkPort is the port a suite serves on: MEGA_CHECK_PORT, else 18470.
 // reconnectable lets a check drop a page's stream, as a network blip would,
 // without stopping the service, so pending requests stay pending. the
 // workspace read the page makes on reconnecting is held until catchUp, so
@@ -104,14 +103,24 @@ export async function reconnectable(p) {
     current = ws
   })
   return {
-    // drop closes the page's end of the stream and holds the reads after it.
-    async drop() {
+    // hold holds the page's workspace reads from now on, with the stream left
+    // as it is: for a stream that drops by itself, as when the service stops.
+    async hold() {
       held = []
       await p.route('**/api/workspace', hold)
+    },
+    // drop closes the page's end of the stream and holds the reads after it.
+    async drop() {
+      await this.hold()
       await current.close({ code: 4000, reason: 'dropped by the check' })
     },
     // held is how many workspace reads wait.
     held: () => held?.length ?? 0,
+    // releaseOne lets the oldest held read go, and holds those after it.
+    async releaseOne() {
+      const route = held?.shift()
+      if (route) await route.continue().catch(() => undefined)
+    },
     // catchUp lets the held reads go, and the ones after them.
     async catchUp() {
       const waiting = held ?? []
@@ -122,6 +131,7 @@ export async function reconnectable(p) {
   }
 }
 
+// checkPort is the port a suite serves on: MEGA_CHECK_PORT, else 18470.
 export const checkPort = () => Number(process.env.MEGA_CHECK_PORT || 18470)
 
 // requireScratchPort ends the run, as cannotRun does, unless a port a suite

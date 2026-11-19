@@ -80,6 +80,10 @@ const historyOf = (cluster: HTMLElement | null) => cluster?.closest<HTMLElement>
 // last read, and cannot stand behind that pending set.
 const heldWhileStale = 'Held until the page has caught up with mega: what it shows is only last known, and an answer waits for the workspace to be read again.'
 
+// why the answers that would let work go on wait while a stop is under way:
+// the service refuses them then, and Deny and Dismiss stay live.
+const heldWhileStopping = 'The turn is stopping, so answers that would let work go on are held. Deny or Dismiss can still be pressed.'
+
 // the words the header used for a runtime started in an older environment.
 const staleEnvironment = 'started in an older environment: the project’s has changed since, and the next start picks it up'
 
@@ -202,6 +206,9 @@ export function InputPanel(props: InputPanelProps) {
   // never a pi dialog either.
   const keyed = docked.find((request) => request.kind === 'permission' && !request.payload?.dialog)
   const hasRuntime = state === 'running' || state === 'stopping'
+  // a stop under way: an interrupt not yet answered by the turn's end, or a
+  // release.
+  const stopping = state === 'stopping' || !!conversation.interrupting
   const blocked = state === 'unsupervised' || state === 'starting' || state === 'stopping' || state === 'resuming' || active
   const activity = describeActivity(conversation, log, stale)
   // the placeholder says what is true: the activity line's own words while a
@@ -360,7 +367,7 @@ export function InputPanel(props: InputPanelProps) {
   // docked less than settleMs before, and one request per press, since a
   // card being answered has its buttons disabled.
   const allowByKey = (event: globalThis.KeyboardEvent) => {
-    if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed || stale) {
+    if (event.repeat || event.isComposing || event.altKey || draft !== '' || !keyed || stale || stopping) {
       return
     }
     if (dialogOpen()) {
@@ -471,7 +478,7 @@ export function InputPanel(props: InputPanelProps) {
       {docked.length > 0 && (
         <div className="docked">
           {docked.map((request) => (
-            <RequestCard key={request.id} conversationId={conversation.id} request={request} keyed={request.id === keyed?.id} held={stale ? heldWhileStale : null} />
+            <RequestCard key={request.id} conversationId={conversation.id} request={request} keyed={request.id === keyed?.id} held={stale ? heldWhileStale : null} stopping={stopping ? heldWhileStopping : null} />
           ))}
         </div>
       )}

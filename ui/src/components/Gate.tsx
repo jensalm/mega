@@ -40,10 +40,18 @@ export function ShutdownBanner({ gate, shutDownAt, connected, stale, busy, error
       <section className="gate-banner shut-down" role="status">
         <Icon name="power_settings_new" />
         <div className="gate-body">
-          {connected ? (
+          {connected && !stale ? (
             <>
               <strong>Shutting down</strong>
               <p>Asked from this page at {clockTime(shutDownAt)}. Every runtime is being released.</p>
+            </>
+          ) : connected ? (
+            // back in touch, but the workspace not yet read again: the
+            // service that answers may be a new one, so the shutdown is not
+            // reported as under way until a current read says so.
+            <>
+              <strong>A shutdown was asked for from this page at {clockTime(shutDownAt)}</strong>
+              <p>The page has reached mega again and is reading the workspace, which says whether that shutdown is still under way.</p>
             </>
           ) : (
             <>

@@ -5,7 +5,7 @@ created: 2026-11-19
 tags: [defect]
 ---
 
-Eight narrow faults, most of them in what mega does when a runtime stops, the service restarts or a connection returns. Each needs something to go wrong first, and none has been seen in use. They were found by review, and they are worth fixing because each is a place where mega's own rules are not kept.
+Eight narrow faults and one small follow-up, most of them in what mega does when a runtime stops, the service restarts or a connection returns. Each needs something to go wrong first, and none has been seen in use. They were found by review, and they are worth fixing because each is a place where mega's own rules are not kept.
 
 ## why
 
@@ -23,9 +23,21 @@ A terminus review of the last three batches' files on 2026-11-19 (`915e203707a7`
 7. **Claude's history does not say that a turn is still open.** Reading a session back, the adapter never marks a turn as unfinished. After an unclean restart, the harness process mega lost may still be working. A resume then imports what that turn has produced so far and counts it as a finished turn's output. Found by the review of the pull request 3 follow-up on 2026-11-19, raised twice, in older lines.
 8. **The tested range claims too much.** Its definition, in `internal/harness/versions.go`, the glossary and `docs/current/mega.md`, says the builds "whose every call mega makes was seen to work". The probe covers a fixed list of steps, which until 2026-11-19 did not include a model switch on an idle runtime, and that was broken inside the range the whole time. It should say what the probe ran.
 
+9. **The pi test's hosted model.** Not a fault, and it rides with this batch. The idle model switch needs a second model, so that one pi round trip leaves Michael's local model for a hosted one. He approved it on 2026-11-19 and asked for `gpt-6-sol`, which pi lists as `openai-codex/gpt-6-sol`. The test's built-in default, and the documents that name it, still say `gpt-6-luna`.
+
 ## decisions inside it
 
 The first and the fourth each hold one: whether a failed runtime's output is counted or cleared, and whether an answer is refused once a release has begun. The recommendations above are the planning agent's. On the first, the review's own suggestion was to clear the output; counting it is recommended here because a turn that ends by its runtime exiting has still ended, and its output is what the operator will want to see when they open the error.
+
+## the fourth, sharpened on 2026-11-19
+
+The implementer found that the fourth item, read literally, breaks pi. pi holds an interrupt until its pending dialog is dismissed, and Dismiss is an answer. Refusing every answer once an interrupt has begun would leave a pi interrupt waiting for ever, with Release as the only way out.
+
+The rule that keeps the intent: once an interrupt or a release has begun, refuse what lets work go on, and accept what settles toward the stop.
+
+- **Refused:** Allow, Allow for the session, and a chosen or written answer to a question. A pi dialog is always a question and mega cannot tell which of its choices would let work run, so every chosen answer to one is refused.
+- **Accepted:** Deny, and pi's Dismiss.
+- **The refusal says why,** that the turn is stopping, and names what can still be pressed. The request is still pending, so the refusal is a conflict, not "no longer pending".
 
 ## a note on the review
 

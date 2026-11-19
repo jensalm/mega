@@ -418,6 +418,8 @@ type Runtime struct {
 	exited      bool
 	settled     bool // the sink has handled the exit
 	holdOnClose bool
+	holdStops   bool   // an interrupt settles nothing, as pi's with a dialog pending
+	onAnswer    func() // runs while an answer is in flight, before it is delivered
 	modes       []string
 	models      []string // "model/effort" for each model change accepted
 	deferred    bool
@@ -441,6 +443,12 @@ func (r *Runtime) Prompt(uuid, text string) error {
 }
 
 func (r *Runtime) Answer(requestID string, answer harness.Answer) error {
+	r.mu.Lock()
+	hook := r.onAnswer
+	r.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	native, ok := r.requests[requestID]
@@ -539,6 +547,10 @@ func (r *Runtime) Modes() []string {
 func (r *Runtime) Interrupt() error {
 	r.mu.Lock()
 	r.interrupts++
+	if r.holdStops {
+		r.mu.Unlock()
+		return nil
+	}
 	var aborted []string
 	for id := range r.requests {
 		aborted = append(aborted, id)
@@ -562,6 +574,21 @@ func (r *Runtime) Close() error {
 		r.Exit(nil)
 	}
 	return nil
+}
+
+// HoldInterrupts makes an interrupt settle none of the pending requests, as
+// pi's does while a dialog is pending: the request stays until it is answered.
+func (r *Runtime) HoldInterrupts() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.holdStops = true
+}
+
+// OnAnswer runs fn while each answer is in flight, before it is delivered.
+func (r *Runtime) OnAnswer(fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onAnswer = fn
 }
 
 // HoldOnClose keeps the runtime alive after Close, like a backgrounded tool.

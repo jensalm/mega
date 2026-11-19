@@ -21,7 +21,7 @@
 //	                         own default model, and skip when it does not
 //	                         answer; the idle model switch then moves to
 //	                         MEGA_E2E_PI_MODEL, by default the hosted
-//	                         openai-codex/gpt-6-luna, and skips where pi does
+//	                         openai-codex/gpt-6-sol, Michael's choice, and skips where pi does
 //	                         not list it
 //
 // `make e2e` also reads them from e2e.local.mk, an optional, git-ignored

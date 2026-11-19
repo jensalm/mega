@@ -182,7 +182,7 @@ func TestCodexModelSwitchWhileIdle(t *testing.T) {
 // TestPiModelSwitchWhileIdle starts a released conversation with no prompt
 // and switches its model while idle, which pi applies at once. the first
 // turn runs on pi's own default; the switch goes to MEGA_E2E_PI_MODEL, by
-// default openai-codex/gpt-6-luna, a hosted model, since the default is the
+// default openai-codex/gpt-6-sol, a hosted model, since the default is the
 // operator's local one and an idle switch needs another. it goes there or
 // nowhere: where pi does not list it, the test skips, so no other provider
 // is ever used.
@@ -201,7 +201,7 @@ func TestPiModelSwitchWhileIdle(t *testing.T) {
 	s.idle()
 	s.skipUnanswered()
 	startedSession(t, svc, s)
-	chosen, runsAs, _ := idleSwitch(t, svc, s, project.ID, model.HarnessPi, env("MEGA_E2E_PI_MODEL", "openai-codex/gpt-6-luna"), service.ModeConfirmed, true)
+	chosen, runsAs, _ := idleSwitch(t, svc, s, project.ID, model.HarnessPi, env("MEGA_E2E_PI_MODEL", "openai-codex/gpt-6-sol"), service.ModeConfirmed, true)
 	s.prompt("Reply with the word BETA-SWITCH-4c2d. Nothing else.")
 	s.idle()
 	s.expectReply("BETA-SWITCH-4c2d")

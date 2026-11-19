@@ -23,6 +23,9 @@ type conversationView struct {
 	Mode       string
 	State      string
 	TurnActive bool
+	// Interrupting says an interrupt has begun and the turn has not ended:
+	// answers that would let work go on are refused meanwhile.
+	Interrupting bool `dd:",+omitempty"`
 	// TurnStartedAt is when the turn in flight began; absent when none is.
 	TurnStartedAt time.Time `dd:",+omitempty"`
 	// InstructedAt is when the operator last instructed the conversation,
@@ -95,6 +98,7 @@ func newConversationView(conv service.ConversationView) *conversationView {
 		Mode:          conv.Mode,
 		State:         conv.State,
 		TurnActive:    conv.TurnActive,
+		Interrupting:  conv.Interrupting,
 		TurnStartedAt: conv.TurnStartedAt,
 		InstructedAt:  conv.InstructedAt,
 		Attention:     conv.Attention,

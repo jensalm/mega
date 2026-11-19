@@ -189,19 +189,30 @@ func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 
 // answerAsTurn starts the next turn with an answer, unless the operator
 // interrupted or released since the answer began: a question never carries
-// execution across a stop. a stop that lands while the turn is being started
-// interrupts the new turn as soon as it exists.
+// execution across a stop. the check and the sending of turn/start are one
+// step under the runtime's lock, which an interrupt or a close takes too, so
+// no stop lands between them; the wait for codex's reply holds no lock. a
+// stop that lands after the turn was sent interrupts it as soon as it exists.
 func (r *runtime) answerAsTurn(threadID, uuid, body string, stops int) error {
+	// built first: it reads the model and effort under the lock itself.
+	params := r.turnStart(threadID, uuid, body)
 	r.mu.Lock()
 	if r.stops != stops {
 		r.mu.Unlock()
 		return harness.ErrNotPending
 	}
+	if afterStopCheck != nil {
+		afterStopCheck()
+	}
+	sent, err := r.conn.begin("turn/start", params)
 	r.mu.Unlock()
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 	resp := &turnResponse{}
-	if err := r.conn.call(ctx, "turn/start", r.turnStart(threadID, uuid, body), resp); err != nil {
+	if err := r.conn.wait(ctx, sent, resp); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -221,6 +232,10 @@ func (r *runtime) answerAsTurn(threadID, uuid, body string, stops int) error {
 	}
 	return harness.ErrNotPending
 }
+
+// afterStopCheck, when a test sets it, runs between the check for a stop and
+// the sending of the answer's turn, under the runtime's lock.
+var afterStopCheck func()
 
 func responseFor(req *serverRequest, answer harness.Answer) any {
 	allow := answer.Decision == harness.DecisionAllow

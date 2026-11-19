@@ -285,7 +285,10 @@ await prompt(X, 'mcp declined-by-the-check')
 await docked.waitFor()
 await docked.first().getByRole('button', { name: 'Deny', exact: true }).click()
 await until('the denial', async () => (await reply(page, 'DECLINED').count()) === 1)
-check((await docked.count()) === 0, 'denied, the tool does not run')
+// the card leaves once the denial is recorded, which the reply can reach the
+// page a moment before.
+await until('the denied card to clear', async () => (await docked.count()) === 0)
+check((await reply(page, 'echo: declined-by-the-check').count()) === 0, 'denied, the tool does not run')
 await t.idle(X)
 
 // a typed form: the required field first.
@@ -402,6 +405,20 @@ t.say(`  the row: "${await waiting.textContent()}"`)
 check((await waiting.textContent()).startsWith("Interrupt waiting on a dialog: the interrupt waits on pi's dialog 'Approve bash command: sleep 1'"), 'the interrupt says it waits on the dialog, naming it')
 await new Promise((r) => setTimeout(r, 800))
 check((await docked.count()) === 1 && (await convOf(Pi)).turn_active, 'the dialog stays docked and the turn goes on until it is answered')
+// with the interrupt under way, a chosen answer is refused, as a conflict,
+// and the page holds it; Dismiss stays live. the answer tried is Block, the
+// gate's own refusal, after the request is checked to be the gate.
+const gate = (await pending(Pi))[0]
+must(gate?.kind === 'question' && gate.payload?.questions?.[0]?.question === 'Approve bash command: sleep 1', 'the pending request is the extension’s gate')
+const chosen = await api('POST', `/api/conversations/${Pi}/answer`, { request_id: gate.id, answers: { [gate.payload.questions[0].question]: 'Block' } })
+check(chosen.status === 409 && chosen.body?.code === 'conflict' && /Deny or Dismiss can still be pressed/.test(chosen.body?.message ?? ''), `after the interrupt a chosen answer is refused: ${chosen.status} ${JSON.stringify(chosen.body)}`)
+const stoppingCard = docked.first()
+await until('the card holds its answer', async () => (await stoppingCard.locator('.request-stopping').count()) === 1)
+check(
+  (await stoppingCard.getByRole('button', { name: 'Answer', exact: true }).isDisabled()) && !(await stoppingCard.getByRole('button', { name: /^Dismiss/ }).isDisabled()),
+  `the page holds the answer, saying why, and leaves Dismiss live: "${await stoppingCard.locator('.request-stopping').textContent()}"`,
+)
+check((await pending(Pi)).length === 1, 'the request is still pending')
 await docked.first().getByRole('button', { name: /^Dismiss/ }).click()
 await until('the turn interrupted', async () => !(await convOf(Pi)).turn_active && (await docked.count()) === 0)
 check((await rows(page, 'Turn ended: interrupted').count()) === 1, 'dismissed, the interrupt goes through and the turn ends interrupted')

@@ -32,9 +32,11 @@ export function App() {
   // an error, rather than reaching nothing.
   const [answered, setAnswered] = useState(false)
   // shutDownAt: when this page's shutdown was accepted. it stands until a read
-  // finds the gate unarmed, which only a new service can say: the gate is
-  // memory, and a restart is what clears it.
+  // finds that gate gone: unarmed, or armed afresh (another armed_at), which
+  // only a new service can say, since the gate is memory and a restart is what
+  // clears it. shutDownGate is the armed_at of the gate it shut down under.
   const [shutDownAt, setShutDownAt] = useState<Date | null>(null)
+  const shutDownGate = useRef<string | undefined>(undefined)
   const [gateBusy, setGateBusy] = useState(false)
   const [gateError, setGateError] = useState<string | null>(null)
   const [selection, setSelection] = useState<Selection | null>(parseHash)
@@ -113,11 +115,13 @@ export function App() {
             setZone(fetched.time_zone)
             setWorkspace(fetched)
             setLoadError(null)
-            if (fetched.shutdown && !fetched.shutdown.armed) {
+            if (fetched.shutdown && (!fetched.shutdown.armed || fetched.shutdown.armed_at !== shutDownGate.current)) {
               setShutDownAt(null)
             }
             ok = true
-            if (sentOn === connection.current) {
+            // caught up only on the current connection, and only when no
+            // change announced during this read has queued another.
+            if (sentOn === connection.current && !state.again) {
               setSynced(true)
             }
           }
@@ -556,6 +560,7 @@ export function App() {
           onShutDown={() =>
             void gateAction(shutDown).then((ok) => {
               if (ok) {
+                shutDownGate.current = gate?.armed_at
                 setShutDownAt(new Date())
               }
             })

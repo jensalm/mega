@@ -547,9 +547,13 @@ func (s *Service) send(conversationID, text string) error {
 	return nil
 }
 
-// Answer delivers the operator's answer to a pending request. the request
-// leaves the pending set before the answer is delivered, so a second answer,
-// from this browser or another, is rejected as not_pending.
+// Answer delivers the operator's answer to a pending request. the answer
+// reserves the request while it is delivered: the request stays in the
+// pending set every reader sees, and a second answer meanwhile, from this
+// browser or another, is refused as conflict. it leaves the set only once its
+// resolution is recorded; a later answer gets not_pending. once an interrupt
+// or a release has begun, an answer that would let work go on is refused as
+// conflict, and deny and dismiss are not.
 func (s *Service) Answer(conversationID, requestID string, answer harness.Answer) error {
 	s.mu.Lock()
 	if _, err := s.conversationLocked(conversationID); err != nil {
@@ -568,12 +572,30 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 		s.mu.Unlock()
 		return newError(CodeNotPending, fmt.Sprintf("request '%s' is not pending", requestID))
 	}
+	switch l.answering[requestID] {
+	case answerInFlight:
+		s.mu.Unlock()
+		return newError(CodeConflict, fmt.Sprintf("request '%s' is already being answered", requestID))
+	case answerDelivered:
+		// answered, or settled by the harness, and still listed only because
+		// that could not be recorded: the harness holds it no more.
+		s.mu.Unlock()
+		return newError(CodeNotPending, fmt.Sprintf("request '%s' was already answered", requestID))
+	}
 	if err := validateAnswer(req, &answer); err != nil {
 		s.mu.Unlock()
 		return err
 	}
-	l.takePending(requestID)
-	s.changed()
+	// once an interrupt or a release has begun, an answer that would let work
+	// go on is refused: the request is still pending, and deny or dismiss,
+	// which only settle it toward the stop, are not.
+	if (l.interrupting || l.releasing) && answer.Decision != harness.DecisionDeny && answer.Decision != harness.DecisionDismiss {
+		s.mu.Unlock()
+		return newError(CodeConflict, "the turn is stopping, so this answer would let work go on after it; Deny or Dismiss can still be pressed")
+	}
+	// the request stays listed until its resolution is recorded, reserved
+	// against a second answer meanwhile.
+	l.answering[requestID] = answerInFlight
 	rt := l.runtime
 	s.mu.Unlock()
 
@@ -584,17 +606,55 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	delete(l.answering, requestID)
+	if err == nil || errors.Is(err, harness.ErrNotPending) {
+		// the harness has it no more: until its resolution is recorded the
+		// request stays listed, but is never answerable again.
+		l.answering[requestID] = answerDelivered
+	}
+	if !slices.ContainsFunc(l.pending, func(r *model.Request) bool { return r.ID == requestID }) {
+		// the harness settled it meanwhile, or the runtime exited, and that
+		// resolution is recorded already.
+		if err == nil {
+			return nil
+		}
+		return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled before the answer arrived", requestID))
+	}
 	switch {
 	case err == nil:
-		return s.resolve(l, req, model.OutcomeAnswered)
+		return s.settleLocked(l, req, model.OutcomeAnswered)
 	case errors.Is(err, harness.ErrNotPending):
 		// the harness settled it first, for example on an interrupt.
-		s.resolveOrLog(l, req, model.OutcomeAborted)
+		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
+			dl.Errorf("%v", err)
+		}
 		return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled before the answer arrived", requestID))
 	default:
-		s.resolveOrLog(l, req, model.OutcomeAborted)
+		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
+			dl.Errorf("%v", err)
+		}
 		return fmt.Errorf("delivering answer to '%s': %w", conversationID, err)
 	}
+}
+
+// what an answer's reservation of a request says: one is on its way to the
+// harness, or one reached it (or the harness had settled the request) and
+// the resolution could not be recorded yet.
+const (
+	answerInFlight  = "in flight"
+	answerDelivered = "delivered"
+)
+
+// settleLocked records a request's resolution and only then takes it out of
+// the pending set: one whose resolution cannot be recorded stays listed.
+// callers hold s.mu.
+func (s *Service) settleLocked(l *live, req *model.Request, outcome string) error {
+	if err := s.resolve(l, req, outcome); err != nil {
+		return err
+	}
+	l.takePending(req.ID)
+	s.changed()
+	return nil
 }
 
 func validateAnswer(req *model.Request, answer *harness.Answer) error {
@@ -647,6 +707,12 @@ func (s *Service) Interrupt(conversationID string) error {
 	if l == nil || l.runtime == nil {
 		s.mu.Unlock()
 		return newError(CodeConflict, "the conversation has no runtime")
+	}
+	// an interrupt with a turn or a request to stop is under way until the
+	// turn ends or the runtime exits.
+	if l.turnActive || len(l.pending) > 0 {
+		l.interrupting = true
+		s.changed()
 	}
 	rt := l.runtime
 	s.mu.Unlock()
@@ -724,6 +790,9 @@ func (s *Service) Resume(conversationID string) error {
 	var importErr error
 	s.mu.Lock()
 	conv.NativeID = l.sessionOf(conv)
+	// what a resume after an unclean restart may count: what came after the
+	// lost runtime's launch, which it produced or a recovery import brought in.
+	lostFrom, scanErr := s.lostFromLocked(l)
 	s.mu.Unlock()
 	if conv.NativeID != "" {
 		var place harness.Place
@@ -744,12 +813,16 @@ func (s *Service) Resume(conversationID string) error {
 	}
 	// after an unclean restart the runtime may have kept working where nobody
 	// could see it, and the turn it was in never ended where the service could
-	// see it either. the marker moves to the newest finished agent output in the
-	// whole log, cached or imported; the reading position decides whether it is
-	// unread. after a release the operator was the one in the terminal, so the
-	// import changes nothing.
+	// see it either. the marker moves to the newest finished agent output that
+	// the lost runtime produced or this resume brought in; output an earlier
+	// adoption or release imported stays as it was, read. the reading
+	// position decides whether it is unread. after a release the operator was
+	// the one in the terminal, so the import changes nothing.
 	if conv.Runtime == model.RuntimeUnsupervised {
-		seq, at, err := s.newestFinishedOutputLocked(l, result.open)
+		seq, at, err := int64(0), time.Time{}, scanErr
+		if err == nil {
+			seq, at, err = s.newestFinishedOutputLocked(l, result.open, lostFrom)
+		}
 		if err == nil && seq > 0 {
 			err = s.markUnreadLocked(l, seq, at)
 		}
@@ -805,10 +878,45 @@ func (s *Service) importHistory(conv model.Conversation, l *live, place harness.
 	return result, nil
 }
 
+// lostFromLocked reads where the lost runtime began: its launch, the last
+// `starting` the service recorded before running anything, moved past the
+// import that brings the cache up to date before a launch, the native events
+// recorded straight after it. everything later is the lost runtime's own
+// output or a recovery import, a retried one included, which a `resuming`
+// event opens; an adoption's or a release's import came before. the launch is
+// recorded before the registry says running, so a crash before the runtime
+// reports started still finds it. callers hold s.mu.
+func (s *Service) lostFromLocked(l *live) (int64, error) {
+	evs, err := l.log.Since(0)
+	if err != nil {
+		return 0, err
+	}
+	launch := -1
+	for i, ev := range evs {
+		if ev.Kind == model.EventRuntime && ev.Status == model.StatusStarting {
+			launch = i
+		}
+	}
+	if launch < 0 {
+		return 0, nil
+	}
+	lostFrom := evs[launch].Seq
+	for _, ev := range evs[launch+1:] {
+		if ev.Origin != model.OriginNative {
+			break
+		}
+		lostFrom = ev.Seq
+	}
+	return lostFrom, nil
+}
+
 // newestFinishedOutputLocked finds the newest agent output (assistant, tool use
-// or tool result; never a native event) anywhere in the log, cached or
-// imported, leaving out events of a turn still in progress. callers hold s.mu.
-func (s *Service) newestFinishedOutputLocked(l *live, open map[string]bool) (int64, time.Time, error) {
+// or tool result; never a native event) that a resume counts: anything after
+// the lost runtime's launch at lostFrom, recorded live or imported by this
+// recovery, a retried one included. output imported earlier, by an adoption,
+// a release or the launch's own catching up, is left out, and so are events
+// of a turn still in progress. callers hold s.mu.
+func (s *Service) newestFinishedOutputLocked(l *live, open map[string]bool, lostFrom int64) (int64, time.Time, error) {
 	evs, err := l.log.Since(0)
 	if err != nil {
 		return 0, time.Time{}, err
@@ -820,7 +928,9 @@ func (s *Service) newestFinishedOutputLocked(l *live, open map[string]bool) (int
 			if ev.NativeID != "" && open[ev.NativeID] {
 				continue
 			}
-			return ev.Seq, ev.At, nil
+			if ev.Seq > lostFrom {
+				return ev.Seq, ev.At, nil
+			}
 		}
 	}
 	return 0, time.Time{}, nil

@@ -1,6 +1,6 @@
 # Harness versions probe
 
-This probe is how mega's tested ranges are extended. `harness.Tested` in `internal/harness/versions.go` names, for each harness, the lowest and highest build that every call mega makes was seen to work against. To add a build to a range, run this probe against it, record what it saw, then widen the range.
+This probe is how mega's tested ranges are extended. `harness.Tested` in `internal/harness/versions.go` names, for Claude Code and Codex, the lowest and highest build between which every build this probe ran passed the steps below; pi has no runner here, and its range is the build `probes/pi` ran. That is what the range claims: these steps, on the builds the capability report lists, not every call mega makes on every build in it. To add a build to a range, run this probe against it, record what it saw, then widen the range.
 
 Each run starts a scratch mega built from this checkout. The build under test is named in the scratch config, and the run makes the e2e round trips' calls (`internal/e2e`) over mega's HTTP API. The e2e tests cannot do this themselves: a project's environment never takes mega's own, so they cannot switch Claude Code's updater off or point Codex at a scratch `CODEX_HOME`. Here the fixture project's local override does both.
 

@@ -1,0 +1,215 @@
+package service
+
+import (
+	"errors"
+	"slices"
+	"testing"
+
+	"github.com/michaelquigley/mega/internal/harness"
+	"github.com/michaelquigley/mega/internal/model"
+)
+
+// the faults around stops and restarts (roadmap, loose-ends-around-stops-
+// and-restarts): each test fails without its fix.
+
+func seqOf(evs []*model.Event, nativeID string) int64 {
+	for _, ev := range evs {
+		if ev.NativeID == nativeID {
+			return ev.Seq
+		}
+	}
+	return 0
+}
+
+// a runtime that exits in the middle of a turn has its turn's output counted
+// at the exit, never left over for a later turn to count.
+func TestAFailedRuntimesOutputIsCountedAtItsExit(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	rt.Emit(&model.Event{Kind: model.EventAssistant, Text: "half a reply", NativeID: "a-1"})
+	rt.Exit(errors.New("the process died"))
+	out := seqOf(r.events(conv.ID), "a-1")
+	view := r.view(conv.ID)
+	if out == 0 || view.OutputSeq != out {
+		t.Fatalf("after the exit: output seq %d, want the half reply's %d", view.OutputSeq, out)
+	}
+	// a later turn with no output of its own counts nothing more.
+	r.readAll(conv.ID)
+	if err := r.svc.Prompt(conv.ID, "two"); err != nil {
+		t.Fatal(err)
+	}
+	next := r.fake.Last()
+	started(next)
+	next.Emit(&model.Event{Kind: model.EventNative, Text: "system/status", NativeID: "n-1"})
+	next.Emit(&model.Event{Kind: model.EventTurnEnd, Status: model.TurnSuccess})
+	if view := r.view(conv.ID); view.OutputSeq != out || view.Attention == model.AttentionUnread {
+		t.Errorf("after a turn with no output: output seq %d (want %d), attention %q", view.OutputSeq, out, view.Attention)
+	}
+}
+
+// after an unclean restart, a resume counts what it brings in and what the
+// lost runtime had produced, never output an earlier adoption brought in,
+// which stays read.
+func TestAResumeCountsOnlyWhatItBringsIn(t *testing.T) {
+	r := newRig(t)
+	r.fake.SetSessions([]harness.Session{{NativeID: "terminal-1", Preview: "from the terminal"}})
+	history := []*model.Event{
+		{Kind: model.EventUser, Text: "from the terminal", NativeID: "t-1"},
+		{Kind: model.EventAssistant, Text: "reply in the terminal", NativeID: "t-2"},
+	}
+	r.fake.SetHistory("terminal-1", history)
+	conv, err := r.svc.Adopt(r.project.ID, model.HarnessClaude, "terminal-1", "adopted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.attention(conv.ID); got != model.AttentionIdle {
+		t.Fatalf("adopted: %q", got)
+	}
+	if err := r.svc.Start(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	started(r.fake.Last())
+	r.restart()
+	if view := r.view(conv.ID); view.Runtime != model.RuntimeUnsupervised {
+		t.Fatalf("after the restart: %q", view.Runtime)
+	}
+	if err := r.svc.Resume(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.attention(conv.ID); got != model.AttentionIdle {
+		t.Errorf("resuming with nothing new made the adopted history %q", got)
+	}
+
+	// what the lost runtime produced is counted, though its turn never ended.
+	lost := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	rt.Emit(&model.Event{Kind: model.EventAssistant, Text: "said before the crash", NativeID: "l-1"})
+	r.restart()
+	if err := r.svc.Resume(lost.ID); err != nil {
+		t.Fatal(err)
+	}
+	if view := r.view(lost.ID); view.OutputSeq != seqOf(r.events(lost.ID), "l-1") || view.Attention != model.AttentionUnread {
+		t.Errorf("the lost runtime's output: output seq %d, attention %q", view.OutputSeq, view.Attention)
+	}
+}
+
+// the boundary is the launch itself, recorded before the runtime runs: a
+// crash after the registry records it running but before it reports started
+// leaves an adopted history read too.
+func TestAResumeAfterACrashBeforeStartedCountsNothingOld(t *testing.T) {
+	r := newRig(t)
+	r.fake.SetSessions([]harness.Session{{NativeID: "terminal-2", Preview: "from the terminal"}})
+	r.fake.SetHistory("terminal-2", []*model.Event{
+		{Kind: model.EventUser, Text: "from the terminal", NativeID: "u-1"},
+		{Kind: model.EventAssistant, Text: "reply in the terminal", NativeID: "u-2"},
+	})
+	conv, err := r.svc.Adopt(r.project.ID, model.HarnessClaude, "terminal-2", "adopted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.svc.Start(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	// no started report: the service dies first.
+	r.restart()
+	if view := r.view(conv.ID); view.Runtime != model.RuntimeUnsupervised {
+		t.Fatalf("after the restart: %q", view.Runtime)
+	}
+	if err := r.svc.Resume(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.attention(conv.ID); got != model.AttentionIdle {
+		t.Errorf("a crash before started made the adopted history %q", got)
+	}
+}
+
+// a request leaves the pending set readers see only once its answer is
+// recorded, and is reserved against a second answer meanwhile.
+func TestAnAnswerHidesNoRequest(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	id := rt.Ask(model.RequestPermission, map[string]any{"tool": "Bash", "input": map[string]any{"command": "echo"}})
+	var during []model.Request
+	var second error
+	rt.OnAnswer(func() {
+		during = r.svc.view(conv.ID).Pending
+		second = r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny})
+	})
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
+		t.Fatal(err)
+	}
+	if len(during) != 1 || during[0].ID != id {
+		t.Errorf("while the answer was in flight the pending set was %+v", during)
+	}
+	wantCode(t, second, CodeConflict)
+	if len(rt.Deliveries()) != 1 || len(r.view(conv.ID).Pending) != 0 {
+		t.Errorf("deliveries %+v, pending %+v", rt.Deliveries(), r.view(conv.ID).Pending)
+	}
+
+	// an answer whose resolution cannot be recorded leaves the request listed.
+	rt.OnAnswer(nil)
+	unrecorded := rt.Ask(model.RequestPermission, map[string]any{"tool": "Bash", "input": map[string]any{"command": "echo again"}})
+	r.closeLog(conv.ID)
+	if err := r.svc.Answer(conv.ID, unrecorded, harness.Answer{Decision: harness.DecisionDeny}); err == nil {
+		t.Error("an unrecorded answer reported success")
+	}
+	if pending := r.view(conv.ID).Pending; !slices.ContainsFunc(pending, func(req model.Request) bool { return req.ID == unrecorded }) {
+		t.Errorf("an answer that could not be recorded hid its request: %+v", pending)
+	}
+	// listed, it is never answerable again: the harness has it no more, and a
+	// second answer never reaches it.
+	reached := 0
+	rt.OnAnswer(func() { reached++ })
+	wantCode(t, r.svc.Answer(conv.ID, unrecorded, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
+	if reached != 0 {
+		t.Errorf("a second answer to a delivered request reached the harness %d times", reached)
+	}
+}
+
+// once an interrupt or a release has begun, an answer that would let work go
+// on is refused as a conflict, the request still pending; deny and dismiss
+// still settle it, toward the stop.
+func TestNoWorkIsAnsweredAfterAStop(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	rt.HoldInterrupts()
+	id := rt.Ask(model.RequestPermission, map[string]any{"tool": "Bash", "input": map[string]any{"command": "echo"}, "allow_session": true})
+	if err := r.svc.Interrupt(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if view := r.view(conv.ID); !view.Interrupting {
+		t.Errorf("an interrupt under way is not shown: %+v", view)
+	}
+	for _, refused := range []harness.Answer{{Decision: harness.DecisionAllow}, {Decision: harness.DecisionAllowSession}} {
+		wantCode(t, r.svc.Answer(conv.ID, id, refused), CodeConflict)
+	}
+	if len(rt.Deliveries()) != 0 || len(r.view(conv.ID).Pending) != 1 {
+		t.Fatalf("after a refused answer: deliveries %+v, pending %+v", rt.Deliveries(), r.view(conv.ID).Pending)
+	}
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
+		t.Errorf("deny after an interrupt: %v", err)
+	}
+
+	// a question asked under a release that has begun: a chosen answer is
+	// refused, a dismissal is not.
+	other := r.start("two")
+	ort := r.fake.Last()
+	started(ort)
+	ort.HoldInterrupts()
+	ort.HoldOnClose()
+	q := ort.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}, "dismiss": true})
+	if err := r.svc.Release(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	wantCode(t, r.svc.Answer(other.ID, q, harness.Answer{Answers: map[string]string{"Which?": "A"}}), CodeConflict)
+	if err := r.svc.Answer(other.ID, q, harness.Answer{Decision: harness.DecisionDismiss}); err != nil {
+		t.Errorf("dismiss during a release: %v", err)
+	}
+}

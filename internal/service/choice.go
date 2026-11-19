@@ -314,6 +314,7 @@ func (s *Service) beginTurnLocked(l *live, at time.Time) {
 	}
 	l.turnActive, l.turnStartedAt = true, at
 	l.turnAsked, l.turnRan = model.TurnSettings{}, nil
+	l.interrupting = false
 	if conv, err := s.conversationLocked(l.id); err == nil {
 		l.turnAsked = model.TurnSettings{Model: conv.Model, Effort: conv.Effort, Mode: conv.PermissionMode}
 	}

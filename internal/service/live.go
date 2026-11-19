@@ -31,6 +31,9 @@ type ConversationView struct {
 	// stopping, resuming, or unsupervised.
 	State      string
 	TurnActive bool
+	// Interrupting says an interrupt has begun and the turn has not yet
+	// ended: answers that would let work go on are refused meanwhile.
+	Interrupting bool
 	// TurnStartedAt is when the turn in flight began, from memory; zero when
 	// no turn is active.
 	TurnStartedAt time.Time
@@ -116,11 +119,13 @@ type live struct {
 	// mcp is the runtime's MCP servers as it last reported them, and
 	// mcpReported whether it has reported any yet; they go with the
 	// runtime, and are never attention.
-	mcp         []model.MCPServer
-	mcpReported bool
-	facts       *model.RuntimeFacts
-	pending     []*model.Request
-	pendingAt   map[string]time.Time // when each pending request was recorded
+	mcp          []model.MCPServer
+	mcpReported  bool
+	facts        *model.RuntimeFacts
+	pending      []*model.Request
+	pendingAt    map[string]time.Time // when each pending request was recorded
+	answering    map[string]string    // requests an answer reached or is reaching: still listed until recorded, never answerable again
+	interrupting bool                 // an interrupt has begun and the turn has not ended
 
 	// fault is whether the last runtime ended badly: an error, an exit during a
 	// turn, or a launch that did not start. a runtime that starts or stops
@@ -185,7 +190,7 @@ func (s *Service) liveLocked(conversationID string) (*live, error) {
 		log.Close()
 		return nil, err
 	}
-	l := &live{id: conversationID, log: log, seen: make(map[string]bool), pendingAt: make(map[string]time.Time)}
+	l := &live{id: conversationID, log: log, seen: make(map[string]bool), pendingAt: make(map[string]time.Time), answering: make(map[string]string)}
 	var outputSeq int64
 	if conv, err := s.conversationLocked(conversationID); err == nil {
 		outputSeq = conv.OutputSeq
@@ -330,6 +335,7 @@ func (s *Service) viewLocked(conv model.Conversation) ConversationView {
 		view.State = l.state
 	}
 	view.TurnActive = l.turnActive
+	view.Interrupting = l.interrupting
 	if l.turnActive {
 		view.TurnStartedAt = l.turnStartedAt
 	}
@@ -459,6 +465,7 @@ func (l *live) takePending(requestID string) (*model.Request, bool) {
 	req := l.pending[i]
 	l.pending = slices.Delete(l.pending, i, i+1)
 	delete(l.pendingAt, requestID)
+	delete(l.answering, requestID)
 	return req, true
 }
 
@@ -563,6 +570,7 @@ func (k *sink) Event(ev *model.Event) {
 	case model.EventTurnEnd:
 		l.turnActive, l.turnStartedAt = false, time.Time{}
 		l.turnAsked, l.turnRan = model.TurnSettings{}, nil
+		l.interrupting = false
 		s.endTurnLocked(l)
 		s.changed()
 	}
@@ -802,6 +810,11 @@ func (k *sink) Exited(err error) {
 		}
 	}
 	l.pending = unrecorded
+	for id := range l.answering {
+		if !slices.ContainsFunc(unrecorded, func(r *model.Request) bool { return r.ID == id }) {
+			delete(l.answering, id)
+		}
+	}
 	ev := &model.Event{Status: model.StatusStopped}
 	switch {
 	case errors.Is(err, harness.ErrLeftRunning):
@@ -834,10 +847,14 @@ func (k *sink) Exited(err error) {
 		l.turnActive, l.turnStartedAt, l.facts, l.background = false, time.Time{}, nil, nil
 		l.mcp, l.mcpReported = nil, false
 		l.turnAsked, l.turnRan = model.TurnSettings{}, nil
+		l.interrupting = false
 	}); err != nil {
 		dl.Errorf("the stop of '%s' could not be recorded; it stays recorded running: %v", l.id, err)
 		return
 	}
+	// the turn ended with its runtime: what it had produced is counted now,
+	// as a turn's end would count it, and nothing is left for a later turn.
+	s.endTurnLocked(l)
 	if err := s.updateConversation(l.id, func(c *model.Conversation) { c.Runtime = model.RuntimeNone }); err != nil {
 		dl.Errorf("recording that '%s' stopped: %v", l.id, err)
 	}

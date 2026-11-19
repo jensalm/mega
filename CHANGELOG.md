@@ -8,6 +8,19 @@ CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470,
 - **The page's per-browser settings,** such as the side panel's width and which projects are folded, start fresh once, because a browser keeps them per port.
 - **A new mega started while an old one still serves 8470** on the same data directory does not start a second one beside it. It is refused by the data directory's lock, which names the running mega at 8470, and `mega daemon` opens that one's page instead.
 
+FIX: **An answer no longer lets work go on after you stop a turn.** (2026-11-19) Once you have pressed Interrupt or Release, Allow, Allow for the session, and an answer to a question, pi's dialogs included, are held on the card and refused by mega, saying the turn is stopping. Deny and Dismiss still work, so an interrupt pi holds for a dialog still ends when you dismiss it. Codex can no longer start a turn from an answer just after a stop.
+
+FIX: **A request stays on the page until its answer is recorded.** (2026-11-19) An answered request used to leave the page before mega had recorded the answer, so a failed record hid a request the agent was still waiting on. It now leaves once the answer is recorded, a moment later than before, and a second answer meanwhile is refused.
+
+FIX: **What a conversation counts as unread after something goes wrong.** (2026-11-19)
+- **Output from a runtime that died mid-turn** is now counted when it exits, instead of being counted by a later turn.
+- **After mega restarts uncleanly,** resuming counts only what the lost runtime produced and what the resume brings in; history from an earlier adoption stays read.
+- **A Claude turn still unfinished** in the session read back is no longer counted as finished.
+
+FIX: **After a reconnect or a restart, the page waits to say what it knows.** (2026-11-19)
+- **"Live" waits** until no further workspace read is queued.
+- **The shutdown banner** no longer reports a shutdown from before a restart as under way until the restarted mega has confirmed it.
+
 FIX: **Switching the model no longer adds a prompt you did not write.** (2026-11-19) Claude Code writes the `/model` command a switch runs into its transcript and never sends it live. On the next resume, mega imported it into the history as a prompt from outside mega. Claude's records of local slash commands and their output are now kept with its own events, hidden unless you show native events.
 
 CHANGE: **Claude Code 2.1.326 is within the tested range,** now 2.1.318 to 2.1.326. Switching the model of an idle Claude conversation left it showing as working on 2.1.322 and 2.1.325 as well, not only on 2.1.327; the fix for that, the entry about switching a Claude conversation's model below, covers them too.

@@ -137,6 +137,9 @@ export interface Conversation {
   mode: string
   state: ConversationState
   turn_active: boolean
+  // an interrupt has begun and the turn has not ended: answers that would let
+  // work go on are refused, deny and dismiss are not. absent otherwise.
+  interrupting?: boolean
   // when the turn in flight began, from the service's memory; absent when no
   // turn is in flight.
   turn_started_at?: string

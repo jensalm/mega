@@ -124,10 +124,27 @@ func (c *conn) initialize(ctx context.Context) error {
 
 // call sends a request and binds its result into out, which may be nil.
 func (c *conn) call(ctx context.Context, method string, params any, out any) error {
+	sent, err := c.begin(method, params)
+	if err != nil {
+		return err
+	}
+	return c.wait(ctx, sent, out)
+}
+
+// sentCall is a request on its way: sent, its reply still to come.
+type sentCall struct {
+	id     int64
+	method string
+	reply  chan callResult
+}
+
+// begin sends a request without waiting for its reply, so a caller can send
+// under its own lock and wait outside it.
+func (c *conn) begin(method string, params any) (*sentCall, error) {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		return errClosed
+		return nil, errClosed
 	}
 	c.nextID++
 	id := c.nextID
@@ -136,8 +153,14 @@ func (c *conn) call(ctx context.Context, method string, params any, out any) err
 	c.mu.Unlock()
 	if err := c.send(&rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params}); err != nil {
 		c.forget(id)
-		return err
+		return nil, err
 	}
+	return &sentCall{id: id, method: method, reply: reply}, nil
+}
+
+// wait waits for a sent request's reply and binds it into out.
+func (c *conn) wait(ctx context.Context, sent *sentCall, out any) error {
+	id, method, reply := sent.id, sent.method, sent.reply
 	select {
 	case r := <-reply:
 		if r.err != nil {

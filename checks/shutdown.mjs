@@ -16,7 +16,7 @@
 // returns, the gate lifted. the service runs in one time zone and the pages
 // in another, UTC, as a hardened browser reports; the time the asking page
 // gives is the service's.
-import { suite } from './lib/mega.mjs'
+import { reconnectable, suite } from './lib/mega.mjs'
 
 const serviceZone = 'Asia/Kolkata'
 const t = await suite('shutdown', { tz: serviceZone })
@@ -51,6 +51,7 @@ const notes = () => {
 }
 const page = await t.page({ init: notes, timezoneId: 'UTC' })
 const other = await t.page({ init: notes, timezoneId: 'UTC' })
+const pageStream = await reconnectable(page)
 await page.goto(`${url}/#/p/${P.id}`)
 await other.goto(`${url}/#/c/${W}`)
 for (const p of [page, other]) await p.locator('.side-foot .stream-connected').waitFor()
@@ -139,8 +140,23 @@ await until('the other page shows the last known gate', async () => (await banne
 check((await banner(other).getByRole('button', { name: 'Shut down mega now' }).count()) === 0, `the other page shows only what it last knew, offering nothing: "${await other.locator('.side-foot .stream').textContent()}"`)
 await t.shot(page, 'shut-down')
 
-// the service returns: both pages recover, the gate lifted.
+// the service returns: both pages recover, the gate lifted. the asking page
+// does not report its old shutdown as under way before a read of the new
+// service's workspace says one is: its first read is held, and meanwhile the
+// banner says it is reading.
+await pageStream.hold()
 await t.start()
+await until('the asking page back and catching up', async () => (await page.locator('.side-foot .stream').textContent()) === 'Catching up' && pageStream.held() > 0, 30000)
+const backSays = (await page.locator('section.gate-banner.shut-down').textContent()) ?? ''
+check(!backSays.includes('Shutting down') && !backSays.includes('being released') && !backSays.includes('was shut down') && backSays.includes('reading the workspace'), `reconnected before its workspace read, the banner claims neither a shutdown under way nor one done: "${backSays}"`)
+// another page arms the new service before that read lands: the read shows a
+// gate armed afresh, not the old shutdown, and the asking page shows that.
+check((await api('POST', '/api/shutdown/arm')).status === 202, 'the new service is armed from elsewhere before the asking page has read it')
+await pageStream.catchUp()
+await until('the asking page shows the new gate', async () => (await banner(page).count()) === 1)
+const rearmed = (await page.locator('section.gate-banner').textContent()) ?? ''
+check(!rearmed.includes('Shutting down') && !rearmed.includes('being released') && (await page.locator('section.gate-banner.shut-down').count()) === 0, `a gate armed afresh is shown as itself, never as the old shutdown: "${rearmed}"`)
+check((await api('POST', '/api/shutdown/cancel')).status === 202, 'and that arming is cancelled')
 for (const p of [page, other]) await p.locator('.side-foot .stream-connected').waitFor({ timeout: 30000 })
 await until('the banners gone', async () => (await page.locator('section.gate-banner').count()) === 0 && (await banner(other).count()) === 0)
 await until('the asking page free', async () => (await page.locator('form.reply button[type=submit]').getAttribute('aria-label')) === 'Send (Ctrl+Enter)')

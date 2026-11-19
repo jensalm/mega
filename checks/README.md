@@ -159,7 +159,7 @@ Where things go:
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
 - **`readme.mjs`** (5 steps): the README's picture of a workspace. A scratch workspace of three projects, with conversations on all three harnesses in the states the side panel shows: a Claude Code approval waiting, a Codex reply unread, a pi turn running, one read and idle, and one Claude Code conversation holding hand-written turns from `lib/scene.mjs`, so its history reads as real work. It checks that needs-you holds the approval and the unread reply and that the pi turn is running. It then opens the hand-written conversation, unfolds every project, opens the last action, and saves the page at 1440×900 as `shots/workspace.png`. `make readme-image` runs it and copies the picture to `docs/images/workspace.png`.
-- **`requests.mjs`** (59 steps): requests. It checks the following:
+- **`requests.mjs`** (63 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -181,11 +181,11 @@ Where things go:
     - Dismiss reaching pi as its cancel;
     - an input dialog's text and an editor dialog's several prefilled lines;
     - a dialog that expires, its row saying so;
-    - an interrupt waiting on a dialog, saying so, until the dialog is dismissed;
+    - an interrupt waiting on a dialog, saying so, until the dialog is dismissed. Meanwhile a chosen answer, the gate's own Block after the request is checked to be the gate, is refused as `conflict` with the request still pending, and the card holds Answer, saying why, with Dismiss still live;
     - a release with a dialog pending, whose dialog warns that pi is ended and the gated command does not run, leaving the dialog's row "never answered".
 
   It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`, and the approval the keys answer, with its Allow's title written under it by the check, since the browser draws a title outside the page, as `shots/approval-key.png`.
-- **`shutdown.mjs`** (24 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
+- **`shutdown.mjs`** (28 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
   - arming from the footer, with the banner naming what it waits for by count and by name, and the request marked as the operator's;
   - a second page seeing it;
   - new work refused with the reason, on the page and by the API;
@@ -196,9 +196,10 @@ Where things go:
   - Shut down ending the service with status 0;
   - the page that asked saying when, in the service's zone, while the other shows only what it last knew;
   - with the footer's longest status, "Shut down from here, retrying", the mega's name beside it shown whole, saved as `shots/foot-shut-down.png`;
+  - the asking page, back in touch before its first workspace read of the new service has landed, which the check holds, not reporting the old shutdown as under way; and, the new service armed from elsewhere before that read lands, showing the gate armed afresh, never the old shutdown;
   - both pages recovering when the service returns.
 
-- **`side.mjs`** (72 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
+- **`side.mjs`** (74 steps): the side panel and the rail. Its mega is named `side-check` in its config. It checks the following:
   - projects sorted by name ignoring case, the id breaking a tie, and starred first in their own group;
   - project rows bolder than their conversations;
   - folds: a starred project unfolded and any other folded until the operator chooses; his choice kept across a reload and outlasting a star or an unstar; navigation by the needs-you list or Ctrl+/ unfolding without recording a choice; the old folded list carried over as folded choices; a removed project's choice forgotten; a folded project keeping its rollup mark;
@@ -211,6 +212,7 @@ Where things go:
   - the build: `GET /api/version` naming this page's interface, the footer's version and its panel, with each harness's tested range and the version found (the fake Codex's inside its range, the stand-in Claude Code's unknown and said so, in the notice colour), and when the newest configuration snapshot was taken and where the snapshots are, with nothing of what one holds, the rail's control, and a page older than the service saying so where the connection status is, without reloading;
   - every control in the panel and on the rail with a title and a label;
   - on a first load, before the first workspace read lands, nothing saying Live; after a reconnect, before the workspace read lands, the footer saying "Catching up" and the rail's dot an empty ring, not Live; and Live once it lands. It saves the footer as `shots/foot-catching-up.png`;
+  - after a reconnect, a change announced while the read is held: once that read lands with another queued behind it, still "Catching up", not Live;
   - where the operator left off, in two new projects:
     - the glyph on the conversation last instructed in each, one per project, after its name;
     - moved by a prompt to another conversation in the same project, and not by that project's agent waking on its own, nor by a request answered;
@@ -254,6 +256,13 @@ await t.done()
 - `page({ width, height, colorScheme, init, timezoneId })` opens a page in its own context, in the zone `timezoneId` names when given. `shot(page, name)` saves a screenshot under `shots/`.
 - `stop()` asks the service to stop and waits for it; `start()` starts it again on the same data. `stopped()` waits for a service a page shut down, and reports how it exited.
 - `done()` adds the page-wide steps, closes everything, prints the summary the runner reads, and exits.
+
+`reconnectable(page)`, exported beside `suite`, lets a step take a page's stream and workspace reads in hand, without stopping the service, so pending requests stay pending. Install it before the page loads. It returns:
+- `drop()` closes the page's end of the stream, and holds the workspace reads after it.
+- `hold()` holds the reads with the stream left as it is, for a stream that drops by itself, as when the service stops.
+- `held()` counts the reads waiting.
+- `releaseOne()` lets the oldest go, still holding those after it.
+- `catchUp()` lets them all go, and every read after them.
 
 The rules:
 

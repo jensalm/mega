@@ -15,8 +15,11 @@ import (
 	"github.com/michaelquigley/mega/internal/model"
 )
 
-// Range is a harness's tested range: the builds whose every call mega makes
-// was seen to work, lowest and highest.
+// Range is a harness's tested range, lowest and highest: the builds between
+// which every build that harness's probe ran passed its steps, the version
+// probe's for claude code and codex (probes/versions/README.md), probes/pi
+// for pi. it says what the probe ran, a fixed list of mega's calls, not that
+// every call mega makes was seen to work, nor that every build in it was run.
 type Range struct {
 	Low  string
 	High string
@@ -25,8 +28,8 @@ type Range struct {
 func (r Range) String() string { return fmt.Sprintf("%s to %s", r.Low, r.High) }
 
 // Tested is each harness's tested range, the one place mega keeps them. a
-// range is what probes/versions ran: every call mega makes, against each
-// build, recorded in docs/research/harness-capabilities.md. extending it
+// range is what probes/versions ran: its steps, against the builds it was run
+// on, each recorded in docs/research/harness-capabilities.md. extending it
 // means running that probe against the new build and recording what it
 // saw, then changing it here. claude code is with the shim's pinned agent
 // sdk; codex is installed whole, with its helper programs. pi's range is the

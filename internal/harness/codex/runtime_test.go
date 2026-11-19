@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -406,6 +407,51 @@ func TestAnswerInFlightNeverStartsATurnAcrossAnInterrupt(t *testing.T) {
 		t.Errorf("answer: %v", err)
 	}
 	w.quiet(t)
+}
+
+// a stop that lands as an answer's turn is about to start, after the answer
+// checked for one, never lets the turn start after it: the check and the
+// start are one step, which an interrupt waits on, and the wait for codex's
+// reply holds no lock.
+func TestNoTurnStartsAfterAStopThatLandsBeforeIt(t *testing.T) {
+	r, _, w := testRuntime()
+	askQuestion(r)
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+	var stopFirst atomic.Bool
+	stopped := make(chan struct{})
+	afterStopCheck = func() {
+		go func() {
+			if err := r.Interrupt(); err != nil {
+				t.Error(err)
+			}
+			close(stopped)
+		}()
+		select {
+		case <-stopped:
+			stopFirst.Store(true)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	t.Cleanup(func() { afterStopCheck = nil })
+	result := make(chan error, 1)
+	go func() {
+		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+	}()
+	start := w.sent(t)
+	if start["method"] == "turn/start" && stopFirst.Load() {
+		t.Fatal("turn/start went out after an interrupt had returned")
+	}
+	// the turn began before the stop, which then interrupts it as soon as it
+	// exists.
+	<-stopped
+	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turn":{"id":"turn-2","status":"inProgress","items":[]}}}`, start["id"]))
+	interrupt := r.reply(t, w, "turn/interrupt", `{}`)
+	if interrupt["params"].(map[string]any)["turnId"] != "turn-2" {
+		t.Errorf("interrupted %v", interrupt["params"])
+	}
+	if err := <-result; !errors.Is(err, harness.ErrNotPending) {
+		t.Errorf("answer: %v", err)
+	}
 }
 
 // a stop that lands while the answer's turn is being started interrupts that

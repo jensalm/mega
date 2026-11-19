@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { createContext, useContext, useState, type FormEvent } from 'react'
 import { answerRequest, type Answer } from '../api'
 import type { FormField, PendingRequest, Question, RequestPayload } from '../types'
 import { IconButton } from './Icon'
@@ -13,6 +13,10 @@ interface RequestCardProps {
   // stale it cannot stand behind the pending set it shows, so the card
   // waits, saying why, as the panel's other controls do.
   held?: string | null
+  // stopping: why the answers that would let work go on wait, while an
+  // interrupt or a release is under way, or null. Deny and Dismiss stay live,
+  // since they only settle the request toward the stop.
+  stopping?: string | null
 }
 
 // allowKeys are the keys that answer the oldest docked approval from an
@@ -25,6 +29,7 @@ const ariaKeys = { allow: 'Control+Enter', allow_session: 'Control+Shift+Enter' 
 // AllowButton is an Allow button; keyed, its title names its key. the key
 // presses this same button (InputPanel), so the answer goes the one way.
 function AllowButton({ decision, keyed, sending, onAnswer }: { decision: 'allow' | 'allow_session'; keyed: boolean; sending: boolean; onAnswer: (answer: Answer) => void }) {
+  const stopping = useContext(Stopping)
   const label = decision === 'allow' ? 'Allow' : 'Allow this tool for the session'
   return (
     <IconButton
@@ -34,7 +39,7 @@ function AllowButton({ decision, keyed, sending, onAnswer }: { decision: 'allow'
       aria-keyshortcuts={keyed ? ariaKeys[decision] : undefined}
       word={label}
       data-answer={decision}
-      disabled={sending}
+      disabled={sending || stopping}
       onClick={() => onAnswer({ decision })}
     />
   )
@@ -42,7 +47,11 @@ function AllowButton({ decision, keyed, sending, onAnswer }: { decision: 'allow'
 
 // RequestCard is answerable only because the service's pending set lists the
 // request. the first answer from any browser wins; a later one is refused.
-export function RequestCard({ conversationId, request, keyed = false, held = null }: RequestCardProps) {
+// Stopping is whether the card's answers that would let work go on wait for a
+// stop under way; Deny and Dismiss read none of it.
+const Stopping = createContext(false)
+
+export function RequestCard({ conversationId, request, keyed = false, held = null, stopping = null }: RequestCardProps) {
   const [error, setError] = useState<string | null>(null)
   const [answering, setSending] = useState(false)
   // the forms disable their answers while one is being sent, and while held.
@@ -63,27 +72,34 @@ export function RequestCard({ conversationId, request, keyed = false, held = nul
   // terminal, sent only when the operator presses it.
   const dismiss = request.payload?.dismiss ? () => void send({ decision: 'dismiss' }) : undefined
   return (
-    <section className="request-card" data-request={request.id} aria-label={request.kind === 'question' ? 'Question' : 'Approval'}>
-      {request.kind === 'question' && request.payload?.fields ? (
-        <FormQuestion payload={request.payload} sending={sending} onAnswer={(answers) => void send({ answers })} onDismiss={dismiss} />
-      ) : request.kind === 'question' ? (
-        <QuestionForm
-          questions={request.payload?.questions ?? []}
-          fromPi={!!request.payload?.dialog}
-          sending={sending}
-          onAnswer={(answers) => void send({ answers })}
-          onDismiss={dismiss}
-        />
-      ) : (
-        <PermissionForm request={request} keyed={keyed} sending={sending} onAnswer={(answer) => void send(answer)} />
-      )}
-      {held && (
-        <p className="muted request-held" role="status">
-          {held}
-        </p>
-      )}
-      {error && <p className="error">{error}</p>}
-    </section>
+    <Stopping.Provider value={stopping !== null}>
+      <section className="request-card" data-request={request.id} aria-label={request.kind === 'question' ? 'Question' : 'Approval'}>
+        {request.kind === 'question' && request.payload?.fields ? (
+          <FormQuestion payload={request.payload} sending={sending} onAnswer={(answers) => void send({ answers })} onDismiss={dismiss} />
+        ) : request.kind === 'question' ? (
+          <QuestionForm
+            questions={request.payload?.questions ?? []}
+            fromPi={!!request.payload?.dialog}
+            sending={sending}
+            onAnswer={(answers) => void send({ answers })}
+            onDismiss={dismiss}
+          />
+        ) : (
+          <PermissionForm request={request} keyed={keyed} sending={sending} onAnswer={(answer) => void send(answer)} />
+        )}
+        {held && (
+          <p className="muted request-held" role="status">
+            {held}
+          </p>
+        )}
+        {!held && stopping && (
+          <p className="muted request-stopping" role="status">
+            {stopping}
+          </p>
+        )}
+        {error && <p className="error">{error}</p>}
+      </section>
+    </Stopping.Provider>
   )
 }
 
@@ -216,11 +232,18 @@ function FormQuestion({
         <FormFieldInput key={field.name} field={field} value={values[field.name] ?? ''} onChange={(value) => set(field.name, value)} />
       ))}
       <div className="actions">
-        <IconButton type="submit" icon="reply" label="Answer" word="Answer" disabled={sending || !complete} />
+        <AnswerButton disabled={sending || !complete} />
         {onDismiss && <DismissButton sending={sending} onDismiss={onDismiss} />}
       </div>
     </form>
   )
+}
+
+// AnswerButton submits a question's answer, which would let work go on, so it
+// waits while a stop is under way.
+function AnswerButton({ disabled }: { disabled: boolean }) {
+  const stopping = useContext(Stopping)
+  return <IconButton type="submit" icon="reply" label="Answer" word="Answer" disabled={disabled || stopping} />
 }
 
 function FormFieldInput({ field, value, onChange }: { field: FormField; value: string; onChange: (value: string) => void }) {
@@ -368,7 +391,7 @@ function QuestionForm({
         </fieldset>
       ))}
       <div className="actions">
-        <IconButton type="submit" icon="reply" label="Answer" word="Answer" disabled={sending || !complete} />
+        <AnswerButton disabled={sending || !complete} />
         {onDismiss && <DismissButton sending={sending} onDismiss={onDismiss} />}
       </div>
     </form>
