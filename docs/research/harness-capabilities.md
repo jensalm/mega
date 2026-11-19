@@ -971,6 +971,19 @@ The path search inserts, for a path under a directory the operator named:
 
 Mega changes nothing about what a harness asks. A Claude mention attaches without asking, as the operator's own naming of the file. A read by the agent's own tools asks, or not, as the harness and the operator's settings say.
 
+## Observation (2026-11-18): a model switch echoes a user message outside any turn
+
+Claude Code 2.1.327, Agent SDK 0.3.318, seen in an operator conversation through mega; no probe was run.
+- After an idle runtime's model was switched (the shim's `set_model`, to `fable`), the live stream delivered one top-level user message and nothing more `[observed]`:
+  - `isReplay: true`, a `uuid`, a `timestamp`, `parent_tool_use_id: null`;
+  - string content `<local-command-stdout>Set model to `fable (claude-fable-5-2)`</local-command-stdout>`.
+- No `system/init`, assistant message or `result` followed it; the CLI stayed idle `[observed]`. An interrupt sent afterwards produced no frame `[observed]`.
+- The session's transcript holds no such message, so a history import never meets it `[observed]`.
+- The SDK types it as `SDKUserMessageReplay`, a user message with `isReplay: true` `[docs: sdk.d.ts]`.
+- The CLI writes the flag into its stream-json; the SDK's query path passes it through and never sets it `[source]`. The 2.1.327 binary builds this message with a fresh `uuid` and a `timestamp`, which is the shape seen.
+- The CLI also echoes each prompt back with `isReplay` and the prompt's own `uuid`, but only when the `replayUserMessages` option is set `[source]`. The shim does not set it, so any `isReplay` message on its stream is Claude's own echo, never a prompt `[inference]`. Turning that option on would bring every prompt back marked this way.
+- Which version began sending it is not known. The model follow-up (2026-11-10, Claude Code 2.1.318) does not mention it, and its logs are not in the repository to check.
+
 ## Recommendations
 
 - Early versions rely on Michael's operator-care decision: close the previous writer before resuming a session elsewhere. Claude interactive sessions and pi do not refuse a second writer. mega should track its own managed processes, but its registry does not prove that an independently launched native process is absent. Stronger exclusion remains deferred, not an implementation requirement.

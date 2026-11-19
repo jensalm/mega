@@ -47,6 +47,12 @@ type sdkMessage struct {
 	IsMetaCamel     bool           `dd:"isMeta,+nullable"`
 	IsQueuedCommand bool           `dd:"isQueuedCommand,+nullable"`
 	Origin          map[string]any `dd:",+opaque,+nullable"`
+
+	// IsReplay marks a user message the CLI echoes rather than one sent as a
+	// prompt, such as a local command's output after a model switch. it is
+	// never an operator's prompt only while the shim leaves the sdk's
+	// replayUserMessages off; with it on, every prompt comes back marked too.
+	IsReplay bool `dd:"isReplay,+nullable"`
 }
 
 type sdkContent struct {
@@ -122,6 +128,10 @@ func mapMessage(raw map[string]any) ([]*model.Event, error) {
 		// hand-back. kept under the native toggle with its identity, so an
 		// import stays idempotent.
 		return []*model.Event{{Kind: model.EventNative, Text: metaText(msg.Origin), NativeID: msg.UUID, Raw: raw}}, nil
+	case msg.Type == "user" && msg.ParentToolUseID == "" && msg.IsReplay:
+		// an echo, never a prompt: as a user event it would open a turn that
+		// no result ever ends.
+		return []*model.Event{{Kind: model.EventNative, Text: "user/replay", NativeID: msg.UUID, Raw: raw}}, nil
 	case msg.Type == "user" && msg.ParentToolUseID == "":
 		if text, ok := msg.Message.text(); ok {
 			return []*model.Event{{Kind: model.EventUser, Text: text, NativeID: msg.UUID, Raw: raw}}, nil
