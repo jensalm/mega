@@ -1,11 +1,50 @@
 ---
 title: a turn is inferred from a message
-state: horizon
+state: researching
 created: 2026-11-19
-tags: [enhancement, spike]
+tags: [story]
 ---
 
-A turn begins and ends because the harness said so, in its own terms, and not because the service saw a message and guessed. A turn that goes quiet is shown as quiet, and an interrupt that gets no answer says so.
+A turn opens on a fact: mega sent a prompt, or the adapter says the harness started one, from the harness's own marker. The service no longer takes a message it happens to see for the start of a turn.
+
+Fourth in the sequence of `simplify-the-core`. It builds the first of the three recommendations below; the other two are new things for the page to say and wait here.
+
+## the failure that becomes impossible
+
+A stray message can no longer open a turn that nothing closes.
+
+## what changes
+
+A turn opens in two ways:
+
+- **Mega sent a prompt,** as now.
+- **The adapter says the harness started one.** This is a turn nobody prompted, such as Claude waking when a background job finishes. Where the harness also announces a turn mega opened, the announcement changes nothing about it. No adapter decides a start from the output it happens to see.
+
+What goes is the third way a turn opens today: any message from a runtime while no turn is open. A message outside any turn is recorded and opens nothing. The flag for output after its turn goes with it.
+
+Two things follow from a start that can arrive by itself:
+
+- **The check that no turn is open is made where the prompt is recorded,** under the same lock. Today it is made earlier, and a declared start could arrive in between.
+- **Once the harness has declared a start, only the harness's own end closes the turn.** An end that mega or an adapter makes up for a prompt, a refusal or pi's "handled" reply, closes only a turn the harness has not declared. A start can arrive after a prompt is recorded and before it is delivered, and mega cannot tell it from the harness's notice of the prompt's own turn. It does not need to.
+
+## what does not change
+
+How a turn closes otherwise. No state is added between idle and running.
+
+## how it is shown
+
+It starts with a probe of each harness for its marker of a turn it starts by itself, recorded with its version under `probes/`. The capability report's record of a Claude wake is the place to start for Claude. If a supported build gives no marker the adapter can trust, the work stops and asks.
+
+- the round trips for all three harnesses, including the model switch on an idle runtime, which is the case that started this;
+- a message outside a turn opens none;
+- a turn the harness starts by itself shows as running before any of its output arrives, and holds a prompt and a shutdown;
+- a harness's own start notice for a turn mega opened leaves that turn as it was;
+- a declared start that arrives between a prompt's first check and its recording: the prompt is refused and the turn stands;
+- a declared start that arrives after a prompt is recorded and before it is delivered, and the harness then refuses the prompt, or pi reports it handled: the conversation stays running, and holds a shutdown, until the harness's end.
+
+## order
+
+After `unread-is-output-beyond-where-you-have-read`, which is the other user of the flag this removes. Lands on `main`.
 
 ## why
 

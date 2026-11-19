@@ -2,55 +2,84 @@
 title: simplify the core
 state: researching
 created: 2026-11-19
-tags: [epic, spike]
+tags: [epic]
 ---
 
-Make the core of mega smaller where it can be, so that whole kinds of fault have nowhere to live, instead of finding and patching each instance. A design step first, then the changes, then the full-tree review continues on a tree with fewer corners in it.
+Make the core of mega smaller where it can be, so that whole kinds of fault have nowhere to live, instead of finding and patching each instance. It is done as a sequence of small pieces, each specified, reviewed and built on its own.
 
 ## why
 
-Michael, 2026-11-19, five passes into `harden-requests-stops-and-restarts`: "part of this work needs to be an effort to simplify the core architecture. rather than patching and covering every possible corner case, we might consider simplifying the code or the model where we can."
+Michael, 2026-11-19, five passes into `harden-requests-stops-and-restarts`: "part of this work needs to be an effort to simplify the core architecture. rather than patching and covering every possible corner case, we might consider simplifying the code or the model where we can." And later the same day: "the goal here is to figure out how to drive complexity out of mega and simplicity into the design. we need to keep pursuing ways to make the design (and the code) simpler."
 
-The hardening work has fixed about forty-five findings in three days, every one real, and each pass still returns five. A third of each pass is now a hole in an earlier pass's fix. That is what patching a complicated thing looks like. The findings are evidence of where the complication is.
+The hardening work fixed about forty-five findings in three days, every one real, and each pass still returned five. A third of each pass was a hole in an earlier pass's fix. Sorted by what made each possible:
 
-## what the findings say, counted by cause
+| Cause | About |
+| --- | --- |
+| A write that fails partway through | 11 |
+| The page's sense of whether it is current | 8 |
+| Work after a stop, or in the gap before a start | 7 |
+| Whose session a stream or a file belongs to | 7 |
+| What counts as unread after a lost runtime or an import | 7 |
+| The rest | 5 |
 
-The planning agent sorted the findings of 2026-11-18 and 2026-11-19 by what made each possible. Roughly:
+Most are not about a feature. They are about how the core is put together, and about what mega promises.
 
-- **A write that fails partway, about eleven.** A change is recorded in the event log and then applied to the registry, or the other way round, and each place that does so needs its own answer to "what if the second write fails". An answer hiding a request before it is recorded; a settlement that could not be recorded; an unread marker lost when its write failed, and then three passes of trying to rebuild it.
-- **The page's sense of being current, about eight.** "Live" before it had caught up, twice; a shutdown banner, twice; reads of output not yet seen; controls live while stale.
-- **Work after a stop, and the gap before a start, about seven.** An answer starting a turn after an interrupt; a fence too narrow; a launch finishing after shutdown began.
-- **Whose session is this, about seven.** One harness at a time: a file imported by name, a history read unchecked, a check made once, a check made on a different read.
-- **What counts as unread across a lost runtime or an import, about seven.** Output from a failed turn; old imports recounted; a turn still open when its history was read.
-- **The rest:** what a release left running, tests that answered without looking, and the cases where a message outside a turn opened one.
+## the sequence
 
-Four of these six are not about a feature. They are about how the core is put together.
+One card each, in this order. Each names the failure it makes impossible.
 
-## candidates, largest effect first
+1. **`a-codex-question-is-a-message`.** An answer to a Codex question can no longer start a turn after a stop.
+2. **`megas-history-may-have-a-gap`.** A design to put to Michael first. A message can no longer be shown twice because an import did not recognise it.
+3. **`unread-is-output-beyond-where-you-have-read`.** An unread mark can no longer be lost to a failed write or miscounted by a rebuild.
+4. **`a-turn-is-inferred-from-a-message`.** A stray message can no longer open a turn that nothing closes.
+5. **`a-failed-write-stops-mega`.** Mega can no longer run on while unable to record.
+6. **`reading-the-workspace-starts-nothing`.** A read of the workspace can no longer run anything.
+7. **`one-route-for-recorded-history`.** A failed read of history can no longer leave a gap nothing fills.
+8. **`the-page-has-one-value`.** Two parts of the page can no longer disagree about whether it is current.
+9. **`one-kit-under-the-adapters`.** A fix to one adapter's stop rule can no longer be missing from the other two.
+10. **`one-fold-for-what-happened`.** A restart can no longer recover something different from what the service had decided. On the branch.
+11. **`the-registry-records-no-runtime-state`.** The registry and a log can no longer disagree about whether a runtime is running. On the branch, with the cutover.
 
-1. **One record for each fact, and stop when it cannot be written.** Today a conversation's state is in two places, its event log and the registry, written one after the other. Keep the registry for what a conversation is: its project, its harness, its session. Keep everything that changes in the log alone, and have start-up read where each log left off. Then there is no second write to fail. And when any write does fail, mega says once, on every page, that it can no longer record, and refuses everything until it is restarted. That replaces a rule for each operation with one rule, and would have left the first group with nothing to find.
-2. **A coarser, honest unread.** Count output when it is recorded, not when its turn ends: a conversation with a turn in flight reads as running either way, so the buffering buys nothing that can be seen. After a runtime is lost, or history is brought in from outside, do not work out exactly which output is new. Mark the conversation as wanting a look, once. That removes the open-turn detection, the recovery scan and its bounds, and most of the fifth group.
-3. **Turns the harness declares.** Already a card, `a-turn-is-inferred-from-a-message`. It removes the cases where a stray message opens a turn nothing closes.
-4. **One kit under the three adapters.** Checking a session's identity, fencing a stop, finding what was left running and ordering an answer against its resolution are each written three times and were each fixed three times. An adapter should translate one harness's protocol and nothing else. This is the first step of `the-orchestration-framework-is-extracted`, arrived at from the other side.
-5. **One state for the page.** Connecting, catching up, live, lost, shutting down: one value, decided in one place, that the footer, the rail, the banner and the held controls all read.
+Then the full-tree review resumes on `harden-requests-stops-and-restarts`, and its count per pass is compared with five.
 
-## how this would run
+## how each piece is run
 
-- **The spec first.** The first two change what mega promises, not only how it is built: what survives a crash, and what "unread" means after one. `AGENTS.md` says a discovery that changes what mega should do goes to the spec before it goes into a batch.
-- **Then one candidate at a time,** each a batch of its own that removes code, with the checks and round trips as the proof that nothing an operator relies on changed.
-- **Then the full-tree review resumes.** It is the measure: fewer findings per pass on a smaller core.
+- **Spec first, where a promise changes.** The section "A simpler core" in `docs/future/mega.md` holds the target. A piece that changes what mega promises brings that section in step before it is built.
+- **A short work order or a prompt of its own,** written from its card when its turn comes, and reviewed by mercurius where its size warrants. A small piece gives the review one surface, and converges.
+- **Terminus to `clean` on its working tree, then Michael.** It leaves `make test`, all of `make checks` and `make e2e` passing, and its report names the harness versions its round trips ran on and every case that was skipped, because `make e2e` passes when a fixture or a model is missing.
+- **The checks are what make this safe to attempt:** about 550 steps in nine suites, and the round trips. A piece that needs a check weakened has changed behaviour, and stops.
+- **Two measures.** It names a failure that has become impossible and shows it. And it leaves `internal/service` no larger than it found it, reporting what was deleted outright, since moving code is not removing it.
+- **What it does not say changes, does not.** The code and its tests, as they stand when a piece starts, are the specification of everything its card is silent on.
 
-## the work order, 2026-11-19
+## where the work lands
 
-Michael, the same day: "we should aggressively pursue the simplification options with the spec and work order." Both are drafted:
+Pieces 1 to 9 land on `main`, one at a time, like any batch. Pieces 10 and 11 are built on a branch, `simpler-core`, which Michael creates. His words: "we do this work on a branch so that we can test it locally and ensure it's solid before merging it to `main` and to the two new downstream users." The merge is a gate of its own and his, not before the cutover has run on each of his three machines.
 
-- **The spec:** the section "A simpler core" in `docs/future/mega.md`.
-- **The work order:** `docs/future/mega-simpler-core-work-order.md`, seven stages, each gated by terminus and then by Michael, each required to leave the service no larger than it found it.
+## what must not change
 
-Five decisions were his, and he settled all five as recommended the same day ("let's consider them settled and see where we land"): a failed write stops mega; unread means output beyond where you have read; what changes about a conversation is kept only in its log; start-up reads the end of each log; a stop mega forced does not clear an error.
+- A session is resumed by its exact id, and a new one is started only on proof that none exists.
+- Permissions are never weakened, no trust is set for the operator, and nothing is answered for him.
+- A state mega cannot vouch for is never shown as certain. A simpler mega may say "look at this" more often. It may not say something untrue.
+- A pending request is answered once, by the operator, and never after it stopped being pending.
 
-The candidates above became the stages in a different order, smallest promise first: unread, declared turns, the one fold, the one record and the one failure, the end of the log, the adapter kit, the page's state. The fold was not a candidate. It came out of asking why the unread rebuild failed three times: live code and start-up code were two tellings of one rule.
+## what was taken out, so it is not added back
 
-## what it must not cost
+This began as one spec section and one work order of seven stages. The work order was removed on 2026-11-19 when its content had moved into these cards; an early form of it is in git history as `docs/future/mega-simpler-core-work-order.md`. It went through eight mercurius rounds in one day: six findings in each of the first six, then four, then three. Michael, at round 3: "we need to be careful we're not back to patching corner cases when a simpler design would eliminate them." Most findings were about things the drafts had added. Each of these was in a draft and was removed:
 
-The promises stay: a session is resumed by its exact id; permissions are never weakened; nothing is answered for the operator; a state mega cannot vouch for is never shown as certain. A simpler model that says "I do not know, look at this" more often is acceptable. One that says something untrue is not.
+- **Moving the operator's facts into the log.** The session id and the requested mode, model and effort were to leave the registry. Old logs never recorded them, so that needed a seed, and the seed needed rules of its own.
+- **Ending the runtimes when a write fails.** That needed an order between the stop and every write to a harness, in three adapters.
+- **Telling the page why mega stopped.** A last frame before the exit needed a rule in each of three rounds.
+- **Reading only the end of each log at start-up.** Checkpoints are a speed feature, and brought a new kind of line in the log. It went back to `start-up-reads-every-log`.
+- **Changing the order in which a choice and its history are written.** Tidy, and not needed.
+- **Describing what does not change.** Every paraphrase of the code was slightly wrong, and each became a finding.
+- **One document for all of it.** Six stages gave a review six surfaces to find gaps between. Michael: "we might want to break some of these out into smaller chunks anyway, rather than trying to ram a big simplification spec and work order through."
+
+The lesson is the epic's own, applied to its plan. A finding count that does not fall is a sign the design, or its description, has too much in it, and the answer is to take something out.
+
+## where the ideas came from
+
+Pieces 3, 4, 5, 8, 9, 10 and 11 are the planning agent's reading of the hardening findings. Pieces 1, 2, 6 and 7, and the measure "name a failure that has become impossible", are from an independent review for simplification that Michael asked of an Astra 6.2 agent on 2026-11-19. It found what the first reading could not: mechanisms that exist because of what mega promises, not because of how the core is built.
+
+## a sign to stop
+
+If a piece finds it needs a new record, a new kind of event line, a second copy of a fact, a new state, or a rule for a failure between two writes, that is the signal to stop and ask whether the design is still the simple one.

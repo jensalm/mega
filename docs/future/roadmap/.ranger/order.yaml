@@ -1,9 +1,7 @@
-building:
-  - the-page-says-more-than-it-has-seen.md
+building: []
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
-  - a-turn-is-inferred-from-a-message.md
   - mega-as-the-development-hub.md
   - the-orchestration-framework-is-extracted.md
   - central-application.md
@@ -18,11 +16,23 @@ horizon:
   - updating-harnesses-from-mega.md
 researching:
   - simplify-the-core.md
+  - a-codex-question-is-a-message.md
+  - megas-history-may-have-a-gap.md
+  - unread-is-output-beyond-where-you-have-read.md
+  - a-turn-is-inferred-from-a-message.md
+  - a-failed-write-stops-mega.md
+  - reading-the-workspace-starts-nothing.md
+  - one-route-for-recorded-history.md
+  - the-page-has-one-value.md
+  - one-kit-under-the-adapters.md
+  - one-fold-for-what-happened.md
+  - the-registry-records-no-runtime-state.md
   - harden-requests-stops-and-restarts.md
-  - a-model-switch-on-an-idle-runtime-is-untested.md
-  - loose-ends-around-stops-and-restarts.md
-  - reviewing-changes-from-outside.md
+  - answering-a-question-moves-the-last-instructed-pointer.md
+  - keyboard-shortcut-pop-open.md
   - darklight-mode-toggle.md
+  - queued-operator-messages.md
+  - reviewing-changes-from-outside.md
   - imported-turns-carry-their-own-times.md
   - first-tagged-release.md
   - the-checks-run-in-a-browser-michael-does-not-use.md
@@ -32,6 +42,9 @@ researching:
   - reads-after-the-service-closes.md
   - mega-on-macos-and-windows.md
 evaluating:
+  - loose-ends-around-stops-and-restarts.md
+  - a-model-switch-on-an-idle-runtime-is-untested.md
+  - the-page-says-more-than-it-has-seen.md
   - read-behind-a-dialog.md
   - focus-on-operator-input.md
   - a-large-named-directory-starves-the-path-search.md

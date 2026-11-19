@@ -8,6 +8,8 @@ The first slice is built: the environment service alone on `fortyfive`, reached 
 
 The work in front is the epic `an-external-operator-can-install-mega` in the roadmap: Michael demonstrates mega in the week after 2026-11-13 to people who may then run it themselves, and its stories are what stands between the repository and an external operator: anyone other than Michael running their own mega. One deferral was lifted by his decision of that date: pi came into scope, as the card `pi-adapter` describes, and its adapter is built (`docs/current/mega.md`, "The pi adapter").
 
+Since 2026-11-19 the work in front is the epic `simplify-the-core` in the roadmap: a sequence of small pieces, one card each, that make the core smaller so that whole kinds of fault have nowhere to live. They are built one at a time, in the order the epic lists. Each names a failure it makes impossible and shows it. What a card does not say changes, does not: the code and its tests are the specification of the rest. The full-tree hardening review on `harden-requests-stops-and-restarts` is paused until the sequence is done.
+
 Read the most recent entries in `docs/journal/` on arrival. The investigation that produced the capability report is complete; do not reopen it unless a change contradicts a recorded observation, in which case record the new observation with its version.
 
 ## Working rules

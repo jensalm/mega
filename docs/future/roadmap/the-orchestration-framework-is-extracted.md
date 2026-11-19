@@ -27,6 +27,14 @@ Three tools now start, prompt, watch and stop coding harnesses, each in its own 
 - **The Claude bridge.** One adapter runs through a Node program beside the binary. A framework others build on has to carry that, which `first-tagged-release` meets first.
 - **Mercurius and terminus as its first other users.** Their reviewers become harness runs like any other, restartable and observable, which is also what the hub epic asks of them.
 
+## raised again, 2026-11-19
+
+Michael wrote a second card for this the day after the presentation, in the inbox as `harness-orchestration-framework`. It was folded in here. His words: "we need to consider separating out the harness orchestration components used by mega, mercurius, and terminus... into a new 'harness orchestration framework' that can be used as a shared foundation for these projects, as well as new projects."
+
+What that adds to the above: new projects are named as users of it, not only the three that exist.
+
+A first step is now on the board from another direction. `one-kit-under-the-adapters`, the ninth piece of `simplify-the-core`, moves the policy the three adapters share into one place under `internal/harness`. What is left in an adapter after it is the translation of one harness's protocol, which is the shape a framework would want.
+
 ## depends on
 
 Nothing built yet. It is the first of the directions because the next two rest on it.

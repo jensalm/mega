@@ -15,3 +15,7 @@ The small-interface batch (terminus `023ffccec7e5`, 2026-11-12) closed part of i
 
 Renamed from `reads-after-close` on 2026-11-12 so the filename matches the title.
 
+
+## before the registry gives up its runtime state, 2026-11-19
+
+A read in that window is answered from the registry alone. `the-registry-records-no-runtime-state`, the last piece of `simplify-the-core`, takes the runtime state out of the registry, so such a read would then have even less to say. The decision above wants making before that piece is built. Answering `unavailable` once the service has closed is the one that needs nothing kept.

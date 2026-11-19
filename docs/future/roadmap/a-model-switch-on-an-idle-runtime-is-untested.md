@@ -1,6 +1,6 @@
 ---
 title: a model switch on an idle runtime is untested
-state: researching
+state: evaluating
 created: 2026-11-18
 tags: [enhancement]
 ---

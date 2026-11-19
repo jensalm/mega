@@ -20,3 +20,9 @@ The workspace was 185 MB on 2026-11-13 and 223 MB on 2026-11-16, about 12 MB a d
 `agent-hand-off-turns` marks the agent last instructed in each project. Its time is not stored anywhere of its own: when a conversation's log is opened, the service takes it from the newest prompt it finds there, and start-up opens every log. That is free today and is exactly the read this card removes. When this card is worked, that time needs another source, such as the registry, or it will be missing after every restart until each conversation is next prompted.
 
 The workspace was 258 MB on this date.
+
+## not part of the simpler core, 2026-11-19
+
+The first draft of the work order behind `simplify-the-core` took this card in as a stage: checkpoints in each log, and a start-up that reads back to the last one. Three review rounds showed what that costs: a new kind of line in the log that older builds must read safely, a name for each version of the fold, and the turn index and the list of native message ids built late because the full read no longer builds them. It is a speed feature and was cut from work whose point is to remove things. It stays here.
+
+What that work does leave behind, in `one-fold-for-what-happened`, is the function that makes this easy: one `apply(state, event)` used live and at start-up. A checkpoint is then that function's state written out, and the findings above are the list of what a design here has to answer.

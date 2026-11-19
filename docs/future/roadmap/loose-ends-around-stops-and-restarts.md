@@ -1,6 +1,6 @@
 ---
 title: loose ends around stops and restarts
-state: researching
+state: evaluating
 created: 2026-11-19
 tags: [defect]
 ---

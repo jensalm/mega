@@ -106,14 +106,14 @@ Michael's direction the same day: simplify the core where it can be, instead of 
 
 ## paused, 2026-11-19
 
-Michael stopped the passes here: "i think the implementer should stop now, and we should commit what they've done." Pass 5's fixes are the last work under this card until the simpler core is in. The work order is `docs/future/mega-simpler-core-work-order.md`.
+Michael stopped the passes here: "i think the implementer should stop now, and we should commit what they've done." Pass 5's fixes are the last work under this card until the simpler core is in. The work is the sequence of cards under `simplify-the-core`.
 
 **Pass 6's five findings are not worked.** Two of them live in code the simplification removes. The other three stand on their own, are small, and can be fixed as a short batch at any time or when the passes resume. Each is checked again then.
 
-- **`recovery-counts-non-exit-errors`** (blocking): the start-up rebuild of the unread marker treats every runtime error as the end of a turn. The rebuild goes with the plain unread rule.
-- **`answer-clears-concurrent-settlement-hold`** (blocking): when the adapter rejects an answer as invalid, the service drops the "takes no further answer" mark on a request settled meanwhile. That mark exists for a settlement that could not be recorded, which stops mega under the one failure rule.
+- **`recovery-counts-non-exit-errors`** (blocking): the start-up rebuild of the unread marker treats every runtime error as the end of a turn. The rebuild goes with `unread-is-output-beyond-where-you-have-read`.
+- **`answer-clears-concurrent-settlement-hold`** (blocking): when the adapter rejects an answer as invalid, the service drops the "takes no further answer" mark on a request settled meanwhile. That mark exists for a settlement that could not be recorded, and `a-failed-write-stops-mega` removes it.
 - **`pi-cache-loses-native-identity`** (blocking): when pi cannot find a message's session entry, the message is stored without an id, and if the entry turns up later an import adds the same message a second time. It stands on its own.
 - **`turn-record-shared-between-subscribers`** (blocking): copying an event for each stream subscriber does not copy its turn record, so one subscriber could change what another sees. It stands on its own.
 - **`http-contract-omits-pi`** (advisory): the HTTP reference lists only `claude` and `codex`, and omits Dismiss for pi's dialogs. A documentation fix.
 
-**The two decisions above are carried into the work order.** Whether a stop mega forced clears an error is its fifth decision. Recording the unread decision instead of inferring it is overtaken: the plain unread rule leaves nothing to rebuild, and the one fold makes "record the decision" the rule for every decision.
+**The two decisions above are carried into that sequence.** Whether a stop mega forced clears an error is settled on `one-fold-for-what-happened`. Recording the unread decision instead of inferring it is overtaken: the plain unread rule leaves nothing to rebuild, and the one fold makes "record the decision" the rule for every decision.

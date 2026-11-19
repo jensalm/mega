@@ -1,6 +1,6 @@
 ---
 title: the page says more than it has seen
-state: building
+state: evaluating
 created: 2026-11-18
 tags: [defect]
 ---
