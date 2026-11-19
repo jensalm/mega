@@ -114,6 +114,9 @@ type runtime struct {
 	cmd      *exec.Cmd
 	stdin    io.WriteCloser
 	sink     harness.Sink
+	// stopping latches a fenced stop: no answer that would let work go on
+	// is delivered after it (harness.CarriesWork).
+	stopping bool
 
 	mu       sync.Mutex
 	requests map[string]string      // service request id -> sdk requestId
@@ -238,7 +241,7 @@ func (r *runtime) Prompt(uuid, text string) error {
 func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 	r.mu.Lock()
 	native, ok := r.requests[requestID]
-	if !ok {
+	if !ok || (r.stopping && harness.CarriesWork(answer)) {
 		r.mu.Unlock()
 		return harness.ErrNotPending
 	}
@@ -343,6 +346,15 @@ func (r *runtime) SetModel(model, effort string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// Stopping fences a stop: from now on no answer that would let work go on
+// reaches the shim, even one accepted before the stop, so no tool runs once
+// it returns; the interrupt that follows aborts the request.
+func (r *runtime) Stopping() {
+	r.mu.Lock()
+	r.stopping = true
+	r.mu.Unlock()
 }
 
 // setSetting sends set_model or set_effort and waits for the shim's reply.

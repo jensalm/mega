@@ -542,6 +542,22 @@ func (s *Service) send(conversationID, text string) error {
 	rt := l.runtime
 	s.mu.Unlock()
 	if err := rt.Prompt(uuid, text); err != nil {
+		if errors.Is(err, harness.ErrPromptRefused) {
+			// refused, no turn started: the turn opened for this prompt ends
+			// here, saying why, as a turn's end would, so the next prompt is
+			// taken. a prompt whose fate is unknown keeps its turn.
+			s.mu.Lock()
+			if s.live[conversationID] == l && l.turnActive && l.turnStartedAt.Equal(ev.At) {
+				end := &model.Event{Kind: model.EventTurnEnd, Status: model.TurnError, Origin: model.OriginManaged, Text: fmt.Sprintf("the harness refused the prompt: %v", err)}
+				end.Turn = s.turnRecordLocked(l)
+				if recordErr := s.record(l, end); recordErr != nil {
+					dl.Errorf("%v", recordErr)
+				} else {
+					s.turnEndedLocked(l)
+				}
+			}
+			s.mu.Unlock()
+		}
 		return fmt.Errorf("sending prompt to '%s': %w", conversationID, err)
 	}
 	return nil
@@ -589,7 +605,7 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 	// once an interrupt or a release has begun, an answer that would let work
 	// go on is refused: the request is still pending, and deny or dismiss,
 	// which only settle it toward the stop, are not.
-	if (l.interrupting || l.releasing) && answer.Decision != harness.DecisionDeny && answer.Decision != harness.DecisionDismiss {
+	if (l.interrupting || l.releasing) && harness.CarriesWork(answer) {
 		s.mu.Unlock()
 		return newError(CodeConflict, "the turn is stopping, so this answer would let work go on after it; Deny or Dismiss can still be pressed")
 	}
@@ -607,10 +623,10 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(l.answering, requestID)
-	if err == nil || errors.Is(err, harness.ErrNotPending) {
-		// the harness has it no more: until its resolution is recorded the
-		// request stays listed, but is never answerable again.
-		l.answering[requestID] = answerDelivered
+	if errors.Is(err, harness.ErrInvalidAnswer) {
+		// refused without settling: the request is still pending, and a
+		// fitting answer or a dismissal still reaches it.
+		return newError(CodeInvalid, err.Error())
 	}
 	if !slices.ContainsFunc(l.pending, func(r *model.Request) bool { return r.ID == requestID }) {
 		// the harness settled it meanwhile, or the runtime exited, and that
@@ -645,11 +661,16 @@ const (
 	answerDelivered = "delivered"
 )
 
-// settleLocked records a request's resolution and only then takes it out of
-// the pending set: one whose resolution cannot be recorded stays listed.
-// callers hold s.mu.
+// settleLocked is the one move of a request out of the pending set, for an
+// answer and for the harness's own settlement alike: it records the
+// resolution and only then takes the request out. one whose resolution
+// cannot be recorded stays listed, as the last confirmed state, and nothing
+// is broadcast, as after any durability fault; but the harness holds it no
+// more, so it is never answerable again: an answer gets not_pending without
+// reaching the harness. callers hold s.mu.
 func (s *Service) settleLocked(l *live, req *model.Request, outcome string) error {
 	if err := s.resolve(l, req, outcome); err != nil {
+		l.answering[req.ID] = answerDelivered
 		return err
 	}
 	l.takePending(req.ID)
@@ -728,18 +749,27 @@ func (s *Service) Release(conversationID string) error {
 		s.mu.Unlock()
 		return err
 	}
-	defer s.mu.Unlock()
 	l := s.live[conversationID]
 	if l == nil || l.runtime == nil {
+		s.mu.Unlock()
 		return newError(CodeConflict, "the conversation has no runtime to release")
 	}
+	rt := l.runtime
 	s.beginStopLocked(l, &model.Event{Status: model.StatusStopping})
+	s.mu.Unlock()
+	// the stop is fenced before Release returns: nothing the runtime is asked
+	// to deliver from now on starts work, whatever the asynchronous interrupt
+	// and close have reached. outside s.mu, since an adapter may report to
+	// the service while it holds its own lock.
+	rt.Stopping()
 	return nil
 }
 
 // releaseRuntime interrupts before closing when anything is outstanding:
 // closing input with a request pending keeps claude alive for minutes.
 func releaseRuntime(rt harness.Runtime, active bool) {
+	// every stop fences first; Release has fenced already, before returning.
+	rt.Stopping()
 	if active {
 		if err := rt.Interrupt(); err != nil {
 			dl.Warnf("interrupting before release: %v", err)
@@ -818,25 +848,36 @@ func (s *Service) Resume(conversationID string) error {
 	// adoption or release imported stays as it was, read. the reading
 	// position decides whether it is unread. after a release the operator was
 	// the one in the terminal, so the import changes nothing.
+	//
+	// the output counted and the end of unsupervised are one registry write:
+	// a resume that cannot record what it found stays unsupervised and says
+	// so, so a retry counts it, never clearing the state that would.
 	if conv.Runtime == model.RuntimeUnsupervised {
 		seq, at, err := int64(0), time.Time{}, scanErr
 		if err == nil {
 			seq, at, err = s.newestFinishedOutputLocked(l, result.open, lostFrom)
 		}
-		if err == nil && seq > 0 {
-			err = s.markUnreadLocked(l, seq, at)
+		if err == nil {
+			err = s.updateConversation(conversationID, func(c *model.Conversation) {
+				if seq > c.OutputSeq {
+					c.OutputSeq = seq
+				}
+				c.Runtime = model.RuntimeNone
+			})
 		}
 		if err != nil {
-			dl.Errorf("marking the output found on resuming '%s' unread: %v", conversationID, err)
+			// it is still unsupervised, as it says, not a runtime that ended
+			// badly: a retry that succeeds leaves no fault behind.
+			if recordErr := s.transition(l, &model.Event{Status: model.StatusUnsupervised, Text: fmt.Sprintf("the output found on resuming could not be recorded, so the conversation stays unsupervised; resume again: %s", recordable(err))}, "", nil); recordErr != nil {
+				dl.Errorf("%v", recordErr)
+			}
+			return err
+		}
+		if c, err := s.conversationLocked(conversationID); err == nil && seq > 0 && c.OutputSeq == seq {
+			l.outputAt = at
 		}
 	}
-	if err := s.transition(l, &model.Event{Status: model.StatusResumed, Text: fmt.Sprintf("%d messages added from native history", result.added)}, "", nil); err != nil {
-		return err
-	}
-	if conv.Runtime == model.RuntimeUnsupervised {
-		return s.updateConversation(conversationID, func(c *model.Conversation) { c.Runtime = model.RuntimeNone })
-	}
-	return nil
+	return s.transition(l, &model.Event{Status: model.StatusResumed, Text: fmt.Sprintf("%d messages added from native history", result.added)}, "", nil)
 }
 
 // imported reports what an import added, and which native events belong to a

@@ -129,12 +129,22 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 	if err := h.once(ctx, place, "thread/read", &threadReadParams{ThreadID: nativeID, IncludeTurns: true}, read); err != nil {
 		return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, err)
 	}
+	if read.Thread.ID != nativeID {
+		// another thread than the one asked for: nothing of it is imported.
+		return harness.History{}, fmt.Errorf("reading history of '%s': codex returned thread '%s'", nativeID, read.Thread.ID)
+	}
 	history := harness.History{Open: make(map[string]bool)}
 	for _, t := range read.Thread.Turns {
 		items, _ := t.Items.([]any)
 		for _, entry := range items {
 			raw, ok := entry.(map[string]any)
 			if !ok {
+				continue
+			}
+			if status, _ := raw["status"].(string); status == "inProgress" {
+				// a command or tool call still running, which can outlive its
+				// turn: only its completion produces a result, under the id it
+				// will carry then.
 				continue
 			}
 			mapped, err := mapItem(raw)

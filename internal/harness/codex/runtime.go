@@ -83,6 +83,7 @@ type runtime struct {
 	// set, none is made.
 	mcpReport sync.Mutex
 	mcpExited bool
+	stopping  bool // a fenced stop: no answer that would let work go on is delivered (harness.CarriesWork)
 }
 
 func newRuntime(sink harness.Sink) *runtime {
@@ -132,6 +133,11 @@ func (r *runtime) startTurn(threadID, uuid, body string) error {
 	defer cancel()
 	resp := &turnResponse{}
 	if err := r.conn.call(ctx, "turn/start", r.turnStart(threadID, uuid, body), resp); err != nil {
+		var refused *replyError
+		if errors.As(err, &refused) {
+			// codex answered with an error: no turn started.
+			return fmt.Errorf("%w: %w", harness.ErrPromptRefused, err)
+		}
 		return err
 	}
 	r.mu.Lock()
@@ -148,6 +154,10 @@ func (r *runtime) startTurn(threadID, uuid, body string) error {
 // so an answer after that reports ErrNotPending.
 func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 	r.mu.Lock()
+	if r.stopping && harness.CarriesWork(answer) {
+		r.mu.Unlock()
+		return harness.ErrNotPending
+	}
 	if req, ok := r.requests[requestID]; ok {
 		delete(r.requests, requestID)
 		delete(r.byNative, nativeKey(req.id))
@@ -197,7 +207,7 @@ func (r *runtime) answerAsTurn(threadID, uuid, body string, stops int) error {
 	// built first: it reads the model and effort under the lock itself.
 	params := r.turnStart(threadID, uuid, body)
 	r.mu.Lock()
-	if r.stops != stops {
+	if r.stops != stops || r.stopping {
 		r.mu.Unlock()
 		return harness.ErrNotPending
 	}
@@ -311,6 +321,17 @@ func (r *runtime) Interrupt() error {
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
 	return r.conn.call(ctx, "turn/interrupt", &turnInterruptParams{ThreadID: threadID, TurnID: turnID}, nil)
+}
+
+// Stopping fences a stop before it is carried out: it latches, so no answer
+// that would let work go on is delivered after it, even one accepted before
+// the stop, and counts as a stop, which an answer starting a turn checks
+// under the same lock as it sends.
+func (r *runtime) Stopping() {
+	r.mu.Lock()
+	r.stops++
+	r.stopping = true
+	r.mu.Unlock()
 }
 
 // Close ends input; the app-server exits when it sees the end, and closing is

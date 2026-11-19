@@ -345,7 +345,7 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 		return harness.History{}, fmt.Errorf("reading history of '%s': %w: %s", nativeID, err, strings.TrimSpace(stderr.String()))
 	}
 	var evs []*model.Event
-	turn := &lastTurn{}
+	turn := &harness.TurnTail{}
 	reader := bufio.NewReader(bytes.NewReader(out))
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -361,11 +361,11 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 			for _, ev := range mapped {
 				ev.Origin = model.OriginNative
 			}
-			turn.see(raw, mapped, len(evs))
+			seeTurn(turn, raw, mapped, len(evs))
 			evs = append(evs, mapped...)
 		}
 		if errors.Is(err, io.EOF) {
-			return harness.History{Events: evs, Open: turn.open(evs)}, nil
+			return harness.History{Events: evs, Open: turn.Open(evs)}, nil
 		}
 		if err != nil {
 			return harness.History{}, err
@@ -373,30 +373,22 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 	}
 }
 
-// lastTurn follows a session read back for whether its last turn ended.
-// claude's history carries no turn end, but every assistant message carries
-// the model's stop_reason, and a turn's last one ends it: end_turn, or a
-// stop_sequence, max_tokens or refusal. a tool call (tool_use), a pause
-// (pause_turn), a tool's result or a prompt with no reply after it leaves the
-// turn open, as it is while the process is still working (the claude-rt1
-// fixture's 149 sessions, claude code 2.1.318 to 2.1.326: every assistant
-// message has one). a message with none is taken as ended, as before.
-type lastTurn struct {
-	from    int  // where the last turn begins in the events: its prompt, or after the turn before it ended
-	pending bool // the last message of the conversation leaves its turn open
-}
-
-// see takes one message read back, and the events it mapped to, which start
-// at index at. native events, claude's bookkeeping, neither begin a turn nor
-// end one. a turn can begin with no prompt, as when claude wakes for a
-// background job, so a turn's end moves the start past it too: an unfinished
-// wake opens only itself, never the turn that ended before it.
-func (t *lastTurn) see(raw map[string]any, mapped []*model.Event, at int) {
+// seeTurn feeds one message read back, and the events it mapped to, which
+// start at index at, to the turn tail (harness.TurnTail). claude's history
+// carries no turn end, but every assistant message carries the model's
+// stop_reason, and a turn's last one ends it: end_turn, or a stop_sequence,
+// max_tokens or refusal. a tool call (tool_use), a pause (pause_turn), a
+// tool's result or a prompt with no reply after it leaves the turn open (the
+// claude-rt1 fixture's 149 sessions, claude code 2.1.318 to 2.1.326: every
+// assistant message has one). a message with none is taken as ended, as
+// before. native events, claude's bookkeeping, are never fed.
+func seeTurn(t *harness.TurnTail, raw map[string]any, mapped []*model.Event, at int) {
 	spoken := false
 	for i, ev := range mapped {
 		switch ev.Kind {
 		case model.EventUser:
-			t.from, spoken = at+i, true
+			t.Prompt(at + i)
+			spoken = true
 		case model.EventAssistant, model.EventToolUse, model.EventToolResult:
 			spoken = true
 		}
@@ -404,32 +396,17 @@ func (t *lastTurn) see(raw map[string]any, mapped []*model.Event, at int) {
 	if !spoken {
 		return
 	}
-	switch raw["type"] {
-	case "assistant":
-		message, _ := raw["message"].(map[string]any)
-		stop, _ := message["stop_reason"].(string)
-		t.pending = stop == "tool_use" || stop == "pause_turn"
-		if !t.pending {
-			t.from = at + len(mapped)
-		}
+	if raw["type"] != "assistant" {
+		t.Working()
+		return
+	}
+	message, _ := raw["message"].(map[string]any)
+	switch stop, _ := message["stop_reason"].(string); stop {
+	case "tool_use", "pause_turn":
+		t.Working()
 	default:
-		t.pending = true
+		t.Ended(at + len(mapped))
 	}
-}
-
-// open names the events of a last turn with no end, from its prompt on, or
-// nothing when it ended.
-func (t *lastTurn) open(evs []*model.Event) map[string]bool {
-	open := make(map[string]bool)
-	if !t.pending {
-		return open
-	}
-	for _, ev := range evs[t.from:] {
-		if ev.NativeID != "" {
-			open[ev.NativeID] = true
-		}
-	}
-	return open
 }
 
 // shimModels is what the shim's models command prints.

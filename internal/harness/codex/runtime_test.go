@@ -454,6 +454,20 @@ func TestNoTurnStartsAfterAStopThatLandsBeforeIt(t *testing.T) {
 	}
 }
 
+// once a stop is fenced, an answer that reaches the adapter afterwards, even
+// one the service accepted before the stop, starts no turn: a question from a
+// completed turn is not answered as the next one.
+func TestNoAnswerStartsATurnAfterTheStopIsFenced(t *testing.T) {
+	r, _, w := testRuntime()
+	askQuestion(r)
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+	r.Stopping()
+	if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
+		t.Errorf("answer after the fence: %v", err)
+	}
+	w.quiet(t)
+}
+
 // a stop that lands while the answer's turn is being started interrupts that
 // turn as soon as it exists.
 func TestStopDuringAnswerTurnStartInterruptsIt(t *testing.T) {

@@ -222,6 +222,28 @@ func TestAnswerRejectedByShimIsNotPending(t *testing.T) {
 	}
 }
 
+// once a stop is fenced, an answer that would let work go on never reaches
+// the shim, even one accepted before the stop: the interrupt that follows
+// aborts the request. a denial still goes.
+func TestNoAnswerLetsWorkGoOnAfterTheStopIsFenced(t *testing.T) {
+	r, _, stdin := testRuntime()
+	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{}}`))
+	r.Stopping()
+	result := make(chan error, 1)
+	go func() { result <- r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}) }()
+	select {
+	case err := <-result:
+		if !errors.Is(err, harness.ErrNotPending) {
+			t.Errorf("allow after the fence: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("an allow after the fence went to the shim and waits on it")
+	}
+	if strings.Contains(stdin.String(), `"type":"answer"`) {
+		t.Errorf("the shim was sent %s", stdin.String())
+	}
+}
+
 func TestAnswerFailsWhenTheRuntimeEnds(t *testing.T) {
 	r, _, _ := testRuntime()
 	r.cmd = exec.Command("true")

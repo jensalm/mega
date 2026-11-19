@@ -60,6 +60,9 @@ type dialog struct {
 type runtime struct {
 	conn *conn
 	sink harness.Sink
+	// stopping latches a fenced stop: no answer that would let work go on
+	// is delivered after it (harness.CarriesWork).
+	stopping bool
 
 	// frames carries what pi sends, in order, from the connection's reader
 	// to work, which handles them one at a time and may ask pi for session
@@ -204,6 +207,11 @@ func (r *runtime) Prompt(_, text string) error {
 	defer cancel()
 	accepted := &struct{ Disposition string }{}
 	if err := r.conn.call(ctx, command, accepted); err != nil {
+		var refused *refusal
+		if errors.As(err, &refused) {
+			// pi answered no: no run started.
+			return fmt.Errorf("%w: %w", harness.ErrPromptRefused, err)
+		}
 		return err
 	}
 	switch accepted.Disposition {
@@ -225,6 +233,10 @@ func (r *runtime) Prompt(_, text string) error {
 func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 	r.mu.Lock()
 	d, ok := r.dialogs[requestID]
+	if ok && r.stopping && harness.CarriesWork(answer) {
+		r.mu.Unlock()
+		return harness.ErrNotPending
+	}
 	if !ok || (!d.deadline.IsZero() && !time.Now().Before(d.deadline)) {
 		// past its deadline, pi has settled it and reads no answer; its
 		// timer settles the record.
@@ -260,7 +272,7 @@ func responseFor(d *dialog, answer harness.Answer) (map[string]any, error) {
 	case "select":
 		value, ok := answer.Answers[d.title]
 		if !ok || !slices.Contains(d.options, value) {
-			return nil, fmt.Errorf("'%s' is not one of the choices pi offered", value)
+			return nil, fmt.Errorf("%w: '%s' is not one of the choices pi offered", harness.ErrInvalidAnswer, value)
 		}
 		response["value"] = value
 	case "confirm":
@@ -270,12 +282,12 @@ func responseFor(d *dialog, answer harness.Answer) (map[string]any, error) {
 		case confirmNo:
 			response["confirmed"] = false
 		default:
-			return nil, fmt.Errorf("a confirmation is answered %s or %s", confirmYes, confirmNo)
+			return nil, fmt.Errorf("%w: a confirmation is answered %s or %s", harness.ErrInvalidAnswer, confirmYes, confirmNo)
 		}
 	default:
 		value, ok := answer.Answers[formField]
 		if !ok {
-			return nil, errors.New("the answer holds no text")
+			return nil, fmt.Errorf("%w: the answer holds no text", harness.ErrInvalidAnswer)
 		}
 		response["value"] = value
 	}
@@ -359,6 +371,15 @@ func (r *runtime) Interrupt() error {
 // (pi 1.5.2), so a pi that has not exited is ended: a SIGTERM, a second,
 // which pi takes at once, then SIGKILL to its process group, each after a
 // bounded wait, sooner when a dialog is pending. the dialog is recorded as
+// Stopping fences a stop: from now on no answer to a dialog that would let
+// work go on reaches pi, even one accepted before the stop. a dismissal still
+// does, which is what lets an interrupt pi holds for a dialog go through.
+func (r *runtime) Stopping() {
+	r.mu.Lock()
+	r.stopping = true
+	r.mu.Unlock()
+}
+
 // never answered; the command it gated does not run.
 func (r *runtime) Close() error {
 	r.mu.Lock()

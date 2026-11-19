@@ -231,7 +231,7 @@ func (c *conn) dispatch(line []byte, h handler) {
 			if message == "" {
 				message = "pi refused the command"
 			}
-			ch <- reply{err: errors.New(message)}
+			ch <- reply{err: &refusal{message: message}}
 			return
 		}
 		data, _ := frame["data"].(map[string]any)
@@ -250,3 +250,11 @@ func logStderr(pid int, stderr io.Reader) {
 		}
 	}
 }
+
+// refusal is pi's own answer that a command failed: pi read it and said no,
+// which a timeout or a closed pipe is not.
+type refusal struct {
+	message string
+}
+
+func (e *refusal) Error() string { return e.message }

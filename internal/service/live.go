@@ -167,6 +167,10 @@ type incarnation struct {
 	// version is what the harness's --version printed just before the
 	// launch, used when its started report names none.
 	version string
+	// wrong latches a report of another session than the one bound: from
+	// then on nothing this runtime reports is recorded or offered, only its
+	// exit and its settlements.
+	wrong bool
 }
 
 // liveLocked returns the conversation's live state, opening its log on first
@@ -521,6 +525,12 @@ func (k *sink) current() bool {
 	return k.l.inc == k.inc && k.s.live[k.l.id] == k.l
 }
 
+// relays is whether what this runtime reports reaches the conversation: it is
+// current, and it has not reported another session than the one bound.
+func (k *sink) relays() bool {
+	return k.current() && !k.inc.wrong
+}
+
 // Event records what the runtime reported. a transition the browser sees (a
 // turn starting or ending, the runtime's facts) takes effect only once its
 // event is recorded, so a log that cannot confirm it leaves the last confirmed
@@ -529,7 +539,7 @@ func (k *sink) Event(ev *model.Event) {
 	s := k.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !k.current() {
+	if !k.relays() {
 		return
 	}
 	l := k.l
@@ -568,11 +578,7 @@ func (k *sink) Event(ev *model.Event) {
 			s.changed()
 		}
 	case model.EventTurnEnd:
-		l.turnActive, l.turnStartedAt = false, time.Time{}
-		l.turnAsked, l.turnRan = model.TurnSettings{}, nil
-		l.interrupting = false
-		s.endTurnLocked(l)
-		s.changed()
+		s.turnEndedLocked(l)
 	}
 	// agent output counts toward unread within a turn, once that turn ends;
 	// output the adapter marks as after its turn (a codex background command
@@ -592,6 +598,17 @@ func (k *sink) Event(ev *model.Event) {
 			l.turnOutput, l.turnOutputAt = ev.Seq, ev.At
 		}
 	}
+}
+
+// turnEndedLocked is what a recorded turn end does to memory, wherever it
+// came from: the turn is over, its settings and interrupt with it, and its
+// output is counted. callers hold s.mu and have recorded the turn_end.
+func (s *Service) turnEndedLocked(l *live) {
+	l.turnActive, l.turnStartedAt = false, time.Time{}
+	l.turnAsked, l.turnRan = model.TurnSettings{}, nil
+	l.interrupting = false
+	s.endTurnLocked(l)
+	s.changed()
 }
 
 // endTurnLocked makes the ended turn's newest agent output the conversation's
@@ -621,6 +638,7 @@ func (k *sink) started(ev *model.Event) {
 	}
 	bound := l.sessionOf(conv)
 	if ev.Facts != nil && ev.Facts.Session != "" && bound != "" && ev.Facts.Session != bound {
+		k.inc.wrong = true
 		refusal := &model.Event{
 			Status: model.StatusError,
 			Text:   fmt.Sprintf("the runtime reported session '%s', but this conversation is bound to '%s'; stopping it", ev.Facts.Session, bound),
@@ -676,7 +694,7 @@ func (k *sink) MCPServers(servers []model.MCPServer) {
 	s := k.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !k.current() {
+	if !k.relays() {
 		return
 	}
 	if k.l.mcpReported && slices.EqualFunc(k.l.mcp, servers, sameMCPServer) {
@@ -711,7 +729,7 @@ func (k *sink) Background(jobs []model.BackgroundJob) {
 	s := k.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !k.current() {
+	if !k.relays() {
 		return
 	}
 	k.l.background = slices.Clone(jobs)
@@ -722,7 +740,7 @@ func (k *sink) Delta(text string) {
 	s := k.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if k.current() {
+	if k.relays() {
 		s.publish(Update{ConversationID: k.l.id, Delta: text})
 	}
 }
@@ -736,7 +754,7 @@ func (k *sink) Request(kind string, payload any) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	req := &model.Request{ID: registry.NewID(), Kind: kind, Payload: payload}
-	if !k.current() {
+	if !k.relays() {
 		return req.ID
 	}
 	l := k.l
@@ -769,12 +787,9 @@ func (k *sink) Resolved(requestID, outcome string) {
 	if i < 0 {
 		return
 	}
-	if err := s.resolve(l, l.pending[i], outcome); err != nil {
+	if err := s.settleLocked(l, l.pending[i], outcome); err != nil {
 		dl.Errorf("%v", err)
-		return
 	}
-	l.takePending(requestID)
-	s.changed()
 }
 
 // Exited settles everything the runtime left: its pending requests are

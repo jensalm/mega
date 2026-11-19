@@ -183,18 +183,43 @@ func (h *Harness) Launch(spec harness.Spec, sink harness.Sink) (harness.Runtime,
 }
 
 // History reads the session's conversation from its file: the chain from the
-// last entry back to the root, as pi reopens it. pi's file carries no turn
-// status, so nothing is reported open.
+// last entry back to the root, as pi reopens it, and which of its events
+// belong to a last turn with no end.
 func (h *Harness) History(_ context.Context, place harness.Place, nativeID string) (harness.History, error) {
 	path, err := sessionFile(place.Env, place.Cwd, nativeID)
 	if err != nil {
 		return harness.History{}, err
 	}
-	evs, err := history(path)
+	history, err := historyOf(path, nativeID)
 	if err != nil {
 		return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, err)
 	}
-	return harness.History{Events: evs}, nil
+	return history, nil
+}
+
+// historyOf reads a session file's conversation, and which of its events
+// belong to a last turn with no end. with want, the file's own header must
+// name that session, or nothing is read: a file is found by its name, which
+// is no proof of what it holds.
+func historyOf(path, want string) (harness.History, error) {
+	if want != "" {
+		header, _, err := readSession(path)
+		if err != nil {
+			return harness.History{}, err
+		}
+		if header == nil || header.ID != want {
+			got := ""
+			if header != nil {
+				got = header.ID
+			}
+			return harness.History{}, fmt.Errorf("the session file '%s' holds session '%s', not '%s'", path, got, want)
+		}
+	}
+	evs, turn, err := historyTurns(path)
+	if err != nil {
+		return harness.History{}, err
+	}
+	return harness.History{Events: evs, Open: turn.Open(evs)}, nil
 }
 
 // Discover lists the sessions pi stored for the checkout. pi's protocol lists

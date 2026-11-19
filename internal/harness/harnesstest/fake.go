@@ -409,25 +409,28 @@ type Runtime struct {
 	Spec harness.Spec
 	sink harness.Sink
 
-	mu          sync.Mutex
-	nativeID    string
-	prompts     []Prompt
-	deliveries  []Delivery
-	interrupts  int
-	closed      bool
-	exited      bool
-	settled     bool // the sink has handled the exit
-	holdOnClose bool
-	holdStops   bool   // an interrupt settles nothing, as pi's with a dialog pending
-	onAnswer    func() // runs while an answer is in flight, before it is delivered
-	modes       []string
-	models      []string // "model/effort" for each model change accepted
-	deferred    bool
-	modeErr     error
-	onMode      func()
-	afterMode   func()
-	requests    map[string]string // service id -> native number
-	nextNative  int
+	mu           sync.Mutex
+	nativeID     string
+	prompts      []Prompt
+	deliveries   []Delivery
+	interrupts   int
+	closed       bool
+	exited       bool
+	settled      bool // the sink has handled the exit
+	holdOnClose  bool
+	holdStops    bool   // an interrupt settles nothing, as pi's with a dialog pending
+	fences       int    // stops fenced
+	rejectWith   error  // an answer refused without settling the request
+	refusePrompt error  // a prompt refused, no turn started
+	onAnswer     func() // runs while an answer is in flight, before it is delivered
+	modes        []string
+	models       []string // "model/effort" for each model change accepted
+	deferred     bool
+	modeErr      error
+	onMode       func()
+	afterMode    func()
+	requests     map[string]string // service id -> native number
+	nextNative   int
 }
 
 func (r *Runtime) NativeID() string { return r.nativeID }
@@ -437,6 +440,9 @@ func (r *Runtime) Prompt(uuid, text string) error {
 	defer r.mu.Unlock()
 	if r.exited {
 		return fmt.Errorf("runtime exited")
+	}
+	if r.refusePrompt != nil {
+		return r.refusePrompt
 	}
 	r.prompts = append(r.prompts, Prompt{UUID: uuid, Text: text})
 	return nil
@@ -454,6 +460,9 @@ func (r *Runtime) Answer(requestID string, answer harness.Answer) error {
 	native, ok := r.requests[requestID]
 	if !ok {
 		return harness.ErrNotPending
+	}
+	if r.rejectWith != nil {
+		return r.rejectWith
 	}
 	delete(r.requests, requestID)
 	r.deliveries = append(r.deliveries, Delivery{Native: native, Answer: answer})
@@ -574,6 +583,36 @@ func (r *Runtime) Close() error {
 		r.Exit(nil)
 	}
 	return nil
+}
+
+// Stopping counts a stop fenced.
+func (r *Runtime) Stopping() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fences++
+}
+
+// Fences counts the stops fenced.
+func (r *Runtime) Fences() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.fences
+}
+
+// RefusePrompts makes every prompt refused with err, as a harness refuses
+// one it will not start; nil accepts again.
+func (r *Runtime) RefusePrompts(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refusePrompt = err
+}
+
+// RejectAnswers makes every answer refused with err, the request left
+// pending, as a harness refuses an answer that does not fit; nil accepts again.
+func (r *Runtime) RejectAnswers(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rejectWith = err
 }
 
 // HoldInterrupts makes an interrupt settle none of the pending requests, as

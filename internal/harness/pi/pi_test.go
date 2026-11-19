@@ -439,6 +439,40 @@ func TestAReleaseThatCouldNotLookSaysSo(t *testing.T) {
 	}
 }
 
+// once a stop is fenced, an answer to a dialog that would let work go on is
+// refused, even one accepted before the stop, and never reaches pi; a
+// dismissal still does, which is what lets an interrupt pi holds go through.
+func TestNoAnswerLetsWorkGoOnAfterTheStopIsFenced(t *testing.T) {
+	h := New(Config{Binary: fake(t)})
+	p := place(t)
+	s := newSink()
+	rt, err := h.Launch(harness.Spec{Cwd: p.Cwd, Env: p.Env, Find: p.Find, Model: "fake/large", Effort: "low"}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Prompt("uuid", "ask"); err != nil {
+		t.Fatal(err)
+	}
+	s.until(t, "the dialog", func() bool { return len(s.ids) == 1 })
+	rt.Stopping()
+	if err := rt.Answer("svc-a", harness.Answer{Answers: map[string]string{"Approve bash command: sleep 1": "Allow"}}); !errors.Is(err, harness.ErrNotPending) {
+		t.Errorf("a chosen answer after the fence: %v", err)
+	}
+	if err := rt.Answer("svc-a", harness.Answer{Decision: harness.DecisionDismiss}); err != nil {
+		t.Errorf("a dismissal after the fence: %v", err)
+	}
+	s.until(t, "the turn", func() bool { return len(s.turns()) == 1 })
+	for _, ev := range s.events {
+		if ev.Kind == model.EventToolResult && ev.Text == "slept" {
+			t.Error("the gated command ran")
+		}
+	}
+	if err := rt.Close(); err != nil {
+		t.Fatal(err)
+	}
+	<-s.done
+}
+
 func TestDiscoverAndAMissingSession(t *testing.T) {
 	h := New(Config{Binary: fake(t)})
 	p := place(t)
@@ -557,6 +591,69 @@ func TestTheConfigurationIncludeList(t *testing.T) {
 // processes wrote at once. the conversation is the chain from the last
 // entry back, as pi reopens it; system messages yield nothing, and every
 // event carries the identity the live stream gives it.
+// a session read back whose last turn has no end says so, as the session of
+// a pi that was lost mid-turn does: cut from the recorded p1 and p4 session
+// at a tool's result, after a call pi made with stopReason toolUse. the turn
+// before it, ended with stop, is not open; the whole session is not.
+func TestHistorySaysWhenTheLastTurnHasNoEnd(t *testing.T) {
+	open, err := historyOf(filepath.Join("testdata", "open-turn.jsonl"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unfinished, finished []string
+	for _, ev := range open.Events {
+		switch {
+		case strings.HasPrefix(ev.NativeID, "26df6a94") || ev.NativeID == "e3e76658" || ev.NativeID == "1795b865":
+			unfinished = append(unfinished, ev.NativeID)
+		case strings.HasPrefix(ev.NativeID, "97782afa") || ev.NativeID == "d8a83bc4":
+			finished = append(finished, ev.NativeID)
+		}
+	}
+	if len(unfinished) == 0 || len(finished) == 0 {
+		t.Fatalf("events %+v", open.Events)
+	}
+	for _, id := range unfinished {
+		if !open.Open[id] {
+			t.Errorf("%s of the unfinished turn is not open: %v", id, open.Open)
+		}
+	}
+	for _, id := range finished {
+		if open.Open[id] {
+			t.Errorf("%s of the turn that ended is open", id)
+		}
+	}
+	closed, err := historyOf(filepath.Join("testdata", "p1-and-p4.jsonl"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed.Open) != 0 {
+		t.Errorf("a session that ends with stop has open events: %v", closed.Open)
+	}
+}
+
+// History reads only the session it was asked for: a file whose name ends
+// with the id but whose header names another session is refused, before
+// anything is imported.
+func TestHistoryChecksTheSessionsOwnID(t *testing.T) {
+	dir := t.TempDir()
+	recorded, err := os.ReadFile(filepath.Join("testdata", "p1-and-p4.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkout := t.TempDir()
+	env := append(os.Environ(), "PI_CODING_AGENT_SESSION_DIR="+dir)
+	if err := os.MkdirAll(checkoutDir(env, checkout), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(checkoutDir(env, checkout), "2026-11-19T00-00-00-000Z_not-this-one.jsonl"), recorded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Binary: "pi"})
+	if history, err := h.History(t.Context(), harness.Place{Cwd: checkout, Env: env, Find: env}, "not-this-one"); err == nil {
+		t.Errorf("a file holding another session was imported: %d events", len(history.Events))
+	}
+}
+
 func TestRecordedSessions(t *testing.T) {
 	evs, err := history(filepath.Join("testdata", "p1-and-p4.jsonl"))
 	if err != nil {

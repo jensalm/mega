@@ -301,9 +301,21 @@ func toolTitle(name string, args map[string]any) string {
 
 // history is a session's conversation as events, from its file.
 func history(path string) ([]*model.Event, error) {
+	evs, _, err := historyTurns(path)
+	return evs, err
+}
+
+// historyTurns reads a session file's conversation, as history does, and
+// follows its turns (harness.TurnTail). pi's file carries no turn status,
+// but every assistant message carries its stopReason: toolUse leaves the turn
+// open, as a tool's result and a prompt with no reply do; stop, length,
+// error and aborted end it, as does none at all (the pi-rt1 fixture's 43
+// sessions, pi 1.5.2: every assistant message has one).
+func historyTurns(path string) ([]*model.Event, *harness.TurnTail, error) {
+	turn := &harness.TurnTail{}
 	_, entries, err := readSession(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var evs []*model.Event
 	for _, e := range conversation(entries) {
@@ -316,9 +328,22 @@ func history(path string) ([]*model.Event, error) {
 		if !ok {
 			continue
 		}
-		evs = append(evs, mapMessage(m, e.Message, e.ID)...)
+		mapped := mapMessage(m, e.Message, e.ID)
+		switch m.Role {
+		case "user":
+			turn.Prompt(len(evs))
+		case "assistant":
+			if m.StopReason == "toolUse" {
+				turn.Working()
+			} else {
+				turn.Ended(len(evs) + len(mapped))
+			}
+		case "toolResult":
+			turn.Working()
+		}
+		evs = append(evs, mapped...)
 	}
-	return evs, nil
+	return evs, turn, nil
 }
 
 // discover lists the sessions stored for a checkout, newest first, with the

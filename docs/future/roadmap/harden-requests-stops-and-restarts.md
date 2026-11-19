@@ -56,3 +56,18 @@ Listed once by the implementer of `loose-ends-around-stops-and-restarts`, and le
 ## also for terminus
 
 A card in terminus's own roadmap proposes a baseline of known findings, so a carded finding stops coming back as new. It was written before Michael's answer above. A clean tree needs no baseline, so it matters only for a project that chooses not to go to clean.
+
+## after two passes, 2026-11-19
+
+The seed list and two full passes are worked: five of the six seeds and ten findings fixed, each with a test seen to fail first. Two changes of shape came out of it, as hoped: every move of a request out of the pending list goes through one function that records first, and every runtime has one stop fence, latched in all three adapters, that refuses anything but Deny or Dismiss. The fence came back once because its first version was too narrow, which is the one finding that recurred.
+
+The count went five, five, five. The implementer's reading, which the planning agent shares: these are not the same findings returning. Each pass reads a different part of a large tree, and the three areas still hold more. It should fall as they are worked through.
+
+Decisions, as the planning agent recommended them to Michael:
+
+- **The shutdown banner.** Fix it without changing what an ordinary shutdown says: the service tells the page when a shutdown has finished, as its last word before it closes. A page that heard it says mega was shut down. A page that asked and then lost contact without hearing it says a shutdown was asked for and contact was lost.
+- **A request whose settlement could not be recorded** stays on the page as last confirmed, unmarked, with further answers refused. The canon's `single-authority` gained a line saying so, so two reviews do not disagree about it again.
+- **Go on,** reporting after each pass.
+
+One thing noticed on the way, not yet a finding: when a write has failed and the service refuses further writes, nothing on the page says so until the operator tries something. A sign that mega can no longer record would say it once, for everything.
+

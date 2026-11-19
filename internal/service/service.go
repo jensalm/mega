@@ -67,6 +67,10 @@ type Workspace struct {
 // Service owns the registry, the event logs, the runtimes and their pending
 // requests, and fans confirmed changes out to subscribers.
 type Service struct {
+	// failUpdate, when a test sets it, runs before each registry write and
+	// fails it with what it returns.
+	failUpdate func() error
+
 	mu          sync.Mutex
 	reg         *registry.Registry
 	isUntrusted UntrustedChecker
@@ -334,6 +338,11 @@ func (s *Service) Subscribe() *Subscription {
 // as unavailable rather than as an internal fault, since it has already logged
 // the condition once. nothing was confirmed, so nothing is announced.
 func (s *Service) update(fn func(*registry.Document) error) error {
+	if s.failUpdate != nil {
+		if err := s.failUpdate(); err != nil {
+			return err
+		}
+	}
 	err := s.reg.Update(fn)
 	if errors.Is(err, registry.ErrUncertain) {
 		return newError(CodeUnavailable, err.Error())

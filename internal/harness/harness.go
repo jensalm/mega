@@ -19,6 +19,24 @@ import (
 // ErrNotPending reports an answer to a request the runtime no longer waits on.
 var ErrNotPending = errors.New("request is not pending")
 
+// CarriesWork is whether an answer would let work go on: anything but a
+// denial or a dismissal, which only settle a request toward a stop. once a
+// stop has begun, the service refuses such an answer, and once it is fenced
+// (Runtime.Stopping) no adapter delivers one, even one accepted before.
+func CarriesWork(answer Answer) bool {
+	return answer.Decision != DecisionDeny && answer.Decision != DecisionDismiss
+}
+
+// ErrPromptRefused reports a prompt the harness answered with a refusal: no
+// turn started. a prompt whose fate is unknown, such as one that timed out,
+// is not this.
+var ErrPromptRefused = errors.New("the harness refused the prompt; no turn started")
+
+// ErrInvalidAnswer reports an answer the harness refused without settling the
+// request, such as a choice it did not offer: the request is still pending,
+// and a corrected answer or a dismissal still reaches it.
+var ErrInvalidAnswer = errors.New("the answer does not fit the request")
+
 // ErrNotStarted marks a Launch failure the adapter can prove came before any
 // native session could exist. adapters wrap it at each such failure site, never
 // as a blanket over Launch: an error without it means the session is unknown,
@@ -392,6 +410,12 @@ type Runtime interface {
 	// what differs from what the runtime last applied. deferred is true when
 	// the harness takes the change with the next prompt rather than now.
 	SetModel(model, effort string) (deferred bool, err error)
+
+	// Stopping tells the runtime a stop has begun, before the interrupt or the
+	// close that carries it out: from now on nothing it is asked to deliver
+	// starts work. it returns at once, never waiting on the harness, and is
+	// the one fence every stop puts up first.
+	Stopping()
 
 	// Close ends input. the runtime exits once the harness is idle.
 	Close() error

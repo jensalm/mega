@@ -51,7 +51,7 @@ func fakeAppServer(mode string) {
 			fmt.Printf(`{"id":%v,"result":{"userAgent":"mega/0.166.0 (fake)","codexHome":"/x","platformFamily":"unix","platformOs":"linux"}}`+"\n", frame["id"])
 		case "thread/read":
 			fmt.Printf(`{"id":%v,"result":{"thread":{"id":"t-1","turns":[`+
-				`{"id":"turn-1","status":"completed","items":[{"type":"agentMessage","id":"a-1","text":"done"}]},`+
+				`{"id":"turn-1","status":"completed","items":[{"type":"agentMessage","id":"a-1","text":"done"},{"type":"commandExecution","id":"c-1","command":"sleep 99","status":"inProgress"}]},`+
 				`{"id":"turn-2","status":"inProgress","items":[{"type":"userMessage","id":"u-2","content":[{"type":"text","text":"next"}]},{"type":"agentMessage","id":"a-2","text":"going"}]}]}}}`+"\n", frame["id"])
 		case "model/list":
 			fmt.Printf(`{"id":%v,"result":{"data":[`+
@@ -138,11 +138,27 @@ func TestMissingAppServerIsNotStarted(t *testing.T) {
 	}
 }
 
+// a thread read back must be the thread asked for: another is refused before
+// anything of it is mapped.
+func TestHistoryChecksTheThreadsOwnID(t *testing.T) {
+	h := fakeHarness(t, "history")
+	if history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "t-2"); err == nil {
+		t.Errorf("thread t-1 was read back as t-2: %d events", len(history.Events))
+	}
+}
+
 func TestHistoryReportsItemsOfATurnInProgressAsOpen(t *testing.T) {
 	h := fakeHarness(t, "history")
 	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "t-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// a command still running, in a turn that completed, is not imported:
+	// only its completion produces a result, under the id it will carry.
+	for _, ev := range history.Events {
+		if strings.HasPrefix(ev.NativeID, "c-1") {
+			t.Errorf("a running command was imported as %s %q", ev.Kind, ev.Text)
+		}
 	}
 	if len(history.Events) != 3 {
 		t.Fatalf("events = %d", len(history.Events))

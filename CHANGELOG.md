@@ -8,18 +8,17 @@ CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470,
 - **The page's per-browser settings,** such as the side panel's width and which projects are folded, start fresh once, because a browser keeps them per port.
 - **A new mega started while an old one still serves 8470** on the same data directory does not start a second one beside it. It is refused by the data directory's lock, which names the running mega at 8470, and `mega daemon` opens that one's page instead.
 
+FIX: **A refused prompt no longer leaves a conversation working.** (2026-11-19) When Codex or pi refuses a prompt outright, the turn mega opened for it now ends, saying why, and the next prompt is taken. A runtime that turns out to be on another session than its conversation's no longer adds anything to that conversation before it is stopped, and a Codex command still running is no longer imported as a failed result.
+
+FIX: **A wrong answer to a pi dialog no longer removes the dialog.** (2026-11-19) An answer pi refuses, such as a choice it did not offer, is now refused with its reason and the dialog stays, to be answered properly or dismissed. A request mega could not record as settled stays on the page as it was last recorded, and an answer to it is refused.
+
 FIX: **An answer no longer lets work go on after you stop a turn.** (2026-11-19) Once you have pressed Interrupt or Release, Allow, Allow for the session, and an answer to a question, pi's dialogs included, are held on the card and refused by mega, saying the turn is stopping. Deny and Dismiss still work, so an interrupt pi holds for a dialog still ends when you dismiss it. Codex can no longer start a turn from an answer just after a stop.
 
 FIX: **A request stays on the page until its answer is recorded.** (2026-11-19) An answered request used to leave the page before mega had recorded the answer, so a failed record hid a request the agent was still waiting on. It now leaves once the answer is recorded, a moment later than before, and a second answer meanwhile is refused.
 
-FIX: **What a conversation counts as unread after something goes wrong.** (2026-11-19)
-- **Output from a runtime that died mid-turn** is now counted when it exits, instead of being counted by a later turn.
-- **After mega restarts uncleanly,** resuming counts only what the lost runtime produced and what the resume brings in; history from an earlier adoption stays read.
-- **A Claude turn still unfinished** in the session read back is no longer counted as finished.
+FIX: **What a conversation counts as unread after something goes wrong.** (2026-11-19) Output from a runtime that died mid-turn is now counted when it exits, instead of by a later turn. After mega restarts uncleanly, resuming counts only what the lost runtime produced and what the resume brings in, so history from an earlier adoption stays read, and a Claude or pi turn still unfinished in the session read back is no longer counted as finished.
 
-FIX: **After a reconnect or a restart, the page waits to say what it knows.** (2026-11-19)
-- **"Live" waits** until no further workspace read is queued.
-- **The shutdown banner** no longer reports a shutdown from before a restart as under way until the restarted mega has confirmed it.
+FIX: **After a reconnect or a restart, the page waits to say what it knows.** (2026-11-19) "Live" waits until no further workspace read is queued, and the shutdown banner no longer reports a shutdown from before a restart as under way until the restarted mega has confirmed it.
 
 FIX: **Switching the model no longer adds a prompt you did not write.** (2026-11-19) Claude Code writes the `/model` command a switch runs into its transcript and never sends it live. On the next resume, mega imported it into the history as a prompt from outside mega. Claude's records of local slash commands and their output are now kept with its own events, hidden unless you show native events.
 
@@ -57,7 +56,7 @@ CHANGE: **mega no longer looks for a roundhouse workspace at start-up.** (2026-1
 
 FEATURE: **The side panel marks where you left off in each project.** (2026-11-17) In each project, the conversation you last sent a prompt to carries a small muted arrow after its name, pointing at it, in the side panel and on the project's page. Pointing at it says when. A new prompt moves it. Nothing an agent does moves it, and nor does answering a request, starting a runtime or changing a mode. It is not attention: it raises nothing, counts nothing and reorders nothing, and the rail does not show it. It survives a restart, and a conversation you already had shows it from its last prompt through mega.
 
-CHANGE: **mega builds on macOS.** (2026-11-17) Two Linux-only names kept it from compiling on darwin: the inode change time `Stat_t.Ctim`, which darwin spells `Ctimespec`, and the terminal-attributes request `unix.TCGETS`, which darwin spells `TIOCGETA`. Each now sits behind a small per-OS file (`ctime_linux.go`, `ctime_darwin.go`, `termios_linux.go`, `termios_darwin.go`), so Linux behaves as before.
+CHANGE: **mega builds on macOS.** (2026-11-17) It now compiles on macOS, where two Linux-only system names kept it from building. Linux behaves as before.
 
 CHANGE: **The README is written for someone trying mega for the first time.** (2026-11-16) It opens with what mega is and a picture of a workspace. It then walks from what you need to a first conversation:
 - installing and logging in to each harness, by its vendor's own instructions;
