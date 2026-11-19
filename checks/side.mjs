@@ -130,7 +130,7 @@ await box.click()
 await box.fill('a draft')
 await box.press('Control+Slash')
 await until('Ctrl+/ from the reply box', async () => (await heading()) === 'unread')
-check((await page.locator('.needs-you .shortcut').textContent()) === 'Ctrl+/' && (await page.locator('.needs-you .shortcut').getAttribute('title')) === 'Next waiting conversation: Ctrl+/ anywhere', 'Ctrl+/ works from the reply box, and the hint reads "Ctrl+/"')
+check((await page.locator('.needs-you .shortcut').textContent()) === 'Ctrl+/' && (await page.locator('.needs-you .shortcut').getAttribute('title')) === 'Next waiting conversation: Ctrl+/, anywhere but in a dialog', 'Ctrl+/ works from the reply box, and the hint reads "Ctrl+/"')
 
 // Ctrl+' shows and hides the side panel, from anywhere, the reply box too.
 const rail = page.locator('nav.rail')

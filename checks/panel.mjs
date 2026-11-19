@@ -4,11 +4,13 @@
 //
 // rebuilt from what the journals recorded of the lost panel, panelscroll,
 // start, idle-mode and models scripts and from docs/current. what it checks:
-// the reply box resting at one line and opening to its height on focus, the
-// line above the panel staying put as it opens and closes and a view at the
-// bottom staying there; a control in the bar
-// keeping it open and a press outside closing it; a draft kept across a switch
-// of conversation; Ctrl+Enter sending, closing and emptying the box and going
+// the reply box resting at one line with the cursor in it when the page
+// loads, its title naming Ctrl+Space, focus alone leaving it at one line and
+// the first character opening it to its height, the line above the panel
+// staying put as it opens and closes and a view at the bottom staying there;
+// a draft opening it on focus; a control in the bar keeping it open and a
+// press outside closing it; a draft kept across a switch of conversation,
+// the box open on return with the cursor at its end; Ctrl+Enter sending, closing and emptying the box and going
 // to the end, following the reply; a refused send keeping the box open,
 // focused and with its draft, and saying why; Send and Start disabled with the
 // reason while a shutdown is armed or the checkout is missing, the shutdown's
@@ -34,6 +36,15 @@
 // absolute path for codex and pi; and @~/Screenshots/, the second named
 // directory, looked in directly and listing its own files; saved as
 // shots/path-search-{outside,second}.png.
+// and the focus: the cursor in the reply box, at one line, after a pick in
+// the side panel or the needs-you list, Ctrl+/, launching and adopting;
+// never with a dialog open, nor from a field being typed in; Ctrl+Space from
+// the history and the side panel, and nothing with a dialog open or the
+// cursor already there; Escape leaving the box for the history, whose keys
+// then scroll, and closing the path list first; Page Up and Page Down
+// scrolling the history from an empty box and ending following, and the
+// box's own with a draft; and the allow keys from a box the switch focused
+// and from the history.
 import { mkdirSync, renameSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { suite } from './lib/mega.mjs'
@@ -41,7 +52,7 @@ import { suite } from './lib/mega.mjs'
 // ~/Sandbox and ~/Screenshots, in the suite's scratch HOME, are named beyond
 // the checkout for the @ search, in that order.
 const t = await suite('panel', { searchDirs: ['~/Sandbox', '~/Screenshots'] })
-const { url, check, until, api, convOf } = t
+const { url, check, must, until, api, convOf } = t
 
 const P = await t.register('panel', t.checkout('panel'))
 const C = (await t.launch(P.id, 'claude', 'burst 40')).id
@@ -113,8 +124,12 @@ const wheel = async (dy) => {
     return still
   })
 }
+const focused = () => box.evaluate((b) => b === document.activeElement)
+await until('the cursor in the reply box on loading the page', focused)
 const resting = await height()
-check(!(await expanded()) && resting >= 30 && resting <= 60, `the box rests at one line: ${resting}px`)
+check(!(await expanded()) && resting >= 30 && resting <= 60, `loading the page on a conversation puts the cursor in its reply box, which rests at one line: ${resting}px`)
+const boxTitle = (await box.getAttribute('title')) ?? ''
+check(boxTitle.includes('Ctrl+Space') && (await box.getAttribute('aria-keyshortcuts')) === 'Control+Space', `the reply box's title names Ctrl+Space: "${boxTitle}"`)
 await until('the history taller than the view', async () => (await scroller.evaluate((m) => m.scrollHeight - m.clientHeight)) > 600)
 await scroller.evaluate((m) => {
   m.scrollTop = m.scrollHeight
@@ -123,25 +138,38 @@ await wheel(-300)
 const anchor = await lineAbove()
 const gapBefore = await gapOf(anchor.seq)
 await box.click()
+await settled()
+check((await focused()) && !(await expanded()) && (await height()) === resting && Math.abs((await gapOf(anchor.seq)) - gapBefore) <= 1, 'focus alone leaves the empty box at one line, and the history where it was')
+await page.keyboard.type('a')
 await until('the box open', expanded)
 await until('the box at its height', async () => (await height()) === 120)
-check(true, 'focus opens it to its height: 120px')
+check(true, 'the first character opens it to its height: 120px')
 const risen = anchor.top - (await lineAbove()).top
 const gapOpen = await gapOf(anchor.seq)
 check(risen > 60 && Math.abs(gapOpen - gapBefore) <= 1, `opening keeps the line above the panel where it was: ${gapBefore.toFixed(1)}px from the edge, then ${gapOpen.toFixed(1)}px, as the edge rose ${Math.round(risen)}px`)
 await outside()
 await until('the box shut', async () => !(await expanded()) && (await height()) === resting)
 check(Math.abs((await gapOf(anchor.seq)) - gapBefore) <= 1, 'and closing returns it')
+// focus on a box holding a draft opens it.
+await box.click()
+await until('the box open on its draft', async () => (await expanded()) && (await height()) === 120)
+check((await box.inputValue()) === 'a', 'focus on a box holding a draft opens it')
+await box.fill('')
+await outside()
+await until('the box shut and empty', async () => !(await expanded()) && (await box.inputValue()) === '')
 await scroller.evaluate((m) => {
   m.scrollTop = m.scrollHeight
 })
 await until('at the bottom', async () => (await fromBottom()) <= 1)
 await box.click()
+await settled()
+check(!(await expanded()) && (await fromBottom()) <= 1, 'at the bottom, focus alone opens nothing either')
+await page.keyboard.type('b')
 await until('the box open at the bottom', async () => (await expanded()) && (await height()) === 120)
 const openBottom = await fromBottom()
 await outside()
 await until('the box shut at the bottom', async () => !(await expanded()) && (await height()) === resting)
-check(openBottom <= 1 && (await fromBottom()) <= 1, `a view at the bottom stays there through opening and closing: ${Math.round(openBottom)}px, then ${Math.round(await fromBottom())}px`)
+check(openBottom <= 1 && (await fromBottom()) <= 1, `a view at the bottom stays there through opening at the first character and closing: ${Math.round(openBottom)}px, then ${Math.round(await fromBottom())}px`)
 await box.click()
 await until('the box open again', expanded)
 
@@ -157,9 +185,14 @@ check((await page.getByRole('menuitem', { name: 'Release' }).count()) === 0 && (
 await box.fill('a draft kept across a switch')
 await go(D)
 await until('D shown', async () => (await page.locator('.conversation-head h1').textContent()) !== '' && (await box.inputValue()) === '')
+await until('the cursor in D’s reply box', focused)
+await settled()
+check(!(await expanded()) && (await height()) === resting, 'a switch puts the cursor in the reply box, at one line')
 await go(C)
 await until('C shown with its draft', async () => (await box.inputValue()) === 'a draft kept across a switch')
-check(true, 'a draft is kept across a switch')
+await until('C’s box open on its draft', async () => (await focused()) && (await expanded()))
+const caret = await box.evaluate((b) => [b.selectionStart, b.value.length])
+check(caret[0] === caret[1], `a draft is kept across a switch, and on return the box is open with the cursor at its end: ${caret[0]} of ${caret[1]}`)
 
 // Ctrl+Enter sends, closes and empties the box, and goes to the end,
 // following the reply.
@@ -314,9 +347,11 @@ const leftmost = (mark) =>
 check((await claudeMark.isVisible()) && (await claudeMark.getAttribute('title')) === 'Claude Code' && (await leftmost(claudeMark)), 'a claude conversation shows the Claude Code mark on the bar, by name, leftmost, with the box collapsed')
 await barShot('bar-claude-collapsed')
 await box.click()
+await page.keyboard.type('x')
 await until('the box open for the mark', expanded)
 check(await claudeMark.isVisible(), 'and with the box open')
 await barShot('bar-claude-open')
+await box.fill('')
 await outside()
 await until('the box shut for the mark', async () => !(await expanded()))
 
@@ -359,9 +394,11 @@ const codexMark = bar.getByRole('img', { name: 'Codex' })
 check((await codexMark.isVisible()) && (await codexMark.getAttribute('title')) === 'Codex' && (await leftmost(codexMark)) && (await bar.getByRole('img', { name: 'Claude Code' }).count()) === 0, 'a codex conversation shows the Codex mark on the bar, by name, leftmost, with the box collapsed')
 await barShot('bar-codex-collapsed')
 await box.click()
+await page.keyboard.type('x')
 await until('the codex box open', expanded)
 check(await codexMark.isVisible(), 'and with the box open')
 await barShot('bar-codex-open')
+await box.fill('')
 await outside()
 await pickers.nth(0).selectOption('fake-small')
 await pickers.nth(1).selectOption('low')
@@ -453,10 +490,13 @@ for (const [id, label, name] of [
   const mark = darkBar.getByRole('img', { name: label })
   await mark.waitFor()
   await darkBar.screenshot({ path: `${t.dir}/shots/bar-${name}-collapsed-dark.png` })
-  await dark.getByRole('textbox', { name: 'Reply' }).click()
+  const darkBox = dark.getByRole('textbox', { name: 'Reply' })
+  await darkBox.click()
+  await dark.keyboard.type('x')
   await until(`the ${name} box open in the dark`, async () => (await dark.locator('.panel-cluster.expanded').count()) === 1)
   check(await mark.isVisible(), `in the dark theme, the ${label} mark shows, collapsed and open`)
   await darkBar.screenshot({ path: `${t.dir}/shots/bar-${name}-open-dark.png` })
+  await darkBox.fill('')
   await dark.locator('.conversation-head h1').click()
 }
 await dark.close()
@@ -569,6 +609,7 @@ await scroller.evaluate((m) => {
 })
 await until('back at the bottom', async () => (await fromBottom()) <= 1)
 await box.click()
+await box.fill('a')
 await until('the box open', expanded)
 const opened = await height()
 await box.fill(Array.from({ length: 14 }, (_, i) => `line ${i + 1} of a long draft`).join('\n'))
@@ -643,6 +684,217 @@ check(
   Math.abs(kept - put.top) <= 0.5 && (await fromBottom()) > 32 && (await page.locator('.newer button').isVisible()),
   `a move up with no input event during a streaming reply keeps the view where it was put: row ${put.seq} at ${put.top.toFixed(1)}, then ${kept.toFixed(1)}; ${Math.round(await fromBottom())}px from the bottom`,
 )
+
+// ---- the focus and the keys that move it ----
+// opening a conversation, however it is opened, puts the cursor in its reply
+// box, at one line: picked in the side panel or the needs-you list, by
+// Ctrl+/, launched, adopted, or the page loaded on it (above). never while a
+// dialog is open, and never from a field being typed in. Ctrl+Space puts the
+// cursor there from anywhere; Escape leaves it for the history, whose keys
+// then scroll; Page Up and Page Down read the history from an empty box.
+const heading = () => page.locator('.conversation-head h1').textContent()
+const atRest = async (what) => {
+  await until(`the cursor in the reply box after ${what}`, focused)
+  await settled()
+  return !(await expanded()) && (await height()) === resting
+}
+const W = (await t.launch(P.id, 'claude', 'ask', { name: 'waiter' })).id
+await until('waiter asks', async () => (await convOf(W)).pending.length === 1)
+await go(H)
+await until('H shown again', async () => (await heading()) === 'dock')
+await outside()
+const inProject = (name) => page.locator('.tree-children .tree-item', { has: page.locator('.tree-label', { hasText: new RegExp(`^${name}$`) }) })
+await inProject('waiter').click()
+await until('waiter shown from the side panel', async () => (await heading()) === 'waiter')
+check(await atRest('the side panel'), 'picking a conversation in the side panel puts the cursor in its reply box, at one line')
+await go(H)
+await until('H shown for the needs-you list', async () => (await heading()) === 'dock')
+await outside()
+await page.locator('.needs-you .tree-item', { hasText: 'waiter' }).click()
+await until('waiter shown from the needs-you list', async () => (await heading()) === 'waiter')
+check(await atRest('the needs-you list'), 'picking it in the needs-you list does the same')
+await go(H)
+await until('H shown for Ctrl+/', async () => (await heading()) === 'dock')
+await outside()
+await page.keyboard.press('Control+Slash')
+await until('Ctrl+/ moved the selection', async () => (await heading()) !== 'dock')
+check(await atRest('Ctrl+/'), `Ctrl+/ does the same, on "${await heading()}"`)
+// launching, from the project page's dialog.
+await page.evaluate((p) => {
+  location.hash = `#/p/${p}`
+}, P.id)
+await page.locator('.section-actions button[aria-label="New conversation"]').click()
+const launchDialog = page.locator('dialog[open]')
+await launchDialog.waitFor()
+await launchDialog.getByRole('textbox', { name: 'Opening prompt' }).fill('launched for the focus')
+await launchDialog.getByRole('button', { name: 'Launch' }).click()
+await until('the launched conversation shown', async () => (await heading()) === 'launched for the focus')
+check(await atRest('launching'), 'launching puts the cursor in the new conversation’s reply box')
+const launchedForFocus = (await t.workspace()).conversations.find((c) => c.name === 'launched for the focus').id
+await t.idle(launchedForFocus)
+// adopting: a session left by a conversation launched, released and removed.
+const left = (await t.launch(P.id, 'claude', 'a session to adopt for the focus')).id
+await t.idle(left)
+await api('POST', `/api/conversations/${left}/release`)
+await until('the session to adopt released', async () => (await convOf(left)).state === 'none')
+must((await api('DELETE', `/api/conversations/${left}`)).status === 204, 'the conversation holding the session to adopt is removed')
+await page.evaluate((p) => {
+  location.hash = `#/p/${p}`
+}, P.id)
+await page.getByRole('button', { name: /Adopt a session/ }).click()
+const adoptDialog = page.locator('dialog[open].adopt-dialog')
+await until('the session to adopt listed', async () => (await adoptDialog.locator('label.session-row', { hasText: 'a session to adopt for the focus' }).count()) === 1)
+await adoptDialog.locator('label.session-row', { hasText: 'a session to adopt for the focus' }).click()
+await adoptDialog.getByRole('textbox', { name: 'Name' }).fill('adopted for the focus')
+await adoptDialog.getByRole('button', { name: 'Adopt' }).click()
+await until('the adopted conversation shown', async () => (await heading()) === 'adopted for the focus')
+check(await atRest('adopting'), 'adopting puts the cursor in the adopted conversation’s reply box')
+
+// never while a dialog is open. Ctrl+/ does nothing there, so nothing is
+// opened, and marked read, behind it; a switch by the address, the one way
+// left, leaves the focus in the dialog; and so does Ctrl+Space.
+const inDialog = () => page.evaluate(() => document.activeElement?.closest('dialog[open]') !== null)
+await go(H)
+await until('H shown for the dialog', async () => (await heading()) === 'dock')
+must((await t.workspace()).needs_you.length > 0, 'something waits, for Ctrl+/ to move to')
+await page.locator('.side-foot .version-label').click()
+await page.locator('dialog[open]').waitFor()
+await page.keyboard.press('Control+Slash')
+await page.waitForTimeout(800)
+check((await heading()) === 'dock' && page.url().endsWith(`#/c/${H}`) && (await inDialog()), 'with a dialog open, Ctrl+/ does nothing: the selection and the focus stay put')
+await go(C)
+await until('a switch behind the dialog', async () => (await heading()) !== 'dock')
+await settled()
+check(await inDialog(), `a switch by the address behind the dialog (to "${await heading()}") leaves the focus in the dialog`)
+await page.keyboard.press('Control+Space')
+await settled()
+check(await inDialog(), 'and Ctrl+Space does nothing while a dialog is open')
+await page.keyboard.press('Escape')
+await until('the dialog closed', async () => (await page.locator('dialog[open]').count()) === 0)
+// never from a field being typed in: one the check adds to the page, outside
+// mega's own, stands in for any.
+await page.evaluate(() => {
+  const field = document.createElement('input')
+  field.id = 'check-field'
+  field.setAttribute('aria-label', 'a field the check adds')
+  document.body.append(field)
+})
+await page.locator('#check-field').fill('typing')
+const from = await heading()
+await go(from === 'dock' ? C : H)
+await until('a switch while typing', async () => (await heading()) !== from)
+await settled()
+check(await page.evaluate(() => document.activeElement?.id === 'check-field'), 'a switch never takes the focus from a field being typed in')
+await page.evaluate(() => document.getElementById('check-field').remove())
+
+// Ctrl+Space from the history and from the side panel; with the cursor
+// already in the box it does nothing, the caret where it was.
+await go(H)
+await until('H shown for Ctrl+Space', async () => (await heading()) === 'dock')
+await outside()
+check(await page.evaluate(() => document.activeElement === document.querySelector('.main')), 'a press in the history gives it the focus')
+await page.keyboard.press('Control+Space')
+await until('Ctrl+Space from the history', focused)
+check(!(await expanded()), 'Ctrl+Space from the history puts the cursor in the reply box, at one line')
+await inProject('waiter').focus()
+await page.keyboard.press('Control+Space')
+await until('Ctrl+Space from the side panel', focused)
+check((await heading()) === 'dock', 'Ctrl+Space from the side panel does the same, and switches nothing')
+await box.fill('abc')
+await box.evaluate((b) => b.setSelectionRange(1, 1))
+await page.keyboard.press('Control+Space')
+await settled()
+check((await box.inputValue()) === 'abc' && (await box.evaluate((b) => b.selectionStart)) === 1, 'with the cursor already there, Ctrl+Space does nothing: the draft and caret as they were')
+
+// Escape leaves the box for the history, its draft kept, and the keys then
+// scroll the history; with the path list open, it closes that first.
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('H at the bottom for Escape', async () => (await fromBottom()) <= 1)
+await page.keyboard.press('Escape')
+await until('Escape left the box', async () => !(await focused()))
+check(
+  (await page.evaluate(() => document.activeElement === document.querySelector('.main'))) && !(await expanded()) && (await box.inputValue()) === 'abc',
+  'Escape leaves the box for the history: the box closes, its draft kept',
+)
+const beforeKey = await scroller.evaluate((m) => m.scrollTop)
+await page.keyboard.press('PageUp')
+await until('the history scrolled by its own key', async () => (await scroller.evaluate((m) => m.scrollTop)) < beforeKey)
+check(true, 'and the keys then scroll the history')
+await box.click()
+await box.fill('look @')
+const pathList = page.locator('.path-list')
+await until('the path list open', async () => await pathList.isVisible())
+await page.keyboard.press('Escape')
+await until('the path list closed', async () => !(await pathList.isVisible()))
+check(await focused(), 'with the path list open, Escape closes the list first, the cursor still in the box')
+await page.keyboard.press('Escape')
+await until('then leaves', async () => !(await focused()))
+check(true, 'and a second Escape leaves the box')
+await box.fill('')
+await outside()
+
+// Page Up and Page Down read the history from an empty box, and that scroll
+// is the reader's own: it ends following, so a reply arriving does not move
+// the view. with a draft they are the box's.
+await scroller.evaluate((m) => {
+  m.scrollTop = m.scrollHeight
+})
+await until('H at the bottom for the page keys', async () => (await fromBottom()) <= 1)
+await page.keyboard.press('Control+Space')
+await until('the cursor back for the page keys', focused)
+const bottomTop = await scroller.evaluate((m) => m.scrollTop)
+await page.keyboard.press('PageUp')
+await until('Page Up scrolled the history', async () => (await scroller.evaluate((m) => m.scrollTop)) < bottomTop - 100)
+await settled()
+const pagedTo = await firstInView()
+const pagedReplies = (await edges()).replies
+check((await api('POST', `/api/conversations/${H}/prompt`, { text: 'drip 4 150' })).status === 202, 'paged up from an empty box, a reply is asked for')
+await until('the paged-up reply landed', async () => (await edges()).replies >= pagedReplies + 4 && !(await convOf(H)).turn_active, 30000)
+const pagedStayed = await topOf(pagedTo.seq)
+check(
+  (await focused()) && Math.abs(pagedStayed - pagedTo.top) <= 0.5 && (await page.locator('.newer button').isVisible()),
+  `Page Up from an empty box scrolls the history and ends following, as a wheel does: row ${pagedTo.seq} at ${pagedTo.top.toFixed(1)}, then ${pagedStayed.toFixed(1)}, newer activity offered`,
+)
+const upTop = await scroller.evaluate((m) => m.scrollTop)
+await page.keyboard.press('PageDown')
+await until('Page Down scrolled the history', async () => (await scroller.evaluate((m) => m.scrollTop)) > upTop)
+check(await focused(), 'Page Down scrolls it back down, the cursor staying in the box')
+// with a draft the keys are the box's: the page leaves them to the browser,
+// which moves the caret (and, as before, may pass a key the box cannot use
+// on to the history).
+await box.fill(Array.from({ length: 30 }, (_, i) => `draft line ${i + 1}`).join('\n'))
+await box.evaluate((b) => b.setSelectionRange(b.value.length, b.value.length))
+const draftEnd = await box.evaluate((b) => b.value.length)
+await page.keyboard.press('PageUp')
+await settled()
+const caretUp = await box.evaluate((b) => b.selectionStart)
+check(caretUp < draftEnd, `with a draft, Page Up is the box’s: its caret moved up, from ${draftEnd} to ${caretUp}`)
+await box.fill('')
+await outside()
+
+// the allow keys, as before: with the cursor put in the box by a switch,
+// Ctrl+Enter allows the oldest docked approval; from the history, where
+// Escape leaves it, it allows as from the page itself.
+const pendingOf = async (id) => (await convOf(id)).pending.length
+await inProject('waiter').click()
+await until('waiter shown for the allow keys', async () => (await heading()) === 'waiter' && (await focused()))
+await page.waitForTimeout(800)
+await page.keyboard.press('Control+Enter')
+await until('the switch’s Ctrl+Enter allowed', async () => (await pendingOf(W)) === 0)
+check(true, 'with the cursor put in the box by a switch, Ctrl+Enter allows the oldest docked approval')
+await t.idle(W)
+check((await api('POST', `/api/conversations/${W}/prompt`, { text: 'ask' })).status === 202, 'waiter asks again')
+await until('waiter docked again', async () => (await page.locator('.panel-cluster .docked section.request-card').count()) === 1)
+await box.click()
+await page.keyboard.press('Escape')
+await until('the history focused for the allow keys', async () => page.evaluate(() => document.activeElement === document.querySelector('.main')))
+await page.waitForTimeout(800)
+await page.keyboard.press('Control+Enter')
+await until('the history’s Ctrl+Enter allowed', async () => (await pendingOf(W)) === 0)
+check(true, 'from the history, where Escape leaves the cursor, Ctrl+Enter allows as from the page itself')
+await t.idle(W)
 
 // @~/ searches the directory named beyond the checkout, ~/Sandbox: the list
 // shows its paths with ~, newest first, and none in a dot-directory or

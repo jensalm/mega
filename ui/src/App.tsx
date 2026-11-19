@@ -367,8 +367,9 @@ export function App() {
 
   // next-waiting walks the needs-you list from the selected conversation; it
   // only moves the selection, so a reply in progress keeps its place. ctrl+/
-  // works anywhere; a bare n works only while focus is outside anything that
-  // takes text, so typing an n never moves the selection.
+  // works anywhere but in a dialog: a conversation opened behind one would be
+  // marked read while the dialog still covers it. the key is taken either
+  // way.
   const needsYouRef = useRef(needsYou)
   useEffect(() => {
     needsYouRef.current = needsYou
@@ -380,7 +381,7 @@ export function App() {
       }
       event.preventDefault()
       const list = needsYouRef.current
-      if (list.length === 0) {
+      if (list.length === 0 || document.querySelector('dialog[open]')) {
         return
       }
       const at = list.indexOf(selectedRef.current ?? '')
@@ -510,7 +511,9 @@ export function App() {
         newer={isNewer(serviceBuild)}
         harnesses={workspace?.harnesses}
       />
-      <main className="main">
+      {/* the main column takes focus, never by Tab, so that Escape from the
+          reply box hands the keys to the history and they scroll it. */}
+      <main className="main" tabIndex={-1}>
         <ShutdownBanner
           gate={gate}
           shutDownAt={shutDownAt}

@@ -1,6 +1,6 @@
 ---
 title: focus on operator input
-state: researching
+state: building
 created: 2026-11-18
 tags: [enhancement]
 ---

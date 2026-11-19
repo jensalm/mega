@@ -166,7 +166,7 @@ export function Sidebar(props: SidebarProps) {
       <section className="needs-you">
         <div className="section-head">
           <h2>Needs you</h2>
-          <span className="muted shortcut" title="Next waiting conversation: Ctrl+/ anywhere">
+          <span className="muted shortcut" title="Next waiting conversation: Ctrl+/, anywhere but in a dialog">
             Ctrl+/
           </span>
         </div>

@@ -330,7 +330,11 @@ const freshMega = (name, port) => {
   p.stderr.on('data', (d) => (out += d))
   const exited = new Promise((r) => p.once('exit', (code) => r(code)))
   const log = () => (existsSync(join(fresh, 'state/mega/mega.log')) ? readFileSync(join(fresh, 'state/mega/mega.log'), 'utf8') : '') + out
-  return { url: `http://127.0.0.1:${port}`, env, log, stop: async () => (p.kill('SIGINT'), await exited) }
+  const url = `http://127.0.0.1:${port}`
+  // ready waits until it answers: spawned is not yet listening, and a page
+  // sent there at once can lose that race on a busy machine.
+  const ready = () => until(`${name} listening`, async () => (await fetch(`${url}/api/version`).catch(() => null))?.ok === true, 20000)
+  return { url, env, log, ready, stop: async () => (p.kill('SIGINT'), await exited) }
 }
 // harnessLine is the start-up log's line for a harness that can run, with
 // its level.
@@ -356,6 +360,7 @@ check(
   'the start-up log says a newer Claude Code plainly, at info, found as the newest build installed',
 )
 check(nx.level === 'INFO' && nx.line.includes(`version '${codexVersion}', of the '${codexTested}' mega was tested with`), 'the start-up log says Codex’s version, inside its range')
+await n.ready()
 await page.goto(n.url)
 const newerShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(newer) && (await text(freshCodex)).includes(codexVersion), 15000)
 shown('the first page on a newer Claude Code', newerShown ? await text(freshClaude) : '(nothing)')
@@ -395,6 +400,7 @@ check(
   olderRead && oc.level === 'WARN' && oc.line.includes(`Claude Code '${older}' is older than the builds mega was tested with, '${claudeTested}'; the Agent SDK mega runs expects Claude Code '2.1.318' or later`),
   'the start-up log warns of an older Claude Code, with the stronger sentence',
 )
+await o.ready()
 await page.goto(o.url)
 const olderShown = await soon(async () => (await freshClaude.count()) > 0 && (await text(freshClaude)).includes(older), 15000)
 shown('the first page on an older Claude Code', olderShown ? await text(freshClaude) : '(nothing)')
@@ -440,6 +446,7 @@ replace(join(piPkg, 'pi'), piSays('1.5.2'))
 relink(join(piPkg, 'pi'), join(t.dir, 'bin/pi'))
 const freshPi = page.locator('main .first-run [data-harness="pi"]')
 const u = freshMega('fresh-update', t.port + 4)
+await u.ready()
 await page.goto(u.url)
 const beforeUpdate = await soon(async () => (await freshPi.count()) > 0 && (await text(freshClaude)).includes('2.1.330') && (await text(freshCodex)).includes('0.166.0') && (await text(freshPi)).includes('1.5.2'), 20000)
 shown('the first page before the update', beforeUpdate ? `${await text(freshClaude)} / ${await text(freshCodex)} / ${await text(freshPi)}` : '(nothing)')

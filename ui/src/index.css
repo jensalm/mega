@@ -666,6 +666,13 @@ pre {
   padding: 24px 32px;
 }
 
+/* the column takes focus so its keys scroll the history (Escape from the
+   reply box); the caret leaving the box is the mark, not a ring around the
+   whole column. */
+.main:focus {
+  outline: none;
+}
+
 /* the main pane has one alignment: whatever it shows sits in the middle of
    it, each column at its own width, and re-centres when the side panel
    collapses to the rail and the pane widens. the conversation and every

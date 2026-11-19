@@ -52,6 +52,29 @@ const clampHeight = (height: number) => Math.min(Math.max(height, minHeight), ma
 // settleMs is how long a docked request waits before a key can answer it.
 const settleMs = 500
 
+// replyShortcut puts the cursor in the reply box, as the box's title says.
+export const replyShortcut = 'Ctrl+Space'
+
+// isReplyFocus is ctrl+space, by physical key so it holds across layouts, from
+// anywhere on the page. some desktops keep it for switching input methods and
+// never pass it on; the operator's browser is to be confirmed by hand.
+function isReplyFocus(event: globalThis.KeyboardEvent): boolean {
+  return event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.code === 'Space'
+}
+
+// typingIn is whether focus is in a field that takes text, which opening a
+// conversation never takes the focus from.
+function typingIn(element: Element | null): boolean {
+  if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable)) {
+    return true
+  }
+  return element instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'submit', 'reset', 'range', 'color', 'file', 'image'].includes(element.type)
+}
+
+// historyOf is the column the history scrolls in: what Escape hands the keys
+// to, and, like the page itself, somewhere focus goes nowhere in particular.
+const historyOf = (cluster: HTMLElement | null) => cluster?.closest<HTMLElement>('.main') ?? null
+
 // the words the header used for a runtime started in an older environment.
 const staleEnvironment = 'started in an older environment: the project’s has changed since, and the next start picks it up'
 
@@ -85,7 +108,8 @@ type Open = 'release' | 'rename' | 'remove' | 'mcp' | null
 // activity line, the reply box, and the control bar. the pending cards here
 // are the one place a request can be answered, driven by the service's
 // current pending set; the history keeps only a row for each. the reply box
-// is one line at rest and opens while focus is anywhere in the cluster.
+// is one line at rest, takes the focus when the conversation is opened, and
+// opens once it holds a draft and focus is anywhere in the cluster.
 export function InputPanel(props: InputPanelProps) {
   const { conversation, project, log, stale, busy, error, attempt, showNative, onShowNative, onRemoved, newer, onLatest, heldBy, dock, isFollowing } = props
   const [draft, setDraft] = useState(() => drafts.get(conversation.id) ?? '')
@@ -110,6 +134,40 @@ export function InputPanel(props: InputPanelProps) {
     setDraft(text)
     drafts.set(conversation.id, text)
   }
+
+  // opening a conversation, however it was opened, puts the cursor in its
+  // reply box, at the end of any draft: never while a dialog is open, and
+  // never taking the focus from a field the operator is typing in. focus
+  // alone leaves the box at one line, so the history does not move; a draft
+  // kept from before opens it.
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box || document.querySelector('dialog[open]') || typingIn(document.activeElement)) {
+      return
+    }
+    box.focus({ preventScroll: true })
+    box.setSelectionRange(box.value.length, box.value.length)
+  }, [])
+
+  // ctrl+space puts the cursor in the reply box from anywhere on the page,
+  // and does nothing while a dialog is open or with the cursor already there.
+  // the key is taken either way, so a space never presses the button that has
+  // the focus, such as a dialog's close.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (!isReplyFocus(event)) {
+        return
+      }
+      event.preventDefault()
+      const box = boxRef.current
+      if (box && box !== document.activeElement && !document.querySelector('dialog[open]')) {
+        setMenu(false)
+        box.focus({ preventScroll: true })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   // the @ list: a path picked from the checkout goes into the draft, with the
   // @ kept only where the harness attaches the file it names.
   const keepAt = harnesses.find((h) => h.value === conversation.harness)?.attachesMentions ?? false
@@ -216,21 +274,25 @@ export function InputPanel(props: InputPanelProps) {
     return () => document.removeEventListener('pointerdown', outside)
   }, [expanded, clusterRef])
 
-  // the box opens when focus enters the reply box or the control bar, and
-  // closes only when focus leaves the whole cluster: the menu and the dialogs
-  // opened from it are inside. focus on a docked card does neither, since
-  // either would move the card under the pointer mid-press.
+  // the box opens at the first character typed, and when focus enters the
+  // reply box or the control bar while it holds a draft; focus alone on an
+  // empty box leaves it at one line. emptied, it stays open until focus
+  // leaves. it closes only when focus leaves the whole cluster: the menu and
+  // the dialogs opened from it are inside. focus on a docked card neither
+  // opens nor closes it, since either would move the card under the pointer
+  // mid-press.
   const onFocus = (event: FocusEvent) => {
-    if (formRef.current?.contains(event.target as Node)) {
+    if (draft !== '' && formRef.current?.contains(event.target as Node)) {
       setExpanded(true)
     }
   }
   // focus that goes nowhere (an answered card removed under it, the window
-  // losing focus) is not leaving: a press outside closes the box, and so does
-  // a send.
+  // losing focus, a press on the history, which takes focus itself so its
+  // keys scroll) is not leaving: a press outside closes the box, and so do
+  // Escape and a send.
   const onBlur = (event: FocusEvent) => {
     const to = event.relatedTarget as Node | null
-    if (to !== null && !clusterRef.current?.contains(to)) {
+    if (to !== null && to !== historyOf(clusterRef.current) && !clusterRef.current?.contains(to)) {
       setExpanded(false)
       setMenu(false)
     }
@@ -307,7 +369,8 @@ export function InputPanel(props: InputPanelProps) {
     const decision = event.shiftKey ? 'allow_session' : 'allow'
     clusterRef.current?.querySelector<HTMLButtonElement>(`[data-request="${CSS.escape(keyed.id)}"] button[data-answer="${decision}"]`)?.click()
   }
-  // the page itself: focus on nothing in particular. anywhere else, another
+  // the page itself: focus on nothing in particular, or on the history's
+  // column, which takes focus so its keys scroll. anywhere else, another
   // field, a button, a menu, the keys are left alone.
   const allowRef = useRef(allowByKey)
   useEffect(() => {
@@ -316,7 +379,8 @@ export function InputPanel(props: InputPanelProps) {
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       const focus = document.activeElement
-      if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || (focus !== null && focus !== document.body && focus !== document.documentElement)) {
+      const page = focus === null || focus === document.body || focus === document.documentElement || focus === historyOf(clusterRef.current)
+      if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || !page) {
         return
       }
       event.preventDefault()
@@ -324,7 +388,7 @@ export function InputPanel(props: InputPanelProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  },[clusterRef])
 
   const onSend = async (event?: FormEvent) => {
     event?.preventDefault()
@@ -425,6 +489,8 @@ export function InputPanel(props: InputPanelProps) {
           ref={boxRef}
           rows={1}
           aria-label="Reply"
+          title={`Reply: ${replyShortcut} puts the cursor here from anywhere on the page, Escape leaves it for the history, and Ctrl+Enter sends`}
+          aria-keyshortcuts="Control+Space"
           placeholder={placeholder}
           value={draft}
           aria-autocomplete="list"
@@ -432,6 +498,9 @@ export function InputPanel(props: InputPanelProps) {
           aria-activedescendant={search.mention && search.paths.length > 0 ? `${listId}-${search.selected}` : undefined}
           onChange={(event) => {
             changeDraft(event.target.value)
+            if (event.target.value !== '') {
+              setExpanded(true)
+            }
             search.track()
           }}
           onSelect={search.track}
@@ -452,6 +521,32 @@ export function InputPanel(props: InputPanelProps) {
             if (search.onKeyDown(event)) {
               event.preventDefault()
               event.stopPropagation()
+              return
+            }
+            const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing
+            // Escape, with the path list closed (it took the key above),
+            // leaves the box for the history, so the keys scroll it. the box
+            // closes as it would for any press outside, its draft kept.
+            if (event.key === 'Escape' && plain) {
+              const history = historyOf(clusterRef.current)
+              if (history) {
+                event.preventDefault()
+                setExpanded(false)
+                setMenu(false)
+                history.focus({ preventScroll: true })
+              }
+              return
+            }
+            // Page Up and Page Down read the history while the box is empty:
+            // the reader's own scroll, which ends following the bottom as a
+            // wheel does (latest.ts). with a draft they are the box's.
+            if ((event.key === 'PageUp' || event.key === 'PageDown') && plain && draft === '') {
+              const history = historyOf(clusterRef.current)
+              if (history) {
+                event.preventDefault()
+                const page = Math.max(history.clientHeight - (clusterRef.current?.offsetHeight ?? 0), 40) * 0.875
+                history.scrollBy({ top: event.key === 'PageUp' ? -page : page, behavior: 'instant' })
+              }
             }
           }}
         />
