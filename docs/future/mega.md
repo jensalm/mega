@@ -78,7 +78,7 @@ An unreachable environment is not proof its agents stopped. Its projects stay in
 
 ## A simpler core
 
-Proposed on 2026-11-19 and waiting on five decisions from Michael, which `docs/future/mega-simpler-core-work-order.md` lists. Until he settles them, the sections above stand where this one differs.
+Decided on 2026-11-19 and not yet built. `docs/future/mega-simpler-core-work-order.md` is its work order and records the five decisions Michael settled. Where this section differs from the ones above, this one is the target, and those are brought in step as each stage lands.
 
 The first slice kept a conversation's state in two places, the registry and its event log, and wrote them one after the other. Every operation then needed its own answer to what happens when the second write fails, and start-up needed its own code to work out what the service had decided before it stopped. Most of what the reviews of 2026-11-18 and 2026-11-19 found lived in those answers and that code, not in any feature. The core is to be made smaller, so those faults have nowhere to live.
 

@@ -44,10 +44,10 @@ Four of these six are not about a feature. They are about how the core is put to
 
 Michael, the same day: "we should aggressively pursue the simplification options with the spec and work order." Both are drafted:
 
-- **The spec:** the section "A simpler core" in `docs/future/mega.md`, marked as proposed.
+- **The spec:** the section "A simpler core" in `docs/future/mega.md`.
 - **The work order:** `docs/future/mega-simpler-core-work-order.md`, seven stages, each gated by terminus and then by Michael, each required to leave the service no larger than it found it.
 
-Five decisions are his before stage 1, and the work order states them with a recommendation each: a failed write stops mega; unread means output beyond where you have read; what changes about a conversation is kept only in its log; start-up reads the end of each log; a stop mega forced does not clear an error.
+Five decisions were his, and he settled all five as recommended the same day ("let's consider them settled and see where we land"): a failed write stops mega; unread means output beyond where you have read; what changes about a conversation is kept only in its log; start-up reads the end of each log; a stop mega forced does not clear an error.
 
 The candidates above became the stages in a different order, smallest promise first: unread, declared turns, the one fold, the one record and the one failure, the end of the log, the adapter kit, the page's state. The fold was not a candidate. It came out of asking why the unread rebuild failed three times: live code and start-up code were two tellings of one rule.
 

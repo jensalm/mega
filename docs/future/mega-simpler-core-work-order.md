@@ -19,9 +19,9 @@ Michael, 2026-11-19: "rather than patching and covering every possible corner ca
 
 The card is `docs/future/roadmap/simplify-the-core.md`. The hardening card, `harden-requests-stops-and-restarts`, is paused at the end of its fifth pass and resumes after this.
 
-## Decisions for Michael before stage 1
+## Decisions
 
-Each changes what mega promises, so each is his. The planning agent's recommendation is the one stated.
+Each changes what mega promises, so each was Michael's. He settled all five as recommended on 2026-11-19: "they sound reasonable. let's consider them settled and see where we land." Each is written below as it was put to him, with what it replaces and what it costs.
 
 1. **A failed write stops mega.** Today a failed write leaves the service running on its last confirmed view. The registry and each event log have an uncertain state of their own that refuses later changes, and each operation has its own rule for what the page may be told when its record fails. Recommended: any failed write to the data directory is fatal. Mega tells every page that it can no longer record and is stopping, ends every runtime it started, and exits. The next start is an unclean restart, which is a path that has to exist and work anyway. This deletes both uncertain states and every per-operation answer to "what if the record fails".
    - **The cost:** a turn in flight when the write fails is cut off, and what it had done is brought back from the harness's own history on resume. The alternative is to exit and leave the runtimes, as a crash does. The recommendation is to end them, because a harness nobody is watching can raise a request nobody can answer.
@@ -95,7 +95,7 @@ Then the full-tree review resumes, on `harden-requests-stops-and-restarts`, and 
 ## Risks and what to watch
 
 - **It is the core.** Every stage touches the files everything else leans on. The checks, about 550 steps in nine suites, and the round trips are what make this safe to attempt. A stage that needs a check weakened is a stage that has changed behaviour, and stops.
-- **Michael's data.** Stage 4 changes the format of a workspace he works in every day, on three machines, and that external operators now have too. The migration is proven on copies first, is safe to interrupt, and the changelog says plainly that a workspace opened by the new mega cannot be opened by an older one.
+- **Michael's data.** Stage 4 changes the format of a workspace he works in every day, on three machines, and that at least two external operators now have too. The migration is proven on copies first, is safe to interrupt, and the changelog says plainly that a workspace opened by the new mega cannot be opened by an older one.
 - **The comparison in stage 3 is the keystone.** If the new fold and the old code disagree about a real log, one of them is wrong about something that happened, and that has to be understood before going on.
 - **Stopping on a failed write is a change in character.** Mega stops being a service that limps on. It is the right trade for one operator on his own machine, where a full disk is rare and a restart is cheap. It should be revisited if mega ever runs where neither is true.
 - **Size is the measure, and it can be gamed.** Moving code out of `internal/service` is not removing it. Each stage reports what was deleted outright.
