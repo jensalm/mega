@@ -38,8 +38,8 @@ func DefaultResolver(env []string) *environ.Resolver {
 
 // helperFresh is how long a resolution serves the helpers (discovery, the
 // model list, path search, an import) before they resolve again. a runtime
-// start always resolves afresh.
-const helperFresh = 15 * time.Second
+// start always resolves afresh. a test may shorten it.
+var helperFresh = 15 * time.Second
 
 // environment statuses, as the project page shows them.
 const (
@@ -299,6 +299,14 @@ func (s *Service) resolveProject(projectID string) (harness.Place, *model.Enviro
 		failure = s.checkNamesLocked(projectID, st, resolved)
 	}
 	rec.resolved, rec.running = resolved, false
+	if failure == nil {
+		// the file may have changed while its activation ran: what was
+		// resolved is used only while it is still the activation that would
+		// run now, for every caller, a helper's as well as a launch's.
+		if current, err := s.projectLocked(projectID); err == nil {
+			failure = s.envUnchangedLocked(current, &model.EnvironmentFacts{Source: st.Source, Activation: st.Activation})
+		}
+	}
 	s.changed()
 	s.mu.Unlock()
 	if failure != nil {
@@ -360,22 +368,29 @@ func envWhere(st EnvState, project model.Project) string {
 // it is fresh and from the activation that would run now, else a new one.
 // callers do not hold s.mu.
 func (s *Service) placeFor(projectID string) (harness.Place, error) {
+	place, _, err := s.placeWithFacts(projectID)
+	return place, err
+}
+
+// placeWithFacts is placeFor with what the place was resolved from, for a
+// caller that checks it again immediately before the harness runs
+// (harnessGateLocked). callers do not hold s.mu.
+func (s *Service) placeWithFacts(projectID string) (harness.Place, *model.EnvironmentFacts, error) {
 	s.mu.Lock()
 	project, err := s.projectLocked(projectID)
 	if err == nil {
 		st := s.envStateLocked(project)
 		if st.fileRefusal != nil {
 			s.mu.Unlock()
-			return harness.Place{}, st.fileRefusal
+			return harness.Place{}, nil, st.fileRefusal
 		}
 		if r := st.Resolved; r != nil && r.Error == "" && !r.namesRefused() && r.Activation == st.Activation && r.Source == st.Source && time.Since(r.At) < helperFresh {
 			s.mu.Unlock()
-			return harness.Place{Cwd: project.Checkout, Env: r.env, Find: r.before}, nil
+			return harness.Place{Cwd: project.Checkout, Env: r.env, Find: r.before}, &model.EnvironmentFacts{Source: r.Source, Activation: r.Activation, Changed: slices.Clone(r.Changed), Fingerprint: r.Fingerprint}, nil
 		}
 	}
 	s.mu.Unlock()
-	place, _, err := s.resolveProject(projectID)
-	return place, err
+	return s.resolveProject(projectID)
 }
 
 // resolveStaleLocked starts a resolution, in the background, for each project
@@ -385,6 +400,10 @@ func (s *Service) placeFor(projectID string) (harness.Place, error) {
 // failed is not retried until the activation changes; a start, a helper or
 // the operator's own request does that. callers hold s.mu.
 func (s *Service) resolveStaleLocked(projects []model.Project, states map[string]EnvState) {
+	if s.closed {
+		// closing: no resolution starts, since none could record its result.
+		return
+	}
 	for _, project := range projects {
 		st := states[project.ID]
 		if st.Refusal != nil || checkoutProblem(project.Checkout) != "" {

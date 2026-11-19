@@ -78,7 +78,7 @@ func TestArmedGateRefusesNewWorkOnly(t *testing.T) {
 	}
 
 	// everything that lets work finish stays available.
-	if err := r.svc.Answer(running.ID, request, harness.Answer{Decision: "allow"}); err != nil {
+	if err := r.svc.Answer(running.ID, request, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Errorf("answer: %v", err)
 	}
 	if err := r.svc.Interrupt(running.ID); err != nil {
@@ -133,7 +133,7 @@ func TestIdleIsComputedFromWhatIsInFlight(t *testing.T) {
 
 	// as each settles, it leaves the gate; nothing settles it for the operator.
 	finishTurn(rtA, "a-2", "done")
-	if err := r.svc.Answer(b.ID, request, harness.Answer{Decision: "allow"}); err != nil {
+	if err := r.svc.Answer(b.ID, request, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Fatal(err)
 	}
 	finishTurn(rtB, "b-3", "done")

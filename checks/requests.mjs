@@ -148,6 +148,13 @@ await docked.nth(0).evaluate((card) => {
 })
 await docked.nth(0).screenshot({ path: `${t.dir}/shots/approval-key.png` })
 await page.locator('.check-caption').evaluate((said) => said.remove())
+// what the presses answer, those that should and those that should not: the
+// fake's two Bash calls, oldest first, looked at before the first press.
+const keyed = await pending(C)
+must(
+  keyed.length === 2 && keyed.every((r) => r.kind === 'permission' && r.payload.tool === 'Bash') && keyed.map((r) => r.payload.input?.command).sort().join(',') === 'echo first,echo second',
+  'the two pending requests are the fake’s Bash calls, echo first and echo second',
+)
 let allows = await answered('allow')
 // another field: the denial's reason box.
 await docked.nth(0).getByPlaceholder('Reason, sent with a denial').focus()
@@ -166,12 +173,6 @@ await keys()
 await settle()
 check((await docked.count()) === 2 && (await box.inputValue()) === 'a draft that is not an answer' && (await answered('allow')) === allows, 'with a draft in the box, Ctrl+Enter answers nothing and the draft stays')
 await box.fill('')
-// what the presses answer: the fake's two Bash calls, oldest first.
-const keyed = await pending(C)
-must(
-  keyed.length === 2 && keyed.every((r) => r.kind === 'permission' && r.payload.tool === 'Bash') && keyed.map((r) => r.payload.input?.command).sort().join(',') === 'echo first,echo second',
-  'the two pending requests are the fake’s Bash calls, echo first and echo second',
-)
 await keys()
 await until('the oldest answered by its key', async () => (await docked.count()) === 1 && (await answered('allow')) === allows + 1)
 check((await docked.first().locator('pre').textContent()) === 'echo second', 'Ctrl+Enter from the empty box answers the oldest approval, Allow, as its button does')
@@ -217,6 +218,8 @@ await keys()
 await keys(true)
 await settle()
 check((await docked.count()) === 1 && (await pending(C)).length === 1, 'neither key answers a question')
+const questionAsked = await pending(C)
+must(questionAsked.length === 1 && questionAsked[0].kind === 'question' && JSON.stringify(questionAsked[0].payload).includes('Which color do you prefer?'), 'the question answered is the fake’s own: Which color do you prefer?')
 await q.getByLabel('Blue').check()
 await until('Answer enabled', async () => answer.isEnabled())
 await answer.click()
@@ -297,6 +300,8 @@ await docked.waitFor()
 const form = docked.first()
 const formAnswer = form.getByRole('button', { name: 'Answer', exact: true })
 check((await form.locator('h2').textContent()) === 'Question from fixture' && (await form.textContent()).includes('Which color do you prefer?') && (await formAnswer.isDisabled()), 'the form names its server and waits for its required field')
+const formAsked = await pending(X)
+must(formAsked.length === 1 && formAsked[0].kind === 'question' && formAsked[0].payload.message === 'Which color do you prefer?', 'the form answered is the fixture server’s own')
 await form.getByLabel('Blue').check()
 await form.getByLabel(/Note/).fill('typed by the check')
 await until('Answer enabled', async () => formAnswer.isEnabled())
@@ -370,12 +375,16 @@ await t.idle(Pi)
 // prefilled.
 await prompt(Pi, 'input')
 await docked.waitFor()
+const inputAsked = await pending(Pi)
+must(inputAsked.length === 1 && JSON.stringify(inputAsked[0].payload).includes('Your name?'), 'the input dialog answered is the fake’s own: Your name?')
 await docked.first().getByRole('textbox').fill('Ada')
 await docked.first().getByRole('button', { name: 'Answer', exact: true }).click()
 await until('the input answered', async () => (await reply(page, 'you typed: Ada').count()) === 1)
 await t.idle(Pi)
 await prompt(Pi, 'editor')
 await docked.waitFor()
+const editorAsked = await pending(Pi)
+must(editorAsked.length === 1 && JSON.stringify(editorAsked[0].payload).includes('Edit the note'), 'the editor dialog answered is the fake’s own: Edit the note')
 const editorBox = docked.first().locator('textarea')
 check((await editorBox.inputValue()) === 'line one\nline two', 'an editor dialog is several lines, prefilled as pi gave it')
 await editorBox.fill('line one\nline three')

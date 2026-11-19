@@ -8,6 +8,7 @@ import { missingReason } from '../checkout'
 import { IconButton } from './Icon'
 import { panelShortcut } from './SidePanel'
 import { aboutTitle, newerLabel } from '../build'
+import { shutDownFooter } from '../gate'
 
 interface RailProps {
   projects: Project[]
@@ -20,6 +21,7 @@ interface RailProps {
   onExpand: () => void
   gate: ShutdownGate | undefined
   shutDownAt: Date | null
+  shutDownHeard: boolean
   about: About | null
   newer: boolean
   onAbout: () => void
@@ -30,7 +32,7 @@ interface RailProps {
 // connection. nothing that signals attention or activity is lost by
 // collapsing: each project's mark is the same rollup the tree shows, working
 // arc included.
-export function Rail({ projects, conversations, needsYou, streamState, stale, loaded, knowledge, onExpand, gate, shutDownAt, about, newer, onAbout }: RailProps) {
+export function Rail({ projects, conversations, needsYou, streamState, stale, loaded, knowledge, onExpand, gate, shutDownAt, shutDownHeard, about, newer, onAbout }: RailProps) {
   const { starred, rest } = treeGroups(projects)
   const waiting = needsYou.length
   // before the first read the count is unknown, never zero.
@@ -45,7 +47,7 @@ export function Rail({ projects, conversations, needsYou, streamState, stale, lo
   }
   const down = shutDownAt !== null && streamState !== 'connected'
   const showNewer = newer && !down && connectionOf(knowledge, streamState) === 'connected' && !failing(knowledge)
-  const connection = down ? 'Shut down from here, retrying' : showNewer ? newerLabel : connectionLabel(knowledge, streamState)
+  const connection = down ? shutDownFooter(shutDownHeard) : showNewer ? newerLabel : connectionLabel(knowledge, streamState)
   return (
     <nav className="rail" aria-label="Side panel, collapsed">
       <IconButton icon="keyboard_double_arrow_right" label={`Expand the side panel (${panelShortcut})`} onClick={onExpand} />

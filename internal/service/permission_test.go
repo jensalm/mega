@@ -125,7 +125,7 @@ func TestSwitchWritesTheChoiceAndShowsOnlyWhatTheRuntimeReports(t *testing.T) {
 	if len(view.Pending) != 1 || view.Pending[0].ID != id {
 		t.Fatalf("pending after the switch = %+v", view.Pending)
 	}
-	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}); err != nil {
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Errorf("answering after the switch: %v", err)
 	}
 }

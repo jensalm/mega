@@ -151,7 +151,7 @@ func TestPiRoundTrip(t *testing.T) {
 	}
 	s.idle()
 	s.expectReply("DELTA-7a8b")
-	if code := s.post(&answerBody{RequestID: gate.ID, Answers: map[string]string{piGatedTitle: "Allow"}}); code != service.CodeNotPending {
+	if code := s.post(&answerBody{RequestID: gate.ID, Decision: "dismiss"}); code != service.CodeNotPending {
 		t.Errorf("late answer: %q", code)
 	}
 

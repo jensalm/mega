@@ -202,23 +202,18 @@ func (h *Harness) History(_ context.Context, place harness.Place, nativeID strin
 // name that session, or nothing is read: a file is found by its name, which
 // is no proof of what it holds.
 func historyOf(path, want string) (harness.History, error) {
-	if want != "" {
-		header, _, err := readSession(path)
-		if err != nil {
-			return harness.History{}, err
-		}
-		if header == nil || header.ID != want {
-			got := ""
-			if header != nil {
-				got = header.ID
-			}
-			return harness.History{}, fmt.Errorf("the session file '%s' holds session '%s', not '%s'", path, got, want)
-		}
-	}
-	evs, turn, err := historyTurns(path)
+	// one read: the header checked and the entries mapped are the same
+	// file's, never a file replaced between two reads.
+	header, entries, err := readSession(path)
 	if err != nil {
 		return harness.History{}, err
 	}
+	if want != "" {
+		if err := harness.SameSession(fmt.Sprintf("the session file '%s'", path), want, header.ID); err != nil {
+			return harness.History{}, err
+		}
+	}
+	evs, turn := turnsOf(entries)
 	return harness.History{Events: evs, Open: turn.Open(evs)}, nil
 }
 

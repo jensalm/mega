@@ -380,11 +380,8 @@ func (r *runtime) watch() {
 	if scan == nil {
 		scan = unlisted
 	}
-	if len(pids) > 0 {
-		err = errors.Join(err, fmt.Errorf("%w: pids %v", harness.ErrLeftRunning, pids))
-	}
-	if scan != nil {
-		err = errors.Join(err, fmt.Errorf("%w: %v", harness.ErrUnchecked, scan))
+	if left := harness.Leftovers(pids, scan); left != nil {
+		err = errors.Join(err, left)
 	}
 	r.sink.Exited(err)
 }
@@ -603,9 +600,11 @@ func (r *runtime) itemCompleted(params map[string]any) {
 	// question is known here.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.interrupted[n.TurnID] {
-		// the operator interrupted this turn; a question it still produced must
-		// not wait for an answer that would start new work.
+	if r.interrupted[n.TurnID] || r.stopping {
+		// the operator interrupted this turn, or the runtime is being stopped:
+		// a question it still produced must not wait for an answer that would
+		// start new work, which a fenced runtime refuses anyway. the question
+		// is the adapter's own, from the agent's text: nothing waits on it.
 		return
 	}
 	id := r.sink.Request(model.RequestQuestion, questionPayload(it.Questions))

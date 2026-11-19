@@ -119,13 +119,14 @@ func TestPromptedLaunchStartsFromInit(t *testing.T) {
 	}
 }
 
-// the first session claude reports in an idle launch is checked, before or
-// after ready: the one resumed passes silently; another is reported as the
-// runtime's session, for the service to refuse. only the first is checked.
-func TestFirstSessionOfAnIdleLaunchIsVerified(t *testing.T) {
+// every session claude reports is checked, before or after ready, in an idle
+// launch or a prompted one: the one bound passes silently; the first other is
+// reported as the runtime's session, for the service to refuse, and nothing
+// after it is relayed or reported again.
+func TestEverySessionReportedIsVerified(t *testing.T) {
 	idle := func() (*runtime, *recordingSink) {
 		r, sink, _ := testRuntime()
-		r.launchMode, r.unverified = "default", true
+		r.launchMode = "default"
 		return r, sink
 	}
 	starts := func(sink *recordingSink) []string {
@@ -146,7 +147,7 @@ func TestFirstSessionOfAnIdleLaunchIsVerified(t *testing.T) {
 	r.handle(hook("edfe4ade-9f59-4db3-89bc-75fcc8b52c44"))
 	r.handle(ready)
 	r.handle([]byte(`{"type":"event","msg":{"type":"system","subtype":"init","session_id":"later","permissionMode":"default","model":"m"}}`))
-	if got := starts(sink); len(got) != 1 || got[0] != "" {
+	if got := starts(sink); len(got) != 2 || got[0] != "" || got[1] != "later" {
 		t.Errorf("the resumed session, then another: started %q", got)
 	}
 
@@ -166,10 +167,10 @@ func TestFirstSessionOfAnIdleLaunchIsVerified(t *testing.T) {
 		t.Errorf("another session after ready: started %q", got)
 	}
 
-	// a prompted launch is checked by the service at its first init.
+	// a prompted launch is checked the same way, from its first frame.
 	r, sink, _ = testRuntime()
 	r.handle(hook("another"))
-	if got := starts(sink); len(got) != 0 {
+	if got := starts(sink); len(got) != 1 || got[0] != "another" {
 		t.Errorf("a prompted launch's hook frame: started %q", got)
 	}
 }

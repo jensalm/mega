@@ -210,7 +210,7 @@ func (s *Service) Prompt(conversationID, text string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.importBeforeLaunch(conv, l, place); err != nil {
+	if err := s.importBeforeLaunch(conv, l, place, facts); err != nil {
 		return err
 	}
 	if err := s.startRuntime(conversationID, l, false, place, facts); err != nil {
@@ -277,7 +277,7 @@ func (s *Service) Start(conversationID string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.importBeforeLaunch(conv, l, place); err != nil {
+	if err := s.importBeforeLaunch(conv, l, place, facts); err != nil {
 		return err
 	}
 	return s.explain(conv.Harness, place.Find, s.startRuntime(conversationID, l, true, place, facts))
@@ -315,14 +315,19 @@ func (s *Service) resolveForStart(conv model.Conversation, l *live) (harness.Pla
 // importBeforeLaunch brings the cache up to date with the native session
 // before a runtime resumes it, after beginStartLocked. a failure ends the
 // start, recorded, with no runtime launched. callers do not hold s.mu.
-func (s *Service) importBeforeLaunch(conv model.Conversation, l *live, place harness.Place) error {
+func (s *Service) importBeforeLaunch(conv model.Conversation, l *live, place harness.Place, env *model.EnvironmentFacts) error {
 	if conv.NativeID == "" {
 		return nil
 	}
-	if _, err := s.importHistory(conv, l, place); err != nil {
+	if _, err := s.importHistory(conv, l, place, env); err != nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		l.busy = false
+		if errors.As(err, new(refusedToRun)) {
+			// the gate refused before the harness ran: nothing started.
+			s.failedLaunch(l, err, true)
+			return err
+		}
 		if recordErr := s.transition(l, &model.Event{Status: model.StatusError, Text: fmt.Sprintf("native history could not be read, so no runtime was started: %s", recordable(err))}, "", nil); recordErr != nil {
 			dl.Errorf("%v", recordErr)
 		}
@@ -401,6 +406,8 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 		s.mu.Unlock()
 		return err
 	}
+	// a shutdown waits for a launch that has begun, until it has returned.
+	defer close(inc.launched)
 	s.mu.Unlock()
 
 	// the version that will run, read just before the launch, bounded by
@@ -417,6 +424,24 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 		}
 		s.versionSeen(h.Name(), version)
 	}
+	// the last check, immediately before the harness starts: nothing reading
+	// the version, filling the request or importing history took a moment
+	// for may have begun a shutdown or changed the environment's file.
+	s.mu.Lock()
+	if err := s.harnessGateLocked(conversationID, facts); err != nil {
+		l.busy = false
+		if l.inc == inc {
+			l.inc = nil
+		}
+		if s.failedLaunch(l, err, true) {
+			if updateErr := s.updateConversation(conversationID, func(c *model.Conversation) { c.Runtime = model.RuntimeNone }); updateErr != nil {
+				dl.Errorf("recording that '%s' did not start: %v", conversationID, updateErr)
+			}
+		}
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
 	rt, err := h.Launch(spec, &sink{s: s, l: l, inc: inc})
 	// the harness's own failure: what is recorded and shown is its summary.
 	err = harnessFault(h.Name(), err)
@@ -429,6 +454,8 @@ func (s *Service) startRuntime(conversationID string, l *live, idle bool, place 
 	if err != nil {
 		if l.inc == inc {
 			l.inc = nil
+			// a request raised while launching died with the launch.
+			s.retireRequestsLocked(l)
 		}
 		// like an unrecorded stop, an unrecorded failure leaves the conversation
 		// recorded running, so a restart settles it rather than this run
@@ -494,7 +521,8 @@ func (s *Service) prepareLaunchLocked(conversationID string, l *live, env *model
 	// the environment was resolved, and history may have been imported, since
 	// the file was checked: the launch is committed only while the project's
 	// environment may still run and is still the activation that was resolved.
-	if err := s.envUnchangedLocked(project, env); err != nil {
+	// the same check runs again immediately before the harness starts.
+	if err := s.harnessGateLocked(conversationID, env); err != nil {
 		return nil, harness.Spec{}, nil, err
 	}
 	h, ok := s.harnesses[conv.Harness]
@@ -513,12 +541,44 @@ func (s *Service) prepareLaunchLocked(conversationID string, l *live, env *model
 		return nil, harness.Spec{}, nil, err
 	}
 	l.session = ""
-	inc := &incarnation{exited: make(chan struct{})}
+	inc := &incarnation{exited: make(chan struct{}), launched: make(chan struct{})}
 	l.inc = inc
 	// the recorded request goes with every launch, so a release and a resume
 	// keep it; a terminal visit never changes it.
 	return h, harness.Spec{Cwd: project.Checkout, NativeID: session, PermissionMode: conv.PermissionMode, Model: conv.Model, Effort: conv.Effort}, inc, nil
 }
+
+// harnessGateLocked is the check immediately before mega runs a harness for
+// a conversation: a launch, and the history read that a start, a resume and
+// an adoption make, each running the harness in the project's environment.
+// nothing runs once a shutdown has begun or the service has closed, and
+// nothing runs in an environment whose file or override is no longer the
+// activation that was resolved for it (env; nil checks only that the
+// environment may run). a refusal is refusedToRun, since no harness ran.
+// callers hold s.mu.
+func (s *Service) harnessGateLocked(conversationID string, env *model.EnvironmentFacts) error {
+	if s.closed {
+		return refusedToRun{newError(CodeUnavailable, "the service is shutting down")}
+	}
+	conv, err := s.conversationLocked(conversationID)
+	if err != nil {
+		return err
+	}
+	project, err := s.projectLocked(conv.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := s.envUnchangedLocked(project, env); err != nil {
+		return refusedToRun{err}
+	}
+	return nil
+}
+
+// refusedToRun is the gate's refusal: nothing ran, so a start it ends is
+// recorded as not started.
+type refusedToRun struct{ error }
+
+func (r refusedToRun) Unwrap() error { return r.error }
 
 // send records the prompt with a service-minted message identity and hands it
 // to the runtime, which passes the identity to the harness so a later import
@@ -596,7 +656,7 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 		// answered, or settled by the harness, and still listed only because
 		// that could not be recorded: the harness holds it no more.
 		s.mu.Unlock()
-		return newError(CodeNotPending, fmt.Sprintf("request '%s' was already answered", requestID))
+		return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled, but that could not be recorded, so it is shown as last recorded and takes no further answer", requestID))
 	}
 	if err := validateAnswer(req, &answer); err != nil {
 		s.mu.Unlock()
@@ -826,9 +886,10 @@ func (s *Service) Resume(conversationID string) error {
 	s.mu.Unlock()
 	if conv.NativeID != "" {
 		var place harness.Place
-		place, importErr = s.placeFor(conv.ProjectID)
+		var env *model.EnvironmentFacts
+		place, env, importErr = s.placeWithFacts(conv.ProjectID)
 		if importErr == nil {
-			result, importErr = s.importHistory(conv, l, place)
+			result, importErr = s.importHistory(conv, l, place, env)
 		}
 	}
 
@@ -890,12 +951,16 @@ type imported struct {
 // importHistory appends the native messages the cache lacks, matched by native
 // identity, as native-origin events, and reports what it added. it never
 // rewrites what the log holds, and never moves the unread marker itself.
-func (s *Service) importHistory(conv model.Conversation, l *live, place harness.Place) (imported, error) {
+func (s *Service) importHistory(conv model.Conversation, l *live, place harness.Place, env *model.EnvironmentFacts) (imported, error) {
 	s.mu.Lock()
 	h, ok := s.harnesses[conv.Harness]
+	gateErr := s.harnessGateLocked(conv.ID, env)
 	s.mu.Unlock()
 	if !ok {
 		return imported{}, newError(CodeInvalid, fmt.Sprintf("harness '%s' is not available", conv.Harness))
+	}
+	if gateErr != nil {
+		return imported{}, gateErr
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), historyTimeout)
 	defer cancel()

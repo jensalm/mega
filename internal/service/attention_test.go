@@ -36,7 +36,7 @@ func TestAttentionFollowsConfirmedFacts(t *testing.T) {
 	if got := r.attention(conv.ID); got != model.AttentionRequest {
 		t.Errorf("request pending: %q", got)
 	}
-	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}); err != nil {
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Fatal(err)
 	}
 

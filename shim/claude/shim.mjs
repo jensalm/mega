@@ -269,6 +269,9 @@ function transcriptFlags(session, cwd, env) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
       if (entry?.message?.model !== syntheticModel || typeof entry.uuid !== 'string') continue;
+      // the file is found by its name, which is no proof of what it holds:
+      // only this session's entries count.
+      if (entry.sessionId !== session) continue;
       // only what the transcript says: a flag that is not a boolean is left
       // out, so the adapter keeps the message a reply.
       const f = {};

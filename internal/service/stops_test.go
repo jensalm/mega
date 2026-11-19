@@ -187,6 +187,7 @@ func TestNoWorkIsAnsweredAfterAStop(t *testing.T) {
 	if view := r.view(conv.ID); !view.Interrupting {
 		t.Errorf("an interrupt under way is not shown: %+v", view)
 	}
+	r.looked(conv.ID, id, `"command":"echo"`)
 	for _, refused := range []harness.Answer{{Decision: harness.DecisionAllow}, {Decision: harness.DecisionAllowSession}} {
 		wantCode(t, r.svc.Answer(conv.ID, id, refused), CodeConflict)
 	}
@@ -208,6 +209,7 @@ func TestNoWorkIsAnsweredAfterAStop(t *testing.T) {
 	if err := r.svc.Release(other.ID); err != nil {
 		t.Fatal(err)
 	}
+	r.looked(other.ID, q, `"question":"Which?"`)
 	wantCode(t, r.svc.Answer(other.ID, q, harness.Answer{Answers: map[string]string{"Which?": "A"}}), CodeConflict)
 	if err := r.svc.Answer(other.ID, q, harness.Answer{Decision: harness.DecisionDismiss}); err != nil {
 		t.Errorf("dismiss during a release: %v", err)

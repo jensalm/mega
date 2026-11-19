@@ -4,11 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -166,10 +162,14 @@ func (r *runtime) entriesAfter() ([]*entry, error) {
 		return got.Entries, nil
 	}
 	r.mu.Lock()
-	path := r.sessionFile
+	path, id := r.sessionFile, r.sessionID
 	r.mu.Unlock()
-	_, entries, err := readSession(path)
+	header, entries, err := readSession(path)
 	if err != nil {
+		return nil, err
+	}
+	// the file is found by its name, which is no proof of what it holds.
+	if err := harness.SameSession(fmt.Sprintf("the session file '%s'", path), id, header.ID); err != nil {
 		return nil, err
 	}
 	if r.cursor == "" {
@@ -465,12 +465,8 @@ func (r *runtime) watch() {
 	if unmatched > 0 {
 		err = errors.Join(err, errors.New(unmatchedText(unmatched)))
 	}
-	pids, scan := groupSurvivors(r.conn.cmd.Process.Pid, survivorGrace)
-	if len(pids) > 0 {
-		err = errors.Join(err, fmt.Errorf("%w: pids %v", harness.ErrLeftRunning, pids))
-	}
-	if scan != nil {
-		err = errors.Join(err, fmt.Errorf("%w: %v", harness.ErrUnchecked, scan))
+	if left := harness.Leftovers(harness.GroupSurvivors(r.conn.cmd.Process.Pid, survivorGrace)); left != nil {
+		err = errors.Join(err, left)
 	}
 	r.sink.Exited(err)
 }
@@ -710,76 +706,6 @@ func asMillis(v any) time.Duration {
 		return time.Duration(n) * time.Millisecond
 	}
 	return 0
-}
-
-// groupSurvivors waits up to grace for every process in pi's process group to
-// go and returns the pids of those confirmed running, with an error when it
-// could not tell: the processes could not be listed, or some could not be
-// read, and any of those might be in the group.
-func groupSurvivors(pgid int, grace time.Duration) ([]int, error) {
-	deadline := time.Now().Add(grace)
-	for {
-		alive, unread, err := inGroup(pgid)
-		if err != nil {
-			return nil, err
-		}
-		if len(alive) == 0 && len(unread) == 0 {
-			return nil, nil
-		}
-		if time.Now().After(deadline) {
-			if len(unread) > 0 {
-				return alive, fmt.Errorf("listing processes: %d could not be read, and any might be in pi's group: pids %v", len(unread), unread)
-			}
-			return alive, nil
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-}
-
-// procRoot is where the processes are listed; a test points it at a
-// directory that cannot be read.
-var procRoot = "/proc"
-
-// inGroup lists the live processes in a process group, from /proc, and names
-// those that are there but could not be read; or it says the processes could
-// not be listed at all. there is a listing only where /proc is: on macOS
-// there is none yet.
-func inGroup(pgid int) ([]int, []int, error) {
-	entries, err := os.ReadDir(procRoot)
-	if err != nil {
-		return nil, nil, fmt.Errorf("listing processes: %w", err)
-	}
-	var out, unread []int
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(procRoot, e.Name(), "stat"))
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
-			// the process went while it was being listed.
-			continue
-		}
-		if err != nil {
-			// a process that is there but cannot be read could be in the
-			// group: the listing is incomplete there, not clean.
-			unread = append(unread, pid)
-			continue
-		}
-		closing := strings.LastIndexByte(string(data), ')')
-		if closing < 0 {
-			continue
-		}
-		// after the command: state, ppid, pgrp.
-		fields := strings.Fields(string(data[closing+1:]))
-		if len(fields) < 3 || fields[0] == "Z" {
-			continue
-		}
-		if g, err := strconv.Atoi(fields[2]); err == nil && g == pgid {
-			out = append(out, pid)
-		}
-	}
-	return out, unread, nil
 }
 
 // modelInfo is the part of pi's Model object the adapter reads.

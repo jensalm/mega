@@ -3,11 +3,14 @@ package claude
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -171,13 +174,13 @@ func TestRequestsMapThroughServiceIDs(t *testing.T) {
 		t.Fatalf("requests = %v", sink.requests)
 	}
 
-	if err := answerWith(r, "svc-1", harness.Answer{Decision: harness.DecisionAllow}, `{"type":"answer_accepted","id":"sdk-1"}`); err != nil {
+	if err := answerWith(r, "svc-1", harness.Answer{Decision: harness.DecisionDeny}, `{"type":"answer_accepted","id":"sdk-1"}`); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdin.String(), `"id":"sdk-1"`) || strings.Contains(stdin.String(), "svc-1") {
 		t.Errorf("answer frame did not carry the sdk id alone: %s", stdin.String())
 	}
-	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("second answer: %v", err)
 	}
 
@@ -185,7 +188,7 @@ func TestRequestsMapThroughServiceIDs(t *testing.T) {
 	if strings.Join(sink.resolved, ",") != "svc-2:aborted" {
 		t.Errorf("resolved = %v", sink.resolved)
 	}
-	if err := r.Answer("svc-2", harness.Answer{Answers: map[string]string{"Which?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-2", harness.Answer{Decision: harness.DecisionDismiss}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("answer after abort: %v", err)
 	}
 }
@@ -212,7 +215,7 @@ func answerWith(r *runtime, id string, answer harness.Answer, verdict string) er
 func TestAnswerRejectedByShimIsNotPending(t *testing.T) {
 	r, sink, _ := testRuntime()
 	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{}}`))
-	err := answerWith(r, "svc-1", harness.Answer{Decision: harness.DecisionAllow}, `{"type":"answer_rejected","id":"sdk-1"}`)
+	err := answerWith(r, "svc-1", harness.Answer{Decision: harness.DecisionDeny}, `{"type":"answer_rejected","id":"sdk-1"}`)
 	if !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("rejected answer: %v", err)
 	}
@@ -226,8 +229,12 @@ func TestAnswerRejectedByShimIsNotPending(t *testing.T) {
 // the shim, even one accepted before the stop: the interrupt that follows
 // aborts the request. a denial still goes.
 func TestNoAnswerLetsWorkGoOnAfterTheStopIsFenced(t *testing.T) {
-	r, _, stdin := testRuntime()
-	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{}}`))
+	r, sink, stdin := testRuntime()
+	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{"command":"echo fenced"}}`))
+	// the request the allow is tried on is the one raised, looked at first.
+	if b, _ := json.Marshal(sink.payloads); len(sink.payloads) != 1 || !strings.Contains(string(b), `"command":"echo fenced"`) {
+		t.Fatalf("the request is not the one meant: %s", b)
+	}
 	r.Stopping()
 	result := make(chan error, 1)
 	go func() { result <- r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}) }()
@@ -244,6 +251,82 @@ func TestNoAnswerLetsWorkGoOnAfterTheStopIsFenced(t *testing.T) {
 	}
 }
 
+// every frame that names a session is checked against the one the runtime is
+// bound to, not only the first: a later frame from another session is
+// reported once, so the service stops the runtime, and is never relayed.
+func TestEveryFramesSessionIsChecked(t *testing.T) {
+	r, sink, _ := testRuntime()
+	r.handle([]byte(`{"type":"event","msg":{"type":"system","subtype":"init","session_id":"edfe4ade-9f59-4db3-89bc-75fcc8b52c44","model":"m"}}`))
+	r.handle([]byte(`{"type":"event","msg":{"type":"assistant","session_id":"another-session","uuid":"x-1","parent_tool_use_id":null,"message":{"role":"assistant","content":[{"type":"text","text":"from another session"}]}}}`))
+	r.handle([]byte(`{"type":"event","msg":{"type":"assistant","session_id":"another-session","uuid":"x-2","parent_tool_use_id":null,"message":{"role":"assistant","content":[{"type":"text","text":"and more"}]}}}`))
+	reports := 0
+	for _, ev := range sink.events {
+		if ev.Kind == model.EventAssistant {
+			t.Errorf("a frame from another session was relayed: %q", ev.Text)
+		}
+		if ev.Kind == model.EventRuntime && ev.Status == model.StatusStarted && ev.Facts != nil && ev.Facts.Session == "another-session" {
+			reports++
+		}
+	}
+	if reports != 1 {
+		t.Errorf("the other session was reported %d times", reports)
+	}
+}
+
+// shimExiting runs a stand-in for the shim, in its own process group as the
+// shim is, that leaves a child of its own running, and reads it to its exit.
+func shimExiting(t *testing.T) (*runtime, *exitSink, *exec.Cmd) {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "sleep 30 >/dev/null 2>&1 & echo $! ; exit 0")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	r, _, _ := testRuntime()
+	sink := &exitSink{exited: make(chan error, 1)}
+	r.sink, r.cmd = sink, cmd
+	go r.read(stdout)
+	return r, sink, cmd
+}
+
+// the shim's exit is checked for the processes it leaves: a child still
+// running is named, never a clean stop.
+func TestAShimThatLeavesAChildRunningSaysSo(t *testing.T) {
+	was := survivorGrace
+	survivorGrace = 300 * time.Millisecond
+	t.Cleanup(func() { survivorGrace = was })
+	_, sink, _ := shimExiting(t)
+	select {
+	case err := <-sink.exited:
+		if !errors.Is(err, harness.ErrLeftRunning) {
+			t.Errorf("exit = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no exit")
+	}
+}
+
+// where the processes cannot be listed, the exit says it could not check.
+func TestAShimExitThatCouldNotLookSaysSo(t *testing.T) {
+	was := harness.ProcRoot
+	harness.ProcRoot = filepath.Join(t.TempDir(), "no-proc")
+	t.Cleanup(func() { harness.ProcRoot = was })
+	_, sink, _ := shimExiting(t)
+	select {
+	case err := <-sink.exited:
+		if !errors.Is(err, harness.ErrUnchecked) {
+			t.Errorf("exit = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no exit")
+	}
+}
+
 func TestAnswerFailsWhenTheRuntimeEnds(t *testing.T) {
 	r, _, _ := testRuntime()
 	r.cmd = exec.Command("true")
@@ -252,7 +335,7 @@ func TestAnswerFailsWhenTheRuntimeEnds(t *testing.T) {
 	}
 	r.handle([]byte(`{"type":"request","id":"sdk-1","kind":"permission","tool":"Bash","input":{}}`))
 	result := make(chan error, 1)
-	go func() { result <- r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}) }()
+	go func() { result <- r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}) }()
 	for {
 		r.mu.Lock()
 		waiting := len(r.answers) > 0
@@ -283,7 +366,7 @@ func TestInterruptedTurnBookkeepingIsNative(t *testing.T) {
 	var evs []*model.Event
 	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 		r, sink, _ := testRuntime()
-		r.started = true
+		r.nativeID, r.started = "bdfb220d-d5f1-4181-b9e1-fae55e0d8373", true // the recording's own session
 		r.handle([]byte(`{"type":"event","msg":` + line + `}`))
 		evs = append(evs, sink.events...)
 	}
@@ -323,7 +406,7 @@ func TestAnAPIErrorStaysAReply(t *testing.T) {
 		"transcript gone": `{` + body + `}`,
 	} {
 		r, sink, _ := testRuntime()
-		r.started = true
+		r.nativeID, r.started = "s", true
 		r.handle([]byte(`{"type":"event","msg":` + msg + `}`))
 		if len(sink.events) != 1 || sink.events[0].Kind != model.EventAssistant {
 			t.Errorf("%s: events = %+v", name, sink.events)

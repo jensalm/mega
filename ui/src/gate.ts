@@ -8,6 +8,15 @@ export const pendingReason = 'Waiting to shut down once every agent is idle; can
 // until the service is back.
 export const shutDownReason = 'mega was shut down from this page; new work waits for the service to start again'
 
+// shutDownLostReason is why new work waits on a page that asked for a
+// shutdown and then lost contact before mega said it had finished.
+export const shutDownLostReason = 'A shutdown was asked for from this page and contact was lost; new work waits until mega answers again'
+
+// shutDownFooter is what the footer and the rail say while a page that shut
+// mega down is out of touch: shut down, when it heard mega finish, or asked
+// for, when it lost contact first.
+export const shutDownFooter = (heard: boolean) => (heard ? 'Shut down from here, retrying' : 'Shutdown asked, contact lost, retrying')
+
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 // blockerKinds names what one conversation holds the gate with. a request is

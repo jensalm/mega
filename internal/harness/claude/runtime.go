@@ -134,12 +134,12 @@ type runtime struct {
 	backgroundSeen map[string]time.Time
 	mode           string // the permission mode as last reported or confirmed
 	started        bool   // the first init, or an idle launch's ready, has been reported
-	// unverified: an idle launch, whose ready reports no session, has not yet
-	// seen claude report one; the first is checked against nativeID.
-	unverified  bool
-	interrupted bool   // an interrupt was sent during the current turn
-	gone        bool   // the shim's output has ended
-	failure     string // the shim's last error frame
+	// wrongSession latches a frame naming another session than nativeID:
+	// it is reported once, and nothing more is relayed.
+	wrongSession bool
+	interrupted  bool   // an interrupt was sent during the current turn
+	gone         bool   // the shim's output has ended
+	failure      string // the shim's last error frame
 	// the MCP servers: an ask in flight, another wanted after it, the asks
 	// so far, the statuses claude gave in its last answer (its own words, by
 	// name), and how many asks in a row found a server still connecting.
@@ -181,10 +181,6 @@ func start(cmd *exec.Cmd, nativeID string, sink harness.Sink, launchMode string,
 		answers:    make(map[string]chan error),
 		modes:      make(map[string]*modeSwitch),
 		launchMode: launchMode,
-		// an idle launch has no first init to carry the session to the
-		// service before it shows the runtime started; the first session
-		// claude reports, from its very first frame, is checked here instead.
-		unverified: idle,
 	}
 	go logStderr(nativeID, stderr)
 	go r.read(stdout)
@@ -440,6 +436,12 @@ func (r *runtime) read(stdout io.Reader) {
 		err = fmt.Errorf("%w: %s", err, r.failure)
 	}
 	r.mu.Unlock()
+	// the shim runs in a process group of its own, which claude code and
+	// what it starts join: the exit names any still running, or says it could
+	// not check, never a clean stop it did not see.
+	if left := harness.Leftovers(harness.GroupSurvivors(r.cmd.Process.Pid, survivorGrace)); left != nil {
+		err = errors.Join(err, left)
+	}
 	r.sink.Exited(err)
 }
 
@@ -555,18 +557,25 @@ func (r *runtime) ready(frame *shimFrame) {
 	r.sink.Event(&model.Event{Kind: model.EventRuntime, Status: model.StatusStarted, Origin: model.OriginManaged, Text: "started with no prompt", Facts: facts})
 }
 
-// verifySession checks the first session claude reports in an idle launch,
-// before or after its ready, against the session resumed. a different one is reported as
-// the session the runtime started on, so the service's guard records the
-// error and stops it, as it does for a first init that disagrees.
-func (r *runtime) verifySession(reported string) {
+// sameSession checks a session claude reports, in any frame that names one,
+// against the session the runtime is bound to: the one resumed, or the one
+// mega minted for a new session. the first that differs is reported as the
+// session the runtime started on, so the service's guard records the error
+// and stops it; from then on nothing more is relayed. it reports whether the
+// frame may be relayed.
+func (r *runtime) sameSession(reported string) bool {
 	r.mu.Lock()
-	check := r.unverified
-	r.unverified = false
+	if !r.wrongSession && reported == r.nativeID {
+		r.mu.Unlock()
+		return true
+	}
+	first := !r.wrongSession && reported != r.nativeID
+	r.wrongSession = true
 	r.mu.Unlock()
-	if check && reported != r.nativeID {
+	if first {
 		r.sink.Event(&model.Event{Kind: model.EventRuntime, Status: model.StatusStarted, Origin: model.OriginManaged, Text: "claude reported another session", Facts: &model.RuntimeFacts{Session: reported}})
 	}
+	return false
 }
 
 func (r *runtime) event(raw map[string]any) {
@@ -578,8 +587,11 @@ func (r *runtime) event(raw map[string]any) {
 		dl.Warnf("claude shim for '%s': %v", r.nativeID, err)
 		return
 	}
-	if msg.SessionID != "" {
-		r.verifySession(msg.SessionID)
+	r.mu.Lock()
+	wrong := r.wrongSession
+	r.mu.Unlock()
+	if wrong || (msg.SessionID != "" && !r.sameSession(msg.SessionID)) {
+		return
 	}
 	if msg.Type == "system" && msg.Subtype == "background_tasks_changed" {
 		// the whole current list of background work; the native event is
@@ -875,3 +887,7 @@ func initMCPStatuses(raw map[string]any) map[string]string {
 	}
 	return statuses
 }
+
+// survivorGrace is how long the shim's exit waits for the processes in its
+// group to go; a test shortens it.
+var survivorGrace = 5 * time.Second

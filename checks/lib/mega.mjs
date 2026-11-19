@@ -98,11 +98,22 @@ export async function reconnectable(p) {
   // a read made after catchUp, while the route is still being taken away,
   // goes straight through.
   const hold = (route) => (held ? held.push(route) : route.continue())
+  // dropping, when set, is a test of a frame the service sends that the page
+  // never receives; every other frame is forwarded as it comes.
+  let dropping = null
   await p.routeWebSocket(/\/api\/stream/, (ws) => {
-    ws.connectToServer()
+    const server = ws.connectToServer()
+    server.onMessage((message) => {
+      if (!dropping || !dropping(String(message))) ws.send(message)
+    })
     current = ws
   })
   return {
+    // dropFrames keeps the frames for which test is true from the page, from
+    // now on; null forwards everything again.
+    dropFrames(test) {
+      dropping = test
+    },
     // hold holds the page's workspace reads from now on, with the stream left
     // as it is: for a stream that drops by itself, as when the service stops.
     async hold() {

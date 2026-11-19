@@ -21,6 +21,8 @@ interface BannerProps {
   gate: ShutdownGate | undefined
   // set once this page's shutdown was accepted: when it asked.
   shutDownAt: Date | null
+  // the page heard mega say its shutdown finished before contact was lost.
+  heard: boolean
   connected: boolean
   // the page shows only what it last read: the gate is last known, and nothing
   // is offered on it.
@@ -34,7 +36,7 @@ interface BannerProps {
 // ShutdownBanner runs across the top of the main column while the gate is
 // armed: what it waits for, and at idle the offer to shut down. on the page
 // that shut the service down it says so, and when, until the service is back.
-export function ShutdownBanner({ gate, shutDownAt, connected, stale, busy, error, onShutDown, onCancel }: BannerProps) {
+export function ShutdownBanner({ gate, shutDownAt, heard, connected, stale, busy, error, onShutDown, onCancel }: BannerProps) {
   if (shutDownAt) {
     return (
       <section className="gate-banner shut-down" role="status">
@@ -53,10 +55,17 @@ export function ShutdownBanner({ gate, shutDownAt, connected, stale, busy, error
               <strong>A shutdown was asked for from this page at {clockTime(shutDownAt)}</strong>
               <p>The page has reached mega again and is reading the workspace, which says whether that shutdown is still under way.</p>
             </>
-          ) : (
+          ) : heard ? (
             <>
               <strong>mega was shut down from this page at {clockTime(shutDownAt)}</strong>
               <p>The page keeps trying, and the workspace comes back by itself when the service starts again.</p>
+            </>
+          ) : (
+            // the page asked, and lost contact before mega said it had
+            // finished: it cannot say the shutdown happened.
+            <>
+              <strong>A shutdown was asked for from this page at {clockTime(shutDownAt)}, and contact was lost</strong>
+              <p>mega did not say whether it finished. The page keeps trying, and the workspace comes back by itself when mega answers again.</p>
             </>
           )}
         </div>

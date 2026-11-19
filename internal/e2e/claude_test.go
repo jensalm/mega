@@ -5,6 +5,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/michaelquigley/df/dd"
 	"github.com/michaelquigley/mega/internal/server"
 	"io"
@@ -249,6 +250,10 @@ func TestClaudeRoundTrip(t *testing.T) {
 	if question.Kind != model.RequestQuestion {
 		t.Fatalf("expected a question, got %+v", question)
 	}
+	// the question answered is the one the prompt asks for, looked at first.
+	if asked, _ := json.Marshal(question.Payload); !strings.Contains(string(asked), `"question":"Which color do you prefer?"`) {
+		t.Fatalf("expected the color question, got %s; it was not answered", asked)
+	}
 	if err := svc.Answer(s.id, question.ID, harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +272,7 @@ func TestClaudeRoundTrip(t *testing.T) {
 	}
 	s.idle()
 	s.expectReply("DELTA-7a8b")
-	if code := s.answer(approval.ID, "allow"); code != service.CodeNotPending {
+	if code := s.answer(approval.ID, "deny"); code != service.CodeNotPending {
 		t.Errorf("late answer: %q", code)
 	}
 
@@ -361,7 +366,7 @@ func TestClaudeInterruptedTurnImportsNoReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.waitFor("the turn to end", func(v service.ConversationView) bool { return !v.TurnActive && len(v.Pending) == 0 })
-	if code := s.answer(approval.ID, "allow"); code != service.CodeNotPending {
+	if code := s.answer(approval.ID, "deny"); code != service.CodeNotPending {
 		t.Errorf("an answer after the interrupt: %q", code)
 	}
 	if err := svc.Release(s.id); err != nil {

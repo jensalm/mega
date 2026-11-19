@@ -256,13 +256,17 @@ test('messages reads the api-error flags of synthetic messages from the transcri
       synthetic('s-gone', 'not in the transcript'),
       synthetic('s-bare', 'in the transcript with no flag'),
       synthetic('s-null', 'in the transcript with a null flag'),
+      synthetic('s-other', 'flagged in the transcript by another session'),
     ];
     const transcript = [
-      { type: 'user', uuid: 'u1', message: { role: 'user', content: 'hello' } },
-      { type: 'assistant', uuid: 's-book', isApiErrorMessage: false, message: { model: '<synthetic>', content: [] } },
-      { type: 'assistant', uuid: 's-err', isApiErrorMessage: true, error: 'authentication_failed', message: { model: '<synthetic>', content: [] } },
-      { type: 'assistant', uuid: 's-bare', message: { model: '<synthetic>', content: [] } },
-      { type: 'assistant', uuid: 's-null', isApiErrorMessage: null, message: { model: '<synthetic>', content: [] } },
+      { type: 'user', uuid: 'u1', sessionId: session, message: { role: 'user', content: 'hello' } },
+      { type: 'assistant', uuid: 's-book', sessionId: session, isApiErrorMessage: false, message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-err', sessionId: session, isApiErrorMessage: true, error: 'authentication_failed', message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-bare', sessionId: session, message: { model: '<synthetic>', content: [] } },
+      { type: 'assistant', uuid: 's-null', sessionId: session, isApiErrorMessage: null, message: { model: '<synthetic>', content: [] } },
+      // an entry of another session in the file: the file is found by its
+      // name, which is no proof of what it holds.
+      { type: 'assistant', uuid: 's-other', sessionId: '99999999-2222-4333-8444-555555555555', isApiErrorMessage: true, error: 'from elsewhere', message: { model: '<synthetic>', content: [] } },
     ].map(e => JSON.stringify(e)).join('\n') + '\n';
     const sdk = { getSessionMessages: async () => reader };
     for (const folder of ['-work-checkout', 'another-folder']) {
@@ -284,6 +288,7 @@ test('messages reads the api-error flags of synthetic messages from the transcri
       assert.equal('isApiErrorMessage' in byId['s-bare'], false, folder);
       assert.equal('isApiErrorMessage' in byId['s-null'], false, folder);
       assert.equal('isApiErrorMessage' in byId.u1, false, folder);
+      assert.equal('isApiErrorMessage' in byId['s-other'], false, `${folder}: another session's entry gave its flags`);
     }
     // with no transcript at all, nothing is added.
     rmSync(join(config, 'projects'), { recursive: true, force: true });

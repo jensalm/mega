@@ -71,3 +71,23 @@ Decisions, as the planning agent recommended them to Michael:
 
 One thing noticed on the way, not yet a finding: when a write has failed and the service refuses further writes, nothing on the page says so until the operator tries something. A sign that mega can no longer record would say it once, for everything.
 
+## after three passes, 2026-11-19
+
+Pass 3's five are fixed, and both rulings are built: the service's last word on the stream says a shutdown has finished, so an ordinary shutdown reads as before and a lost one says contact was lost; and a settlement that could not be recorded now refuses a further answer with the reason. Pass 4 returned six. The counts are five, five, five, six.
+
+**What the passes show when read together.** The same kind of finding has been arriving one harness at a time:
+
+- "Is this the session that was asked for": pi importing a file by name (pass 1), Codex's history read unchecked (pass 2), Claude's check running only once (pass 3), pi checking one read and importing another (pass 4).
+- "What was left running": Codex and pi before this card, Claude in pass 3.
+- "A test that allows a request without looking": two fixed on 2026-11-19, one more in pass 4.
+
+Each was fixed where the review pointed, and its sibling turned up a pass later. The count will fall faster if a fix is made for the kind and not the instance: when a finding names one harness or one call site, the same question is asked of the other two harnesses and every other caller before the next review.
+
+**A decision for Michael, from pass 4.** If the registry write that marks a finished turn's output as unread fails, the output is never counted and nothing tries again. The planning agent's recommendation: do not retry while the registry refuses writes, which is the rule, and reconcile the marker from the event log at the next start. The log is the record and the registry's marker is derived from it, so start-up can always rebuild it.
+
+
+## after four passes, 2026-11-19
+
+Pass 4's six are fixed, and this was the first pass worked by kind and not by instance. For each finding the implementer asked the same question of the other harnesses and callers, and fixed what it found that the review had not named: every environment resolution checked as it finishes, shutdown waiting for a launch already under way, a failed launch's request settled, pi's runtime and Claude's history each checking whose session they read, and about thirty tests that answered a request without looking. Pass 5 returned five, four blocking, the first fall: five, five, five, six, five. One of the five is a hole in pass 4's own fix for the unread marker.
+
+One thing left as it is, by the planning agent's recommendation: if the registry write of a runtime's state fails after a stop the log recorded, the next start shows the conversation as unsupervised. That is the safe side, and it is what `honest-runtime-state` asks of a state the service cannot vouch for.

@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/model"
+	"github.com/michaelquigley/mega/internal/registry"
 )
 
 // harden-requests-stops-and-restarts: each test fails without its fix.
@@ -55,7 +57,11 @@ func TestAnUnrecordedSettlementLeavesNothingAnswerable(t *testing.T) {
 	}
 	reached := 0
 	rt.OnAnswer(func() { reached++ })
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
+	err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny})
+	wantCode(t, err, CodeNotPending)
+	if err == nil || !strings.Contains(err.Error(), "could not be recorded") {
+		t.Errorf("the refusal does not say why: %v", err)
+	}
 	if reached != 0 {
 		t.Errorf("an answer to a settled request reached the harness %d times", reached)
 	}
@@ -71,6 +77,7 @@ func TestARejectedAnswerLeavesTheRequestPending(t *testing.T) {
 	started(rt)
 	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
 	rt.RejectAnswers(fmt.Errorf("%w: 'B' is not one of the choices offered", harness.ErrInvalidAnswer))
+	r.looked(conv.ID, id, `"question":"Which?"`)
 	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "B"}}), CodeInvalid)
 	if pending := r.view(conv.ID).Pending; len(pending) != 1 || pending[0].ID != id {
 		t.Fatalf("a rejected answer settled the request: %+v", pending)
@@ -81,6 +88,7 @@ func TestARejectedAnswerLeavesTheRequestPending(t *testing.T) {
 		}
 	}
 	rt.RejectAnswers(nil)
+	r.looked(conv.ID, id, `"label":"A"`)
 	if err := r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}}); err != nil {
 		t.Errorf("a fitting answer after a rejected one: %v", err)
 	}
@@ -160,5 +168,46 @@ func TestARefusedPromptLeavesNoTurnOpen(t *testing.T) {
 	rt.RefusePrompts(nil)
 	if err := r.svc.Prompt(conv.ID, "three"); err != nil {
 		t.Errorf("the next prompt: %v", err)
+	}
+}
+
+// once the service has closed, nothing writes the registry: a late
+// environment resolution, or anything else, finds the write refused, so the
+// file the next instance owns is never touched.
+func TestNothingWritesTheRegistryAfterClose(t *testing.T) {
+	r := newRig(t)
+	r.svc.Close()
+	err := r.svc.update(func(doc *registry.Document) error {
+		doc.Projects = nil
+		return nil
+	})
+	if err == nil {
+		t.Error("the registry was written after Close")
+	}
+}
+
+// an orderly shutdown's last word to every subscriber, before its stream
+// closes, is that it has finished; a service closed without one, as after a
+// crash or in a test, says nothing of the kind.
+func TestAFinishedShutdownIsTheStreamsLastWord(t *testing.T) {
+	r := newRig(t)
+	sub := r.svc.Subscribe()
+	r.svc.Shutdown(t.Context())
+	r.svc.Close()
+	var last Update
+	for update := range sub.Updates() {
+		last = update
+	}
+	if !last.ShutdownFinished {
+		t.Errorf("the last update before the stream closed was %+v", last)
+	}
+
+	other := newRig(t)
+	quiet := other.svc.Subscribe()
+	other.svc.Close()
+	for update := range quiet.Updates() {
+		if update.ShutdownFinished {
+			t.Error("a service closed without a shutdown said one finished")
+		}
 	}
 }

@@ -159,7 +159,7 @@ Where things go:
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
 - **`readme.mjs`** (5 steps): the README's picture of a workspace. A scratch workspace of three projects, with conversations on all three harnesses in the states the side panel shows: a Claude Code approval waiting, a Codex reply unread, a pi turn running, one read and idle, and one Claude Code conversation holding hand-written turns from `lib/scene.mjs`, so its history reads as real work. It checks that needs-you holds the approval and the unread reply and that the pi turn is running. It then opens the hand-written conversation, unfolds every project, opens the last action, and saves the page at 1440×900 as `shots/workspace.png`. `make readme-image` runs it and copies the picture to `docs/images/workspace.png`.
-- **`requests.mjs`** (63 steps): requests. It checks the following:
+- **`requests.mjs`** (67 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -267,7 +267,7 @@ await t.done()
 The rules:
 
 - Wait on conditions, never on delays. The one exception is a step that shows a key did nothing: nothing can be waited for, so it gives the page longer than the press needed to act (`settle` in `requests.mjs`) and then checks nothing changed. A step that cannot be made stable is reported, not left flaky.
-- Approve only where the approval is under test, after a `must` on what is pending; where the decision is incidental, deny.
+- Approve, or choose an answer, only where that answer is under test, after a `must` on what is pending, made before the first press that could answer it, including the presses that are meant to answer nothing; where the decision is incidental, deny or dismiss. The Go tests keep the same rule: the service's `rig.looked`, Codex's `askQuestion`, and a look at the sink's payload in each adapter's tests.
 - Drive the fakes by the text of each prompt. The fake shim's verbs are in its header, and the fake Codex's in its own; a verb a suite needs is added there.
 - Only data goes in scratch. A suite never writes outside its scratch directory, apart from what the service writes there for it.
 - Say at the top of the file what the suite checks, and add it to the list above.

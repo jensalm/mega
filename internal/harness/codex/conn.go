@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -358,16 +357,12 @@ type stat struct {
 	start string
 }
 
-// procRoot is where the processes are listed; a test points it at a
-// directory that cannot be read.
-var procRoot = "/proc"
-
 // readStats reads the parent and start time of every live process, and names
 // those that are there but could not be read; or it says the processes
 // could not be listed at all. there is a listing only where /proc is: on
 // macOS there is none yet.
 func readStats() (map[int]stat, []int, error) {
-	entries, err := os.ReadDir(procRoot)
+	entries, err := os.ReadDir(harness.ProcRoot)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing processes: %w", err)
 	}
@@ -378,8 +373,8 @@ func readStats() (map[int]stat, []int, error) {
 		if err != nil {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(procRoot, entry.Name(), "stat"))
-		if gone(err) {
+		data, err := os.ReadFile(filepath.Join(harness.ProcRoot, entry.Name(), "stat"))
+		if harness.Gone(err) {
 			continue
 		}
 		if err != nil {
@@ -405,12 +400,6 @@ func readStats() (map[int]stat, []int, error) {
 		stats[pid] = stat{ppid: ppid, start: fields[19]}
 	}
 	return stats, unread, nil
-}
-
-// gone is whether reading a process's entry failed because the process went
-// while it was being listed, which is ordinary, and leaves nothing unknown.
-func gone(err error) bool {
-	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
 func logStderr(pid int, stderr io.Reader) {

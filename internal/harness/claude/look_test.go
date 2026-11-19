@@ -1,6 +1,9 @@
 package claude
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,10 +13,11 @@ import (
 	"github.com/michaelquigley/mega/internal/model"
 )
 
-// a look at a recorded session, through the shim's messages command as an
-// import reads it (here the fake shim's, serving the recorded transcript):
-// the first prompt, the last, and the last reply.
-func TestLookReadsARecordedSession(t *testing.T) {
+// recorded is a harness whose fake shim serves the recorded session file as
+// the messages of the session asked, and the session id the recording's
+// messages carry.
+func recorded(t *testing.T, file, asked string) *Harness {
+	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("no node")
@@ -29,15 +33,40 @@ func TestLookReadsARecordedSession(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	recorded, err := os.ReadFile(filepath.Join("testdata", "history.jsonl"))
+	data, err := os.ReadFile(filepath.Join("testdata", file))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(shim, "messages-s-1.jsonl"), recorded, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(shim, "messages-"+asked+".jsonl"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h := New(Config{Node: node, Shim: shim, Executable: truePath(t)})
-	look, err := h.Look(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "s-1")
+	return New(Config{Node: node, Shim: shim, Executable: truePath(t)})
+}
+
+// sessionOf is the session id a recording's messages carry.
+func sessionOf(t *testing.T, file string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, _ := bytes.Cut(data, []byte("\n"))
+	var m struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(first, &m); err != nil || m.SessionID == "" {
+		t.Fatalf("no session id in %s: %v", file, err)
+	}
+	return m.SessionID
+}
+
+// a look at a recorded session, through the shim's messages command as an
+// import reads it (here the fake shim's, serving the recorded transcript):
+// the first prompt, the last, and the last reply.
+func TestLookReadsARecordedSession(t *testing.T) {
+	id := sessionOf(t, "history.jsonl")
+	h := recorded(t, "history.jsonl", id)
+	look, err := h.Look(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,30 +81,9 @@ func TestLookReadsARecordedSession(t *testing.T) {
 // claude-rt1 fixture, claude code 2.1.326), beside a prompt made only of the
 // same tags and unmarked: the record is native, the prompt the operator's.
 func TestHistoryKeepsAModelSwitchRecordNative(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("no node")
-	}
-	shim := t.TempDir()
-	fake, err := filepath.Abs(filepath.Join("..", "..", "..", "shim", "claude", "fake", "shim.mjs"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(fake, filepath.Join(shim, "shim.mjs")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	recorded, err := os.ReadFile(filepath.Join("testdata", "model-switch-history.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(shim, "messages-s-2.jsonl"), recorded, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	h := New(Config{Node: node, Shim: shim, Executable: truePath(t)})
-	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "s-2")
+	id := sessionOf(t, "model-switch-history.jsonl")
+	h := recorded(t, "model-switch-history.jsonl", id)
+	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,30 +103,9 @@ func TestHistoryKeepsAModelSwitchRecordNative(t *testing.T) {
 // shim's messages command, as an import does.
 func historyFrom(t *testing.T, file string) harness.History {
 	t.Helper()
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("no node")
-	}
-	shim := t.TempDir()
-	fake, err := filepath.Abs(filepath.Join("..", "..", "..", "shim", "claude", "fake", "shim.mjs"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(fake, filepath.Join(shim, "shim.mjs")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(shim, "node_modules", "@anthropic-ai", "claude-agent-sdk"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	recorded, err := os.ReadFile(filepath.Join("testdata", file))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(shim, "messages-s-3.jsonl"), recorded, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	h := New(Config{Node: node, Shim: shim, Executable: truePath(t)})
-	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "s-3")
+	id := sessionOf(t, file)
+	h := recorded(t, file, id)
+	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,5 +144,16 @@ func TestHistorySaysWhenTheLastTurnHasNoEnd(t *testing.T) {
 	wake := historyFrom(t, "open-wake-history.jsonl")
 	if !wake.Open["a5e29c09-ef44-4bf0-9fe6-35ff990f3a1c"] || wake.Open["e220e245-0e75-4b21-aceb-52eb3a614836"] || wake.Open["6d3ab919-51d5-4033-8f32-cca7d6982164"] {
 		t.Errorf("a wake with no prompt after an ended turn opens %v", wake.Open)
+	}
+}
+
+// a history read back must be the session asked for, message by message, as
+// the live stream is checked frame by frame: messages of another session are
+// refused before anything of them is imported.
+func TestHistoryRefusesAnotherSessionsMessages(t *testing.T) {
+	h := recorded(t, "history.jsonl", "not-this-one")
+	history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "not-this-one")
+	if !errors.Is(err, harness.ErrWrongSession) {
+		t.Errorf("another session's messages were read back: %d events (%v)", len(history.Events), err)
 	}
 }

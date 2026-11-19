@@ -142,8 +142,8 @@ func TestMissingAppServerIsNotStarted(t *testing.T) {
 // anything of it is mapped.
 func TestHistoryChecksTheThreadsOwnID(t *testing.T) {
 	h := fakeHarness(t, "history")
-	if history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "t-2"); err == nil {
-		t.Errorf("thread t-1 was read back as t-2: %d events", len(history.Events))
+	if history, err := h.History(t.Context(), harness.Place{Cwd: t.TempDir(), Env: os.Environ(), Find: os.Environ()}, "t-2"); !errors.Is(err, harness.ErrWrongSession) {
+		t.Errorf("thread t-1 was read back as t-2: %d events (%v)", len(history.Events), err)
 	}
 }
 

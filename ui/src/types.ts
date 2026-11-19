@@ -402,4 +402,6 @@ export interface StreamFrame {
   conversation_id?: string
   event?: ConversationEvent
   delta?: string
+  // an orderly shutdown's last word, before the stream closes.
+  shutdown_finished?: boolean
 }

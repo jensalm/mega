@@ -332,7 +332,8 @@ func (h *Harness) Launch(spec harness.Spec, sink harness.Sink) (harness.Runtime,
 }
 
 // History reads the session's stored messages through the shim. a claude
-// transcript carries no turn status, so no event is reported open.
+// transcript carries no explicit turn status, so History infers which events
+// belong to an unfinished last turn (seeTurn) and reports them open.
 func (h *Harness) History(ctx context.Context, place harness.Place, nativeID string) (harness.History, error) {
 	cmd, err := h.command(ctx, place, "messages", "--session", nativeID, "--cwd", place.Cwd)
 	if err != nil {
@@ -353,6 +354,12 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 			raw, bindErr := dd.DecodeStrictJSON(line)
 			if bindErr != nil {
 				return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, bindErr)
+			}
+			// every message names its session, as every live frame does, and
+			// each is checked: messages of another are never imported.
+			got, _ := raw["session_id"].(string)
+			if err := harness.SameSession("claude's messages", nativeID, got); err != nil {
+				return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, err)
 			}
 			mapped, mapErr := mapMessage(raw)
 			if mapErr != nil {

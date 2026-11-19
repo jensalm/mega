@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/michaelquigley/df/dl"
 
@@ -14,19 +15,30 @@ import (
 // that was pending died with its runtime and is resolved lost, and a
 // conversation still recorded running was never seen to exit, so it becomes
 // unsupervised until the operator resumes it. native history is not imported
-// here, because an orphaned runtime may still be writing.
+// here, because an orphaned runtime may still be writing. the unread marker
+// is derived from the log, which is the record: a marker the registry
+// refused when a turn ended is counted here, from the turn the log holds.
 func (s *Service) recover() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var orphaned []string
+	outputs := make(map[string]int64)
 	for _, conv := range s.reg.Snapshot().Conversations {
 		l, err := s.liveLocked(conv.ID)
 		if err != nil {
 			return err
 		}
 		s.settleModeRequestLocked(conv, l)
-		if err := s.loseUnresolvedLocked(l); err != nil {
+		evs, err := l.log.Since(0)
+		if err != nil {
 			return err
+		}
+		if err := s.loseUnresolvedLocked(l, evs); err != nil {
+			return err
+		}
+		if seq, at := finishedOutput(evs); seq > conv.OutputSeq {
+			outputs[conv.ID] = seq
+			l.outputAt = at
 		}
 		if conv.Runtime == model.RuntimeRunning {
 			if err := s.record(l, &model.Event{
@@ -39,27 +51,75 @@ func (s *Service) recover() error {
 			orphaned = append(orphaned, conv.ID)
 		}
 	}
-	if len(orphaned) == 0 {
+	if len(orphaned) == 0 && len(outputs) == 0 {
 		return nil
 	}
 	return s.update(func(doc *registry.Document) error {
 		for i := range doc.Conversations {
-			if slices.Contains(orphaned, doc.Conversations[i].ID) {
-				doc.Conversations[i].Runtime = model.RuntimeUnsupervised
+			c := &doc.Conversations[i]
+			if slices.Contains(orphaned, c.ID) {
+				c.Runtime = model.RuntimeUnsupervised
+			}
+			if seq, ok := outputs[c.ID]; ok && seq > c.OutputSeq {
+				c.OutputSeq = seq
 			}
 		}
 		return nil
 	})
 }
 
+// finishedOutput is the unread marker as the log has it: the newest agent
+// output whose turn ended, or whose runtime's exit was recorded, by the rule
+// sink.Event and Exited apply as it happens. output the adapter marked as
+// after its turn counts at once; output of a turn still open at the log's
+// end does not. imported events never count, since an import leaves what it
+// brings in read, and a resume counts what it finds in its own write; a
+// runtime lost to a restart leaves its turn to that resume.
+func finishedOutput(evs []*model.Event) (int64, time.Time) {
+	var seq, turn int64
+	var at, turnAt time.Time
+	active := false
+	end := func() {
+		if turn > seq {
+			seq, at = turn, turnAt
+		}
+		turn, turnAt, active = 0, time.Time{}, false
+	}
+	for _, ev := range evs {
+		switch ev.Kind {
+		case model.EventUser, model.EventAssistant, model.EventToolUse, model.EventToolResult:
+			if ev.Origin == model.OriginNative || ev.Seq <= 0 {
+				continue
+			}
+			output := ev.Kind != model.EventUser
+			if ev.AfterTurn && !active {
+				if output && ev.Seq > seq {
+					seq, at = ev.Seq, ev.At
+				}
+				continue
+			}
+			active = true
+			if output {
+				turn, turnAt = ev.Seq, ev.At
+			}
+		case model.EventTurnEnd:
+			end()
+		case model.EventRuntime:
+			switch ev.Status {
+			case model.StatusStopped, model.StatusError:
+				end()
+			case model.StatusUnsupervised:
+				turn, turnAt, active = 0, time.Time{}, false
+			}
+		}
+	}
+	return seq, at
+}
+
 // loseUnresolvedLocked resolves every request the log shows without a
 // resolution. this reads history only to close it out; the pending set itself
 // is never rebuilt from the log. callers hold s.mu.
-func (s *Service) loseUnresolvedLocked(l *live) error {
-	evs, err := l.log.Since(0)
-	if err != nil {
-		return err
-	}
+func (s *Service) loseUnresolvedLocked(l *live, evs []*model.Event) error {
 	var open []*model.Request
 	for _, ev := range evs {
 		if ev.Req == nil {
@@ -95,9 +155,20 @@ func (s *Service) Shutdown(ctx context.Context) {
 		id     string
 		exited chan struct{}
 	}
+	type launching struct {
+		l   *live
+		inc *incarnation
+	}
 	var waits []stopping
+	var launches []launching
 	for _, l := range s.live {
 		if l.runtime == nil {
+			// a launch past its preparation: it starts no harness from here,
+			// or one it started is stopped as its launch returns; either way
+			// the shutdown waits for it.
+			if l.busy && l.inc != nil {
+				launches = append(launches, launching{l: l, inc: l.inc})
+			}
 			continue
 		}
 		waits = append(waits, stopping{id: l.id, exited: l.inc.exited})
@@ -105,6 +176,20 @@ func (s *Service) Shutdown(ctx context.Context) {
 	}
 	s.mu.Unlock()
 
+	for _, w := range launches {
+		select {
+		case <-w.inc.launched:
+		case <-ctx.Done():
+			dl.Warnf("a launch of '%s' did not return before shutdown; it will be unsupervised at the next start", w.l.id)
+			continue
+		}
+		s.mu.Lock()
+		running := w.l.inc == w.inc && w.l.runtime != nil
+		s.mu.Unlock()
+		if running {
+			waits = append(waits, stopping{id: w.l.id, exited: w.inc.exited})
+		}
+	}
 	for _, w := range waits {
 		select {
 		case <-w.exited:
@@ -112,6 +197,9 @@ func (s *Service) Shutdown(ctx context.Context) {
 			dl.Warnf("conversation '%s' did not stop before shutdown; it will be unsupervised at the next start", w.id)
 		}
 	}
+	s.mu.Lock()
+	s.shutdownDone = true
+	s.mu.Unlock()
 }
 
 // Close ends every subscription and closes the event logs. runtimes still
@@ -126,6 +214,12 @@ func (s *Service) Close() {
 	s.snapshotting.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.shutdownDone {
+		// an orderly shutdown's last word, before every stream closes: a page
+		// that hears it knows mega was shut down, and one that lost contact
+		// first knows only that it was asked to.
+		s.publish(Update{ShutdownFinished: true})
+	}
 	for sub := range s.subs {
 		s.drop(sub)
 	}

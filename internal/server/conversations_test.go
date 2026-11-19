@@ -86,7 +86,7 @@ func TestBrowserReconnectReplaysAndShowsCurrentPendingSet(t *testing.T) {
 	rt.Emit(&model.Event{Kind: model.EventAssistant, Text: "working", NativeID: "a-1"})
 	stillPending := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?"}}})
 	resolved := rt.Ask(model.RequestPermission, map[string]any{"tool": "Bash"})
-	if status, body := f.do(t, http.MethodPost, "/api/conversations/"+id+"/answer", jsonBody(map[string]string{"request_id": resolved, "decision": "allow"})); status != http.StatusAccepted {
+	if status, body := f.do(t, http.MethodPost, "/api/conversations/"+id+"/answer", jsonBody(map[string]string{"request_id": resolved, "decision": "deny"})); status != http.StatusAccepted {
 		t.Fatalf("answer: %d %v", status, body)
 	}
 
@@ -102,7 +102,7 @@ func TestBrowserReconnectReplaysAndShowsCurrentPendingSet(t *testing.T) {
 	if ids := pendingIDs(f.conversation(t, id)); !slices.Equal(ids, []string{stillPending}) {
 		t.Errorf("pending = %v, want only %s", ids, stillPending)
 	}
-	if status, body := f.do(t, http.MethodPost, "/api/conversations/"+id+"/answer", jsonBody(map[string]string{"request_id": resolved, "decision": "allow"})); status != http.StatusConflict || body["code"] != "not_pending" {
+	if status, body := f.do(t, http.MethodPost, "/api/conversations/"+id+"/answer", jsonBody(map[string]string{"request_id": resolved, "decision": "deny"})); status != http.StatusConflict || body["code"] != "not_pending" {
 		t.Errorf("late answer: %d %v", status, body)
 	}
 	if len(rt.Prompts()) != 1 || len(rt.Deliveries()) != 1 {
@@ -145,7 +145,7 @@ func TestConversationCommandStatuses(t *testing.T) {
 	}{
 		{"prompt mid-turn", http.MethodPost, base + "/prompt", `{"text":"two"}`, http.StatusConflict, "conflict"},
 		{"empty prompt", http.MethodPost, base + "/prompt", `{"text":"  "}`, http.StatusBadRequest, "invalid"},
-		{"unknown request", http.MethodPost, base + "/answer", `{"request_id":"nope","decision":"allow"}`, http.StatusConflict, "not_pending"},
+		{"unknown request", http.MethodPost, base + "/answer", `{"request_id":"nope","decision":"deny"}`, http.StatusConflict, "not_pending"},
 		{"bad since", http.MethodGet, base + "/events?since=-1", "", http.StatusBadRequest, "invalid"},
 		{"no turns", http.MethodGet, base + "/events?turns=0", "", http.StatusBadRequest, "invalid"},
 		{"bad before", http.MethodGet, base + "/events?before=x", "", http.StatusBadRequest, "invalid"},

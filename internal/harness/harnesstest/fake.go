@@ -26,6 +26,7 @@ type Harness struct {
 	launchErr  error
 	onLaunch   func()
 	onHistory  func()
+	onVersion  func()
 	catalog    harness.Catalog
 	settings   model.TurnSettings
 	version    string
@@ -199,8 +200,22 @@ func (h *Harness) Invocation(ev *model.Event) (harness.Invocation, bool) {
 // Version is the scripted version (SetVersion), as a harness's --version.
 func (h *Harness) Version(_ context.Context, _ []string) (string, error) {
 	h.mu.Lock()
+	onVersion := h.onVersion
+	h.mu.Unlock()
+	if onVersion != nil {
+		onVersion()
+	}
+	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.version, h.versionErr
+}
+
+// OnVersion runs fn each time the version is read, before it is returned, as
+// the last thing the service does before a launch.
+func (h *Harness) OnVersion(fn func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onVersion = fn
 }
 
 // DeferModelChanges makes later runtimes take a model change with the next

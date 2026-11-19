@@ -70,6 +70,11 @@ type Service struct {
 	// failUpdate, when a test sets it, runs before each registry write and
 	// fails it with what it returns.
 	failUpdate func() error
+	// failRecord, when a test sets it, runs before each event is appended and
+	// fails the append with what it returns. it runs under s.mu.
+	failRecord func(*model.Event) error
+	// shutdownDone: an orderly Shutdown has finished, which Close announces.
+	shutdownDone bool
 
 	mu          sync.Mutex
 	reg         *registry.Registry
@@ -338,6 +343,11 @@ func (s *Service) Subscribe() *Subscription {
 // as unavailable rather than as an internal fault, since it has already logged
 // the condition once. nothing was confirmed, so nothing is announced.
 func (s *Service) update(fn func(*registry.Document) error) error {
+	if s.logsClosed {
+		// closed: the data directory may already be the next instance's, so
+		// nothing more is written, whatever was still in flight.
+		return newError(CodeUnavailable, "the service has closed; nothing more is written")
+	}
 	if s.failUpdate != nil {
 		if err := s.failUpdate(); err != nil {
 			return err

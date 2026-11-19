@@ -61,9 +61,13 @@ func TestMCPApprovalAnswers(t *testing.T) {
 		{harness.DecisionDeny, map[string]any{"action": "decline"}},
 	}
 	for _, c := range cases {
-		r, _, w := testRuntime()
+		r, sink, w := testRuntime()
 		r.feed(mcpCallStarted)
 		r.feed(mcpApproval)
+		// the request answered is the one the fixture raised, looked at first.
+		if len(sink.payloads) != 1 || sink.payloads[0]["tool"] != "fixture/echo" {
+			t.Fatalf("%s: the request is not the fixture's echo: %v", c.decision, sink.payloads)
+		}
 		if err := r.Answer("svc-1", harness.Answer{Decision: c.decision, Message: "not now"}); err != nil {
 			t.Fatalf("%s: %v", c.decision, err)
 		}
@@ -71,7 +75,7 @@ func TestMCPApprovalAnswers(t *testing.T) {
 		if frame["id"] != float64(0) || !reflect.DeepEqual(frame["result"], c.want) {
 			t.Errorf("%s: response = %v, want result %v", c.decision, frame, c.want)
 		}
-		if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); !errors.Is(err, harness.ErrNotPending) {
+		if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 			t.Errorf("%s: a late answer: %v", c.decision, err)
 		}
 		w.quiet(t)
@@ -83,8 +87,8 @@ func TestMCPApprovalAnswers(t *testing.T) {
 func TestSessionIsSentOnlyWhereOffered(t *testing.T) {
 	r, sink, w := testRuntime()
 	r.feed(strings.Replace(mcpApproval, `"persist":["session","always"],`, `"persist":["always"],`, 1))
-	if _, offered := sink.payloads[0]["allow_session"]; offered {
-		t.Fatalf("payload offers the session: %v", sink.payloads[0])
+	if _, offered := sink.payloads[0]["allow_session"]; offered || sink.payloads[0]["tool"] != "fixture/echo" {
+		t.Fatalf("payload offers the session, or is not the fixture's echo: %v", sink.payloads[0])
 	}
 	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllowSession}); err != nil {
 		t.Fatal(err)
@@ -104,7 +108,7 @@ func TestMCPApprovalIsAbortedWhenCodexResolvesIt(t *testing.T) {
 	if strings.Join(sink.resolved, ",") != "svc-1:aborted" {
 		t.Errorf("resolved = %v", sink.resolved)
 	}
-	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("answer after the abort: %v", err)
 	}
 	w.quiet(t)

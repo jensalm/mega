@@ -224,10 +224,10 @@ func (s *Service) Adopt(projectID, harnessName, nativeID, name string) (Conversa
 	l.busy = true
 	s.mu.Unlock()
 
-	place, importErr := s.placeFor(projectID)
+	place, env, importErr := s.placeWithFacts(projectID)
 	var result imported
 	if importErr == nil {
-		result, importErr = s.importHistory(conv, l, place)
+		result, importErr = s.importHistory(conv, l, place, env)
 	}
 
 	s.mu.Lock()

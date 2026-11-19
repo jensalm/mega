@@ -2,6 +2,7 @@ package pi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -207,18 +208,20 @@ func TestALaunchRunsATurnAndAnImportAddsNothing(t *testing.T) {
 func TestDialogsAreQuestions(t *testing.T) {
 	h := New(Config{Binary: fake(t)})
 	rt, s := launch(t, h, place(t), "")
+	// shows is the dialog's own title, looked at before it is answered.
 	cases := []struct {
 		prompt string
+		shows  string
 		answer harness.Answer
 		reply  string
 	}{
 		// the gate is answered Block: allowing it is not what this test is
 		// about, and a test allows only the approval it is about.
-		{"ask", harness.Answer{Answers: map[string]string{"Approve bash command: sleep 1": "Block"}}, "blocked"},
-		{"choose", harness.Answer{Decision: harness.DecisionDismiss}, "dismissed"},
-		{"confirm", harness.Answer{Answers: map[string]string{"Proceed?": "No"}}, "declined"},
-		{"input", harness.Answer{Answers: map[string]string{"value": "Ada"}}, "you typed: Ada"},
-		{"editor", harness.Answer{Answers: map[string]string{"value": "one\ntwo"}}, "edited: one\ntwo"},
+		{"ask", "Approve bash command: sleep 1", harness.Answer{Answers: map[string]string{"Approve bash command: sleep 1": "Block"}}, "blocked"},
+		{"choose", "Which color do you prefer?", harness.Answer{Decision: harness.DecisionDismiss}, "dismissed"},
+		{"confirm", "Proceed?", harness.Answer{Answers: map[string]string{"Proceed?": "No"}}, "declined"},
+		{"input", "Your name?", harness.Answer{Answers: map[string]string{"value": "Ada"}}, "you typed: Ada"},
+		{"editor", "Edit the note", harness.Answer{Answers: map[string]string{"value": "one\ntwo"}}, "edited: one\ntwo"},
 	}
 	for i, c := range cases {
 		if err := rt.Prompt("uuid", c.prompt); err != nil {
@@ -230,6 +233,9 @@ func TestDialogsAreQuestions(t *testing.T) {
 		s.mu.Unlock()
 		if payload["dismiss"] != true || payload["allow_session"] != nil {
 			t.Errorf("%s: payload %v", c.prompt, payload)
+		}
+		if b, _ := json.Marshal(payload); !strings.Contains(string(b), strconv.Quote(c.shows)) {
+			t.Fatalf("%s: the dialog is not the one meant: %s", c.prompt, b)
 		}
 		if err := rt.Answer(id, c.answer); err != nil {
 			t.Fatalf("%s: answer: %v", c.prompt, err)
@@ -257,8 +263,11 @@ func TestDialogsAreQuestions(t *testing.T) {
 	}
 	s.until(t, "another dialog", func() bool { return len(s.ids) > len(cases) })
 	s.mu.Lock()
-	id := s.ids[len(cases)]
+	id, again := s.ids[len(cases)], s.requests[len(cases)]
 	s.mu.Unlock()
+	if b, _ := json.Marshal(again); !strings.Contains(string(b), `"Which color do you prefer?"`) {
+		t.Fatalf("the dialog is not the one meant: %s", b)
+	}
 	if err := rt.Answer(id, harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Green"}}); err == nil {
 		t.Error("an answer pi did not offer was sent")
 	}
@@ -381,17 +390,17 @@ func TestAReleaseWithADialogPendingEndsPi(t *testing.T) {
 // confirmed survivor is named beside it, and a process that went
 // mid-listing, its entry gone, is ordinary.
 func TestAListingReadInPartIsNotClean(t *testing.T) {
-	was := procRoot
-	procRoot = t.TempDir()
-	t.Cleanup(func() { procRoot = was })
-	if err := os.Mkdir(filepath.Join(procRoot, "456"), 0o755); err != nil {
+	was := harness.ProcRoot
+	harness.ProcRoot = t.TempDir()
+	t.Cleanup(func() { harness.ProcRoot = was })
+	if err := os.Mkdir(filepath.Join(harness.ProcRoot, "456"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if found, unread, err := inGroup(123); err != nil || len(found) != 0 || len(unread) != 0 {
-		t.Fatalf("a process gone mid-listing: %v %v %v", found, unread, err)
+	if found, err := harness.GroupSurvivors(123, 0); err != nil || len(found) != 0 {
+		t.Fatalf("a process gone mid-listing: %v %v", found, err)
 	}
 	write := func(pid int, mode os.FileMode) {
-		path := filepath.Join(procRoot, strconv.Itoa(pid), "stat")
+		path := filepath.Join(harness.ProcRoot, strconv.Itoa(pid), "stat")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -401,10 +410,10 @@ func TestAListingReadInPartIsNotClean(t *testing.T) {
 	}
 	write(200, 0o644)
 	write(300, 0o000)
-	if _, err := os.ReadFile(filepath.Join(procRoot, "300", "stat")); err == nil {
+	if _, err := os.ReadFile(filepath.Join(harness.ProcRoot, "300", "stat")); err == nil {
 		t.Skip("an unreadable stat file stays readable here, as it does for root")
 	}
-	alive, err := groupSurvivors(123, 0)
+	alive, err := harness.GroupSurvivors(123, 0)
 	if err == nil || !slices.Equal(alive, []int{200}) {
 		t.Errorf("a survivor in the group beside a process that cannot be read: %v %v", alive, err)
 	}
@@ -420,10 +429,10 @@ func TestAReleaseThatCouldNotLookSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	was := procRoot
-	procRoot = filepath.Join(t.TempDir(), "no-proc")
-	t.Cleanup(func() { procRoot = was })
-	if found, _, err := inGroup(1); err == nil {
+	was := harness.ProcRoot
+	harness.ProcRoot = filepath.Join(t.TempDir(), "no-proc")
+	t.Cleanup(func() { harness.ProcRoot = was })
+	if found, err := harness.GroupSurvivors(1, 0); err == nil {
 		t.Errorf("an unreadable listing gave %v with no error", found)
 	}
 	if err := rt.Close(); err != nil {
@@ -454,6 +463,13 @@ func TestNoAnswerLetsWorkGoOnAfterTheStopIsFenced(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.until(t, "the dialog", func() bool { return len(s.ids) == 1 })
+	// the gate the allow is tried on is the fake's own, looked at first.
+	s.mu.Lock()
+	gate, _ := json.Marshal(s.requests[0])
+	s.mu.Unlock()
+	if !strings.Contains(string(gate), `"Approve bash command: sleep 1"`) {
+		t.Fatalf("the dialog is not the fake's gate: %s", gate)
+	}
 	rt.Stopping()
 	if err := rt.Answer("svc-a", harness.Answer{Answers: map[string]string{"Approve bash command: sleep 1": "Allow"}}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("a chosen answer after the fence: %v", err)
@@ -649,8 +665,8 @@ func TestHistoryChecksTheSessionsOwnID(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(Config{Binary: "pi"})
-	if history, err := h.History(t.Context(), harness.Place{Cwd: checkout, Env: env, Find: env}, "not-this-one"); err == nil {
-		t.Errorf("a file holding another session was imported: %d events", len(history.Events))
+	if history, err := h.History(t.Context(), harness.Place{Cwd: checkout, Env: env, Find: env}, "not-this-one"); !errors.Is(err, harness.ErrWrongSession) {
+		t.Errorf("a file holding another session was imported: %d events (%v)", len(history.Events), err)
 	}
 }
 
@@ -716,7 +732,7 @@ func TestAnInterruptCancelsADialogThatTakesTheSignal(t *testing.T) {
 		t.Errorf("turn = %v", got)
 	}
 	s.until(t, "the dialog settled", func() bool { return slices.Contains(s.resolved, "svc-a:"+model.OutcomeAborted) })
-	if err := rt.Answer("svc-a", harness.Answer{Answers: map[string]string{"Cancelled by an abort": "Go"}}); err != harness.ErrNotPending {
+	if err := rt.Answer("svc-a", harness.Answer{Decision: harness.DecisionDismiss}); err != harness.ErrNotPending {
 		t.Errorf("a late answer: %v", err)
 	}
 }
@@ -794,7 +810,7 @@ func TestAnEntryIDComesFromTheFileWhenPiCannotBeAsked(t *testing.T) {
 `)
 	r := newRuntime(newSink())
 	r.conn = &conn{inClose: true, calls: map[string]chan reply{}, done: make(chan struct{})}
-	r.sessionFile, r.cursor = path, "u1"
+	r.sessionID, r.sessionFile, r.cursor = "s", path, "u1"
 	first := &message{Role: "assistant", Timestamp: 1794841243345}
 	if id := r.entryID(first); id != "a1" {
 		t.Errorf("the first reply is %q", id)
@@ -813,7 +829,7 @@ func TestADialogsDeadlineRunsFromItsArrival(t *testing.T) {
 	r.conn = &conn{inClose: true, calls: map[string]chan reply{}, done: make(chan struct{})}
 	r.uiRequest(map[string]any{"type": "extension_ui_request", "id": "d1", "method": "select", "title": "Now?", "options": []any{"Now"}, "timeout": float64(1000)}, time.Now().Add(-2*time.Second))
 	s.until(t, "the expiry", func() bool { return slices.Contains(s.resolved, "svc-a:"+model.OutcomeExpired) })
-	if err := r.Answer("svc-a", harness.Answer{Answers: map[string]string{"Now?": "Now"}}); err != harness.ErrNotPending {
+	if err := r.Answer("svc-a", harness.Answer{Decision: harness.DecisionDismiss}); err != harness.ErrNotPending {
 		t.Errorf("an answer past the deadline: %v", err)
 	}
 }
@@ -837,5 +853,53 @@ func TestAMessageWithNoEntryIsShownAndTheTurnSaysSo(t *testing.T) {
 	}
 	if end := s.events[1]; end.Kind != model.EventTurnEnd || end.Status != model.TurnError || !strings.Contains(end.Text, "may bring them in again") {
 		t.Errorf("turn end = %+v", end)
+	}
+}
+
+// a session file is read once for an import: the header checked and the
+// entries mapped come from the same read, so a file replaced between two
+// reads cannot pass one session's header with another's entries.
+func TestHistoryMapsTheReadItChecked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a.jsonl")
+	mine := `{"type":"session","version":3,"id":"a","cwd":"/c"}
+{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"mine","timestamp":1794841243300}}
+`
+	theirs := []byte(`{"type":"session","version":3,"id":"b","cwd":"/c"}
+{"type":"message","id":"u9","parentId":null,"message":{"role":"user","content":"theirs","timestamp":1794841243300}}
+`)
+	write(t, path, mine)
+	reads := 0
+	read := readFile
+	readFile = func(name string) ([]byte, error) {
+		reads++
+		if reads > 1 {
+			return theirs, nil
+		}
+		return read(name)
+	}
+	t.Cleanup(func() { readFile = read })
+	history, err := historyOf(path, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range history.Events {
+		if ev.Text != "mine" {
+			t.Errorf("an import of session a mapped %s %q", ev.NativeID, ev.Text)
+		}
+	}
+}
+
+// the runtime's own read of its session file, once pi can no longer be
+// asked, checks the file is its session's, as an import does.
+func TestTheRuntimesFileReadChecksItsSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	write(t, path, `{"type":"session","version":3,"id":"another","cwd":"/c"}
+{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"go","timestamp":1794841243300}}
+`)
+	r := newRuntime(newSink())
+	r.conn = &conn{inClose: true, calls: map[string]chan reply{}, done: make(chan struct{})}
+	r.sessionID, r.sessionFile = "s", path
+	if entries, err := r.entriesAfter(); !errors.Is(err, harness.ErrWrongSession) {
+		t.Errorf("another session's file gave %d entries (%v)", len(entries), err)
 	}
 }

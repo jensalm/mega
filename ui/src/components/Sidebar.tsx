@@ -15,6 +15,7 @@ import { Icon, IconButton } from './Icon'
 import { missingReason } from '../checkout'
 import { panelShortcut } from './SidePanel'
 import { aboutTitle, newerLabel } from '../build'
+import { shutDownFooter } from '../gate'
 
 interface SidebarProps {
   projects: Project[]
@@ -34,6 +35,7 @@ interface SidebarProps {
   onCollapse: () => void
   gate: ShutdownGate | undefined
   shutDownAt: Date | null
+  shutDownHeard: boolean
   gateBusy: boolean
   onArm: () => void
   onCancelShutdown: () => void
@@ -49,7 +51,7 @@ interface SidebarProps {
 // workspace state, written through the service.
 export function Sidebar(props: SidebarProps) {
   const { projects, conversations, needsYou, selection, streamState, stale, loaded, knowledge, onRegister, onCollapse } = props
-  const { gate, shutDownAt, gateBusy, onArm, onCancelShutdown } = props
+  const { gate, shutDownAt, shutDownHeard, gateBusy, onArm, onCancelShutdown } = props
   const { waiting: waitingFor, about, newer, onAbout } = props
   // before the first read the page knows nothing, and says so, never "none".
   const unknownText =
@@ -224,7 +226,7 @@ export function Sidebar(props: SidebarProps) {
       <footer className="side-foot">
         <ConnectionStatus
           className={`stream stream-${failing(knowledge) || down ? 'disconnected' : showNewer ? 'newer' : connectionOf(knowledge, streamState)}`}
-          label={down ? 'Shut down from here, retrying' : showNewer ? newerLabel : connectionLabel(knowledge, streamState)}
+          label={down ? shutDownFooter(shutDownHeard) : showNewer ? newerLabel : connectionLabel(knowledge, streamState)}
           waiting={waitingFor}
         />
         {about?.name && (

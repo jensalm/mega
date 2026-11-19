@@ -101,10 +101,13 @@ type entry struct {
 	Message   map[string]any `dd:",+opaque,+nullable"`
 }
 
+// readFile reads a session file; a test may stand in for it.
+var readFile = os.ReadFile
+
 // readSession reads a session file: its header and its entries, in order.
 // a line that is not an entry is passed over.
 func readSession(path string) (*entry, []*entry, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -312,11 +315,18 @@ func history(path string) ([]*model.Event, error) {
 // error and aborted end it, as does none at all (the pi-rt1 fixture's 43
 // sessions, pi 1.5.2: every assistant message has one).
 func historyTurns(path string) ([]*model.Event, *harness.TurnTail, error) {
-	turn := &harness.TurnTail{}
 	_, entries, err := readSession(path)
 	if err != nil {
 		return nil, nil, err
 	}
+	evs, turn := turnsOf(entries)
+	return evs, turn, nil
+}
+
+// turnsOf maps a session's entries, as read, to events and follows their
+// turns, as historyTurns does.
+func turnsOf(entries []*entry) ([]*model.Event, *harness.TurnTail) {
+	turn := &harness.TurnTail{}
 	var evs []*model.Event
 	for _, e := range conversation(entries) {
 		if e.Type != "message" {
@@ -343,7 +353,7 @@ func historyTurns(path string) ([]*model.Event, *harness.TurnTail, error) {
 		}
 		evs = append(evs, mapped...)
 	}
-	return evs, turn, nil
+	return evs, turn
 }
 
 // discover lists the sessions stored for a checkout, newest first, with the

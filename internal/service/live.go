@@ -161,6 +161,9 @@ func instructs(ev *model.Event) bool {
 // call from a runtime that has been replaced changes nothing.
 type incarnation struct {
 	exited chan struct{}
+	// launched is closed once its launch has returned, or was refused at the
+	// last check: a shutdown that began meanwhile waits for it.
+	launched chan struct{}
 	// env is the environment the runtime was launched with, as names and
 	// fingerprints, recorded with its started report.
 	env *model.EnvironmentFacts
@@ -229,6 +232,11 @@ func (s *Service) record(l *live, ev *model.Event) error {
 	}
 	if ev.Origin == "" {
 		ev.Origin = model.OriginService
+	}
+	if s.failRecord != nil {
+		if err := s.failRecord(ev); err != nil {
+			return fmt.Errorf("recording event for '%s': %w", l.id, err)
+		}
 	}
 	if err := l.log.Append(ev); err != nil {
 		if errors.Is(err, events.ErrUncertain) {
@@ -801,8 +809,9 @@ func (k *sink) Resolved(requestID, outcome string) {
 //
 // the dead process is always let go. if the stop cannot be recorded, the view
 // keeps its last confirmed state and nothing is announced: requests whose abort
-// was not recorded stay listed (an answer reaches no runtime and is refused as
-// not pending), and the conversation stays recorded running, so a restart
+// was not recorded stay listed, and take no further answer, so none reaches a
+// runtime that replaces this one (retireRequestsLocked), and the conversation
+// stays recorded running, so a restart
 // reports it unsupervised rather than claiming a stop it never confirmed.
 func (k *sink) Exited(err error) {
 	s := k.s
@@ -815,21 +824,7 @@ func (k *sink) Exited(err error) {
 	l := k.l
 	released := l.releasing
 	l.runtime, l.inc, l.releasing = nil, nil, false
-	confirmed := true
-	var unrecorded []*model.Request
-	for _, req := range l.pending {
-		if err := s.resolve(l, req, model.OutcomeAborted); err != nil {
-			dl.Errorf("%v", err)
-			unrecorded = append(unrecorded, req)
-			confirmed = false
-		}
-	}
-	l.pending = unrecorded
-	for id := range l.answering {
-		if !slices.ContainsFunc(unrecorded, func(r *model.Request) bool { return r.ID == id }) {
-			delete(l.answering, id)
-		}
-	}
+	confirmed := s.retireRequestsLocked(l)
 	ev := &model.Event{Status: model.StatusStopped}
 	switch {
 	case errors.Is(err, harness.ErrLeftRunning):
@@ -873,6 +868,22 @@ func (k *sink) Exited(err error) {
 	if err := s.updateConversation(l.id, func(c *model.Conversation) { c.Runtime = model.RuntimeNone }); err != nil {
 		dl.Errorf("recording that '%s' stopped: %v", l.id, err)
 	}
+}
+
+// retireRequestsLocked settles every request a runtime that has ended left
+// pending, as aborted, through settleLocked: one whose abort cannot be
+// recorded stays listed as last recorded, and takes no further answer, so
+// none reaches a runtime that replaces this one. it reports whether every
+// abort was recorded. callers hold s.mu.
+func (s *Service) retireRequestsLocked(l *live) bool {
+	confirmed := true
+	for _, req := range slices.Clone(l.pending) {
+		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
+			dl.Errorf("%v", err)
+			confirmed = false
+		}
+	}
+	return confirmed
 }
 
 // only is whether err is target alone: target itself, or errors joined whose

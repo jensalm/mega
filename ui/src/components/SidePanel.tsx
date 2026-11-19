@@ -23,6 +23,8 @@ interface SidePanelProps {
   // the shutdown gate, the page's own shutdown, and the gate's controls.
   gate: ShutdownGate | undefined
   shutDownAt: Date | null
+  // the page heard mega say its shutdown finished, before contact was lost.
+  shutDownHeard: boolean
   gateBusy: boolean
   onArm: () => void
   onCancelShutdown: () => void

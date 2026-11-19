@@ -186,7 +186,7 @@ func TestApprovalIsAnsweredOnceByItsServerID(t *testing.T) {
 	}
 	payload := sink.payloads[0]
 	if payload["tool"] != "shell" || payload["description"] != "write outside the sandbox" || payload["input"].(map[string]any)["command"] != "printf x > f" {
-		t.Errorf("payload = %v", payload)
+		t.Fatalf("payload = %v", payload)
 	}
 	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestApprovalIsAnsweredOnceByItsServerID(t *testing.T) {
 	if frame["id"] != float64(0) || frame["result"].(map[string]any)["decision"] != "accept" {
 		t.Errorf("response = %v", frame)
 	}
-	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("second answer: %v", err)
 	}
 	w.quiet(t)
@@ -208,16 +208,20 @@ func TestResolvedByServerIsAbortedAndNotAnswered(t *testing.T) {
 	if strings.Join(sink.resolved, ",") != "svc-1:aborted" {
 		t.Errorf("resolved = %v", sink.resolved)
 	}
-	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("late answer: %v", err)
 	}
 	w.quiet(t)
 }
 
 func TestPermissionsGrantExactlyWhatWasAskedForTheTurn(t *testing.T) {
-	r, _, w := testRuntime()
+	r, sink, w := testRuntime()
 	r.feed(`{"id":2,"method":"item/permissions/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"p-1","startedAtMs":1,"cwd":"/f","permissions":{"network":{"enabled":true}}}}`)
 	r.feed(`{"id":3,"method":"item/permissions/requestApproval","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"p-2","startedAtMs":1,"cwd":"/f","permissions":{"network":{"enabled":true}}}}`)
+	// the request allowed is the network grant the fixture asked for.
+	if b, _ := json.Marshal(sink.payloads[0]); len(sink.payloads) != 2 || !strings.Contains(string(b), `"network"`) {
+		t.Fatalf("the request is not the network grant: %s", b)
+	}
 	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionAllow}); err != nil {
 		t.Fatal(err)
 	}
@@ -234,14 +238,31 @@ func TestPermissionsGrantExactlyWhatWasAskedForTheTurn(t *testing.T) {
 	}
 }
 
-func askQuestion(r *runtime) {
+// askQuestion raises the agent's question and looks at it: no test answers
+// a question it has not seen raised as the one it means.
+func askQuestion(t *testing.T, r *runtime) {
+	t.Helper()
+	raiseQuestion(r)
+	s := r.sink.(*recordingSink)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.payloads) == 0 {
+		t.Fatal("no question was raised")
+	}
+	if b, _ := json.Marshal(s.payloads[len(s.payloads)-1]); !strings.Contains(string(b), `"question":"Which color do you prefer?"`) {
+		t.Fatalf("the question raised is not the one meant: %s", b)
+	}
+}
+
+// raiseQuestion feeds the agent's question as codex sends it.
+func raiseQuestion(r *runtime) {
 	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}`)
 	r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"agentMessage","id":"a-1","text":"Which color?","delivery":"async","questions":[{"title":"Which color do you prefer?","options":["Red","Blue"]}]}}}`)
 }
 
 func TestAsyncQuestionIsSteeredIntoItsActiveTurn(t *testing.T) {
 	r, sink, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	if strings.Join(sink.requests, ",") != "question:svc-1" {
 		t.Fatalf("requests = %v", sink.requests)
 	}
@@ -269,7 +290,7 @@ func TestAsyncQuestionIsSteeredIntoItsActiveTurn(t *testing.T) {
 func TestAsyncQuestionDiesWithAnInterruptedOrFailedTurn(t *testing.T) {
 	for _, status := range []string{"interrupted", "failed"} {
 		r, sink, w := testRuntime()
-		askQuestion(r)
+		askQuestion(t, r)
 		r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"` + status + `","items":[]}}}`)
 		if strings.Join(sink.resolved, ",") != "svc-1:aborted" {
 			t.Errorf("%s: resolved = %v", status, sink.resolved)
@@ -283,7 +304,7 @@ func TestAsyncQuestionDiesWithAnInterruptedOrFailedTurn(t *testing.T) {
 
 func TestAsyncQuestionOutlivesACompletedTurnAndStartsTheNext(t *testing.T) {
 	r, sink, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	if len(sink.resolved) != 0 {
 		t.Fatalf("a question from a completed turn was resolved: %v", sink.resolved)
@@ -303,7 +324,7 @@ func TestAsyncQuestionOutlivesACompletedTurnAndStartsTheNext(t *testing.T) {
 
 func TestInterruptAbortsQuestionsAtOnce(t *testing.T) {
 	r, sink, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	result := make(chan error, 1)
 	go func() { result <- r.Interrupt() }()
 	frame := r.reply(t, w, "turn/interrupt", `{}`)
@@ -379,7 +400,7 @@ func TestQuestionFromAnInterruptedTurnNeverWaits(t *testing.T) {
 	if len(sink.requests) != 0 {
 		t.Errorf("a question from the interrupted turn was raised: %v", sink.requests)
 	}
-	if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
+	if err := r.Answer("svc-1", harness.Answer{Decision: harness.DecisionDeny}); !errors.Is(err, harness.ErrNotPending) {
 		t.Errorf("answer: %v", err)
 	}
 	w.quiet(t)
@@ -389,7 +410,7 @@ func TestQuestionFromAnInterruptedTurnNeverWaits(t *testing.T) {
 // interrupts; the steer then fails. the answer must not start a new turn.
 func TestAnswerInFlightNeverStartsATurnAcrossAnInterrupt(t *testing.T) {
 	r, _, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	result := make(chan error, 1)
 	go func() {
 		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
@@ -415,7 +436,7 @@ func TestAnswerInFlightNeverStartsATurnAcrossAnInterrupt(t *testing.T) {
 // reply holds no lock.
 func TestNoTurnStartsAfterAStopThatLandsBeforeIt(t *testing.T) {
 	r, _, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	var stopFirst atomic.Bool
 	stopped := make(chan struct{})
@@ -454,12 +475,24 @@ func TestNoTurnStartsAfterAStopThatLandsBeforeIt(t *testing.T) {
 	}
 }
 
+// a question the agent asks after the stop is fenced is not raised: the
+// fenced runtime would refuse its answer, so it would only wait in Needs you
+// until the runtime exits.
+func TestNoQuestionIsRaisedAfterTheStopIsFenced(t *testing.T) {
+	r, sink, _ := testRuntime()
+	r.Stopping()
+	raiseQuestion(r)
+	if len(sink.requests) != 0 {
+		t.Errorf("a question was raised after the fence: %v", sink.requests)
+	}
+}
+
 // once a stop is fenced, an answer that reaches the adapter afterwards, even
 // one the service accepted before the stop, starts no turn: a question from a
 // completed turn is not answered as the next one.
 func TestNoAnswerStartsATurnAfterTheStopIsFenced(t *testing.T) {
 	r, _, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	r.Stopping()
 	if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
@@ -472,7 +505,7 @@ func TestNoAnswerStartsATurnAfterTheStopIsFenced(t *testing.T) {
 // turn as soon as it exists.
 func TestStopDuringAnswerTurnStartInterruptsIt(t *testing.T) {
 	r, _, w := testRuntime()
-	askQuestion(r)
+	askQuestion(t, r)
 	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	result := make(chan error, 1)
 	go func() {

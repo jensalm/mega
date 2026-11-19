@@ -82,7 +82,7 @@ await p.run(async () => {
   must((await p.answer(id, first.id, 'allow')) === '', 'Allow was accepted')
   await p.turnEnd(id, seq, 'the approved turn')
   await p.expectReply(id, 'DELTA-7a8b')
-  const late = await p.answer(id, first.id, 'allow')
+  const late = await p.answer(id, first.id, 'deny')
   check(late === 'not_pending', `a late answer is refused as not pending (${late || 'accepted'})`)
 
   // an interrupt with a second approval pending: never answered.

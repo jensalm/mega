@@ -15,7 +15,7 @@ import { ProjectDetail } from './components/ProjectDetail'
 import { RegisterProjectDialog } from './components/RegisterProjectDialog'
 import { SidePanel } from './components/SidePanel'
 import { ShutdownBanner } from './components/Gate'
-import { pendingReason, shutDownReason } from './gate'
+import { pendingReason, shutDownLostReason, shutDownReason } from './gate'
 import { claudeCannotRun, environmentReason, missingReason } from './checkout'
 import { showTab, tabState } from './favicon'
 import { productName } from './brand'
@@ -37,6 +37,9 @@ export function App() {
   // clears it. shutDownGate is the armed_at of the gate it shut down under.
   const [shutDownAt, setShutDownAt] = useState<Date | null>(null)
   const shutDownGate = useRef<string | undefined>(undefined)
+  // shutDownHeard: the stream's last word said the shutdown finished. a
+  // page that lost contact without hearing it says only that one was asked.
+  const [shutDownHeard, setShutDownHeard] = useState(false)
   const [gateBusy, setGateBusy] = useState(false)
   const [gateError, setGateError] = useState<string | null>(null)
   const [selection, setSelection] = useState<Selection | null>(parseHash)
@@ -117,6 +120,7 @@ export function App() {
             setLoadError(null)
             if (fetched.shutdown && (!fetched.shutdown.armed || fetched.shutdown.armed_at !== shutDownGate.current)) {
               setShutDownAt(null)
+              setShutDownHeard(false)
             }
             ok = true
             // caught up only on the current connection, and only when no
@@ -260,6 +264,9 @@ export function App() {
       if (frame.workspace_changed) {
         void refresh()
       }
+      if (frame.shutdown_finished) {
+        setShutDownHeard(true)
+      }
       if (!frame.conversation_id || frame.conversation_id !== selectedRef.current) {
         return
       }
@@ -321,7 +328,7 @@ export function App() {
   // the shutdown gate. while armed, new work waits; at idle the page says so
   // in its title and with a notification, once, so nobody has to watch.
   const gate = workspace?.shutdown
-  const heldBy = shutDownAt !== null ? shutDownReason : gate?.armed ? pendingReason : null
+  const heldBy = shutDownAt !== null ? (streamState === 'connected' || shutDownHeard ? shutDownReason : shutDownLostReason) : gate?.armed ? pendingReason : null
   const gateAction = async (action: () => Promise<void>, asking = false): Promise<boolean> => {
     if (asking && 'Notification' in window && Notification.permission === 'default') {
       // asked on the press that arms, the one gesture the page gets.
@@ -540,6 +547,7 @@ export function App() {
         onRegister={() => setRegistering(true)}
         gate={gate}
         shutDownAt={shutDownAt}
+        shutDownHeard={shutDownHeard}
         gateBusy={gateBusy}
         onArm={() => void gateAction(armShutdown, true)}
         onCancelShutdown={() => void gateAction(cancelShutdown)}
@@ -553,6 +561,7 @@ export function App() {
         <ShutdownBanner
           gate={gate}
           shutDownAt={shutDownAt}
+          heard={shutDownHeard}
           connected={streamState === 'connected'}
           stale={stale}
           busy={gateBusy}
@@ -561,6 +570,7 @@ export function App() {
             void gateAction(shutDown).then((ok) => {
               if (ok) {
                 shutDownGate.current = gate?.armed_at
+                setShutDownHeard(false)
                 setShutDownAt(new Date())
               }
             })

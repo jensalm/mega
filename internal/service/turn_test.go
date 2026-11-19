@@ -89,7 +89,7 @@ func TestPendingRequestCarriesItsRecordedTime(t *testing.T) {
 	if at.IsZero() || !at.Equal(recorded) || !at.After(turnStart) {
 		t.Errorf("pending at %v, request event at %v, turn started %v", at, recorded, turnStart)
 	}
-	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}); err != nil {
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Fatal(err)
 	}
 	if view := r.view(conv.ID); len(view.PendingAt) != 0 {

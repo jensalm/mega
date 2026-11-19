@@ -37,6 +37,22 @@ var ErrPromptRefused = errors.New("the harness refused the prompt; no turn start
 // and a corrected answer or a dismissal still reaches it.
 var ErrInvalidAnswer = errors.New("the answer does not fit the request")
 
+// ErrWrongSession is what a read of a native session returned when it holds
+// another session than the one asked for: a file found by its name, or a
+// reply from the harness, is no proof of what it holds. nothing of it is
+// imported.
+var ErrWrongSession = errors.New("another session than the one asked for")
+
+// SameSession refuses what a read of session want returned when it names
+// another, got: what is the read, as a message names it. every adapter's
+// history read and file read goes through it.
+func SameSession(what, want, got string) error {
+	if got == want {
+		return nil
+	}
+	return fmt.Errorf("%w: %s holds session '%s', not '%s'", ErrWrongSession, what, got, want)
+}
+
 // ErrNotStarted marks a Launch failure the adapter can prove came before any
 // native session could exist. adapters wrap it at each such failure site, never
 // as a blanket over Launch: an error without it means the session is unknown,

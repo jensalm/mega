@@ -56,9 +56,9 @@ func TestDescendantsOutlivingTheirParentAreReported(t *testing.T) {
 // as on a machine with no /proc.
 func unreadable(t *testing.T) {
 	t.Helper()
-	was := procRoot
-	procRoot = filepath.Join(t.TempDir(), "no-proc")
-	t.Cleanup(func() { procRoot = was })
+	was := harness.ProcRoot
+	harness.ProcRoot = filepath.Join(t.TempDir(), "no-proc")
+	t.Cleanup(func() { harness.ProcRoot = was })
 }
 
 // a listing that cannot be read is an error, never an empty list: nothing
@@ -83,7 +83,7 @@ func TestAnUnreadableListingIsNotAnEmptyOne(t *testing.T) {
 // its start time; unreadable leaves it there but unreadable.
 func fakeProc(t *testing.T, pid int, ppid int, start string, unreadable bool) {
 	t.Helper()
-	path := filepath.Join(procRoot, strconv.Itoa(pid), "stat")
+	path := filepath.Join(harness.ProcRoot, strconv.Itoa(pid), "stat")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -110,10 +110,10 @@ func fakeProc(t *testing.T, pid int, ppid int, start string, unreadable bool) {
 // else was unreadable, and a process that went mid-listing, its entry gone,
 // is ordinary.
 func TestAListingReadInPartIsNotClean(t *testing.T) {
-	was := procRoot
-	procRoot = t.TempDir()
-	t.Cleanup(func() { procRoot = was })
-	if err := os.Mkdir(filepath.Join(procRoot, "456"), 0o755); err != nil {
+	was := harness.ProcRoot
+	harness.ProcRoot = t.TempDir()
+	t.Cleanup(func() { harness.ProcRoot = was })
+	if err := os.Mkdir(filepath.Join(harness.ProcRoot, "456"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if stats, unread, err := readStats(); err != nil || len(stats) != 0 || len(unread) != 0 {

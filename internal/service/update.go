@@ -14,4 +14,7 @@ type Update struct {
 	Delta            string       `dd:",+omitempty"`
 	Attention        string       `dd:",+omitempty"`
 	WorkspaceChanged bool         `dd:",+omitempty"`
+	// ShutdownFinished is an orderly shutdown's last word, before every
+	// stream closes: the runtimes are released and nothing more will come.
+	ShutdownFinished bool `dd:",+omitempty"`
 }

@@ -129,9 +129,9 @@ func (h *Harness) History(ctx context.Context, place harness.Place, nativeID str
 	if err := h.once(ctx, place, "thread/read", &threadReadParams{ThreadID: nativeID, IncludeTurns: true}, read); err != nil {
 		return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, err)
 	}
-	if read.Thread.ID != nativeID {
-		// another thread than the one asked for: nothing of it is imported.
-		return harness.History{}, fmt.Errorf("reading history of '%s': codex returned thread '%s'", nativeID, read.Thread.ID)
+	// another thread than the one asked for: nothing of it is imported.
+	if err := harness.SameSession("codex's thread/read", nativeID, read.Thread.ID); err != nil {
+		return harness.History{}, fmt.Errorf("reading history of '%s': %w", nativeID, err)
 	}
 	history := harness.History{Open: make(map[string]bool)}
 	for _, t := range read.Thread.Turns {

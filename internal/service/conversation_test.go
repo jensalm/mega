@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -97,6 +98,24 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+// looked asserts that the request is pending and is the one the test means
+// to answer, its payload holding want: no test answers a request it has not
+// looked at.
+func (r *rig) looked(conversationID, id, want string) {
+	r.t.Helper()
+	for _, req := range r.view(conversationID).Pending {
+		if req.ID != id {
+			continue
+		}
+		payload, err := json.Marshal(req.Payload)
+		if err != nil || !strings.Contains(string(payload), want) {
+			r.t.Fatalf("request %s is not the one meant: %s", id, payload)
+		}
+		return
+	}
+	r.t.Fatalf("request %s is not pending", id)
+}
+
 func started(rt *harnesstest.Runtime) {
 	rt.Emit(&model.Event{Kind: model.EventRuntime, Status: model.StatusStarted, Facts: &model.RuntimeFacts{Session: rt.NativeID(), Model: "m", Version: "v"}})
 }
@@ -178,7 +197,7 @@ func TestAnswerIsDeliveredOnceAndThenNotPending(t *testing.T) {
 	if err := r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}); err != nil {
 		t.Fatal(err)
 	}
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
 
 	deliveries := rt.Deliveries()
 	if len(deliveries) != 1 || deliveries[0].Answer.Decision != harness.DecisionDeny || deliveries[0].Answer.Message == "" {
@@ -200,7 +219,7 @@ func TestInterruptAbortsRequestAndLateAnswerIsRejected(t *testing.T) {
 	if err := r.svc.Interrupt(conv.ID); err != nil {
 		t.Fatal(err)
 	}
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "Blue"}}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDismiss}), CodeNotPending)
 	if len(rt.Deliveries()) != 0 {
 		t.Error("a late answer reached the runtime")
 	}
@@ -217,7 +236,7 @@ func TestAnswerSettledByHarnessFirstIsNotPending(t *testing.T) {
 	// the harness has aborted the request but its notice has not reached the
 	// service yet: the runtime refuses the answer, and the service says so.
 	rt.Settle(id, model.OutcomeAborted)
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
 }
 
 func TestReleaseInterruptsOnlyWhenActiveAndReportsStoppingUntilExit(t *testing.T) {
@@ -287,7 +306,7 @@ func TestStaleRequestFromEarlierRuntimeNeverMatchesNewOne(t *testing.T) {
 	if fresh == old {
 		t.Fatal("request ids repeated across runtimes")
 	}
-	wantCode(t, r.svc.Answer(conv.ID, old, harness.Answer{Decision: harness.DecisionAllow}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, old, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
 	if len(second.Deliveries()) != 0 || len(r.view(conv.ID).Pending) != 1 {
 		t.Fatal("the stale answer touched the new runtime's request")
 	}
@@ -568,7 +587,7 @@ func TestUnrecordedRequestIsNotAnswerable(t *testing.T) {
 	if pending := r.view(conv.ID).Pending; len(pending) != 0 {
 		t.Errorf("an unrecorded request is pending: %+v", pending)
 	}
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
 	if len(rt.Deliveries()) != 0 {
 		t.Error("an unrecorded request was answered")
 	}
@@ -611,7 +630,7 @@ func TestUnrecordedStopKeepsTheConfirmedViewAndRestartsUnsupervised(t *testing.T
 		t.Errorf("an unrecorded stop was announced: %+v", update)
 	default:
 	}
-	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionAllow}), CodeNotPending)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Decision: harness.DecisionDeny}), CodeNotPending)
 	if len(rt.Deliveries()) != 0 {
 		t.Error("an answer reached a runtime that had exited")
 	}
@@ -1307,6 +1326,7 @@ func TestAllowSessionOnlyWhereOffered(t *testing.T) {
 	rt := r.fake.Last()
 	started(rt)
 	plain := rt.Ask(model.RequestPermission, map[string]any{"tool": "Bash"})
+	r.looked(conv.ID, plain, `"tool":"Bash"`)
 	err := r.svc.Answer(conv.ID, plain, harness.Answer{Decision: harness.DecisionAllowSession})
 	wantCode(t, err, CodeInvalid)
 	if pending := r.view(conv.ID).Pending; len(pending) != 1 || pending[0].ID != plain {
@@ -1317,6 +1337,7 @@ func TestAllowSessionOnlyWhereOffered(t *testing.T) {
 	}
 
 	offered := rt.Ask(model.RequestPermission, map[string]any{"tool": "fixture/echo", "allow_session": true})
+	r.looked(conv.ID, offered, `"tool":"fixture/echo"`)
 	if err := r.svc.Answer(conv.ID, offered, harness.Answer{Decision: harness.DecisionAllowSession}); err != nil {
 		t.Fatal(err)
 	}
@@ -1339,6 +1360,7 @@ func TestDismissOnlyWhereOffered(t *testing.T) {
 	if pending := r.view(conv.ID).Pending; len(pending) != 1 || pending[0].ID != plain {
 		t.Fatalf("a refused dismissal took the request: %+v", pending)
 	}
+	r.looked(conv.ID, plain, `"question":"Which?"`)
 	if err := r.svc.Answer(conv.ID, plain, harness.Answer{Answers: map[string]string{"Which?": "this"}}); err != nil {
 		t.Fatal(err)
 	}
