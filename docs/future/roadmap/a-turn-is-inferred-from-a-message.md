@@ -62,6 +62,14 @@ The answer: the service opens a turn whenever a runtime reports a user message, 
 
 What each harness's own markers are, and whether all three have both a start and an end the adapter can trust. What a turn the harness opens by itself looks like, such as Claude waking when a background job finishes, which is a real turn nobody prompted. And how this meets `honest-runtime-state`: a turn shown as running with nothing happening is a claim the service cannot stand behind for long.
 
+## from piece 1, 2026-11-20
+
+- **What piece 1 marks.** Piece 1, `a-codex-question-is-a-message`, marks every Codex item `AfterTurn` when it belongs to a turn the runtime saw end.
+- **The case it leaves, vetoed for this card.** An item for a turn the runtime never saw end, and that is not the active one, still opens a turn: one that ended before a resume, say. Terminus pass `243b6eb30af0` found it, and Michael vetoed it in piece 1 for this card. Telling it from output of a turn still starting would need state for an outstanding `turn/start`, and this card removes the rule that makes it a fault.
+- **More readers of the flag.** Piece 1 also gave `AfterTurn` more readers, which this card's removal of the flag has to replace:
+  - the service's first-output call to `ranLocked`, so late output never sets another turn's run settings;
+  - the page's live indicator on a tool row.
+
 ## depends on
 
-Nothing. It bears on `loose-ends-around-stops-and-restarts`, whose seventh item is the same question asked of history instead of the live stream.
+Nothing. The earlier batch addressed this question for recorded history. See item 7 under “What changed” in [the November 19 journal](../../journal/2026-11-19.md#what-changed).

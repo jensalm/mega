@@ -297,6 +297,40 @@ func TestATurnWithNoReportCarriesNoRecord(t *testing.T) {
 	}
 }
 
+// output the adapter marks as after its turn, a codex question that arrives
+// once its turn has ended, never says what another turn ran with: arriving
+// after the next prompt and before codex reports that turn's settings, it
+// leaves the turn's record to the turn's own output.
+func TestOutputAfterItsTurnSetsNoOtherTurnsSettings(t *testing.T) {
+	r, codex := modelRig(t)
+	conv, err := r.svc.StartConversation(r.project.ID, model.HarnessCodex, "", "one", LaunchChoice{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := codex.Last()
+	startedOn(rt, "gpt-a", "medium")
+	finishTurn(rt, "a-1", "done")
+	if outcome := r.setModel(conv.ID, "gpt-b", "low"); outcome != ModelNextPrompt {
+		t.Fatalf("outcome = %q", outcome)
+	}
+	if err := r.svc.Prompt(conv.ID, "two"); err != nil {
+		t.Fatal(err)
+	}
+	rt.Emit(&model.Event{Kind: model.EventAssistant, Text: "Which color?", NativeID: "a-late", AfterTurn: true})
+	if view := r.view(conv.ID); view.TurnRan != nil {
+		t.Errorf("the late question settled what the next turn ran with: %+v", view.TurnRan)
+	}
+	reportModel(rt, "gpt-b", "low")
+	finishTurn(rt, "a-2", "done")
+	records := r.turnRecords(conv.ID)
+	if len(records) != 2 || records[1] == nil {
+		t.Fatalf("records = %v", records)
+	}
+	if got := records[1]; got.Ran != (model.TurnSettings{Model: "gpt-b", Effort: "low"}) || len(got.Differs) != 0 {
+		t.Errorf("the next turn recorded it ran with %+v, differing in %v", got.Ran, got.Differs)
+	}
+}
+
 // a model is always required, for codex as for claude, and an effort for a
 // model that takes one.
 func TestAModelIsAlwaysRequired(t *testing.T) {

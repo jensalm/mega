@@ -32,6 +32,12 @@ func CarriesWork(answer Answer) bool {
 // is not this.
 var ErrPromptRefused = errors.New("the harness refused the prompt; no turn started")
 
+// ErrUnconfirmed reports an answer that was sent and that the harness never
+// confirmed: it may or may not have been taken. the adapter has settled the
+// request as unconfirmed (model.OutcomeUnconfirmed) before returning it, and
+// wraps it in what the operator is told, naming the harness.
+var ErrUnconfirmed = errors.New("did not confirm whether it received your answer")
+
 // ErrInvalidAnswer reports an answer the harness refused without settling the
 // request, such as a choice it did not offer: the request is still pending,
 // and a corrected answer or a dismissal still reaches it.

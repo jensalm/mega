@@ -8,6 +8,18 @@ CHANGE: **mega's default port is now 6342.** (2026-11-18) The old default, 8470,
 - **The page's per-browser settings,** such as the side panel's width and which projects are folded, start fresh once, because a browser keeps them per port.
 - **A new mega started while an old one still serves 8470** on the same data directory does not start a second one beside it. It is refused by the data directory's lock, which names the running mega at 8470, and `mega daemon` opens that one's page instead.
 
+CHANGE: **A Codex question whose turn has ended is answered in the reply box.** (2026-11-19) While the turn that asked is running, the question's card answers it into that turn, as before. Once the turn ends, for any reason, the card goes and Codex's message stays in the conversation, to be answered with a reply that starts the next turn. A card answer never starts a turn.
+
+FIX: **An answer Codex never confirms is no longer reported as settled before it arrived.** (2026-11-19) When an answer is sent into Codex's running turn and no reply comes, within a minute or before Codex's app-server goes, the card closes and the question's history says "Codex did not confirm whether it received your answer". mega does not send it again.
+
+FIX: **A turn's line names what that turn ran with, even when output from the turn before arrives late.** (2026-11-19) Late output the adapter recognizes, such as a Codex question or background command arriving just as the next turn began, could be taken for that turn's first output, so its line named the previous turn's model and effort.
+
+FIX: **Late Codex output from a turn this runtime saw end no longer opens a turn.** (2026-11-20) The adapter now recognizes it. With no turn active it counts as unread at once, as a background command's output does, where before it opened a turn nothing would end. Arriving during the next turn, it is not taken for that turn's work: a late tool call shows no spinner, and neither a late message nor text streamed for its turn touches the streaming reply. Output from a turn the runtime never saw end, such as one that ended before a resume, is not yet recognized.
+
+FIX: **A request whose settlement mega could not write down is recorded as it was settled when its runtime ends.** (2026-11-20) It was recorded as aborted, whatever the operator had been told.
+
+FIX: **An interrupt no longer stays shown under way once nothing is left to stop.** (2026-11-20) Pressed with no turn running while a request was still being settled, as a Codex answer awaiting its reply, it stayed shown until the next prompt.
+
 FIX: **Nothing starts once a shutdown has begun, or in an environment file that changed while it was read.** (2026-11-19) A start, a resume or an adoption now checks again immediately before the harness runs, after the version check and any history import. A shutdown that began meanwhile refuses it, and a shutdown waits for a launch already under way. An environment file changed meanwhile refuses it with `environment_changed`, as an edit before the start always did.
 
 FIX: **A conversation's unread output is no longer lost to a failed registry write.** (2026-11-19) When a turn's end could not record its output as unread, the output stayed read for good. mega now counts it from the conversation's log at its next start, including the output of a Codex background command that finishes after its turn.

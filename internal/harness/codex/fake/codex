@@ -18,8 +18,21 @@
 //                command that fails (exit code 2)
 //   mcp-sign-in  a reply of "signed in"; the docs MCP server is connected
 //                from then on, announced with mcpServer/startupStatus/updated
+//   askq         a question in the agent's message, as codex-cli 0.166.0 asks
+//                in default mode, and the turn waits; turn/steer answers it,
+//                the reply is "answered: TEXT" and the turn ends
+//   askq lose    the same, but on the steer the fake exits without replying,
+//                as an app-server lost after the answer was written
+//   late-search  a web search of the turn before, reported while this turn
+//                runs, as an item codex sends after its turn; this turn
+//                waits until it is interrupted
+//   late-message streams "STALE-STREAM" for the turn before and
+//                "STREAMING-NOW" for this one, then reports a message of the
+//                turn before, "LATE-MESSAGE"; this turn waits until it is
+//                interrupted
 //   anything     a reply of "ok"
 // turn/interrupt resolves a pending elicitation and ends the turn interrupted.
+// each turn/steer received is appended to steers.jsonl beside threads.json.
 // thread/resume with no turn/start holds the thread idle until a prompt, as
 // codex does, so a start with no prompt needs nothing more.
 //
@@ -42,7 +55,7 @@
 // tools and their descriptions; docs, which needs signing in until an
 // mcp-sign-in turn; and broken, which failed to start.
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -99,6 +112,8 @@ let threadID = null
 let activeTurn = null
 let nextRequest = 0
 const pending = new Map() // our server request id -> {resolve, turn}
+let asking = null // the turn whose question waits on a steer: {turn, lose}
+let lastTurn = null // the turn that ended last
 
 const catalog = [
   { id: 'fake-large', model: 'fake-large', displayName: 'Fake Large', description: 'The bigger stand-in.', hidden: false, isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: ['low', 'medium', 'high'].map((reasoningEffort) => ({ reasoningEffort, description: reasoningEffort })) },
@@ -164,6 +179,7 @@ const agent = (turn, text) =>
 const finish = (turn, status = 'completed') => {
   if (activeTurn !== turn) return
   activeTurn = null
+  lastTurn = turn
   notify('turn/completed', { threadId: threadID, turn: { id: turn, status, items: [], error: null } })
 }
 
@@ -206,6 +222,22 @@ async function runTurn(turn, text) {
     ] })
     done({ type: 'commandExecution', id: `exec-${id()}`, command: "/bin/bash -lc 'exit 2'", cwd: process.cwd(), status: 'failed', exitCode: 2, aggregatedOutput: '' })
     agent(turn, 'done')
+  } else if (verb === 'askq') {
+    asking = { turn, lose: rest[0] === 'lose' }
+    notify('item/completed', {
+      threadId: threadID,
+      turnId: turn,
+      item: { type: 'agentMessage', id: `msg-${id()}`, text: 'Which color do you prefer? Red or Blue.', delivery: 'async', questions: [{ title: 'Which color do you prefer?', options: ['Red', 'Blue'] }] },
+    })
+    return // the turn waits for the answer, as codex's sleeps do
+  } else if (verb === 'late-message') {
+    if (lastTurn) notify('item/agentMessage/delta', { threadId: threadID, turnId: lastTurn, itemId: `msg-${id()}`, delta: 'STALE-STREAM' })
+    notify('item/agentMessage/delta', { threadId: threadID, turnId: turn, itemId: `msg-${id()}`, delta: 'STREAMING-NOW' })
+    if (lastTurn) notify('item/completed', { threadId: threadID, turnId: lastTurn, item: { type: 'agentMessage', id: `msg-${id()}`, text: 'LATE-MESSAGE' } })
+    return
+  } else if (verb === 'late-search') {
+    if (lastTurn) notify('item/completed', { threadId: threadID, turnId: lastTurn, item: { type: 'webSearch', id: `search-${id()}`, query: 'fake late search' } })
+    return
   } else if (verb === 'mcp-sign-in') {
     docsSignedIn = true
     startup('docs', 'ready')
@@ -311,6 +343,21 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       notify('turn/started', { threadId: threadID, turn: { id: turn, status: 'inProgress', items: [] } })
       notify('item/completed', { threadId: threadID, turnId: turn, item: { type: 'userMessage', id: id(), clientId: p.clientUserMessageId, content: [{ type: 'text', text }] } })
       void runTurn(turn, text)
+      break
+    }
+    case 'turn/steer': {
+      mkdirSync(storeDir, { recursive: true })
+      appendFileSync(join(storeDir, 'steers.jsonl'), JSON.stringify(p) + '\n')
+      if (!asking || asking.turn !== activeTurn || p.expectedTurnId !== activeTurn) {
+        send({ id: msg.id, error: { code: -32600, message: 'fake codex: no active turn to steer' } })
+        break
+      }
+      if (asking.lose) process.exit(1)
+      const turn = activeTurn
+      asking = null
+      send({ id: msg.id, result: { turnId: turn } })
+      agent(turn, `answered: ${(p.input ?? []).map((i) => i.text ?? '').join('')}`)
+      finish(turn)
       break
     }
     case 'turn/interrupt': {

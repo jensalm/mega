@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -161,5 +162,42 @@ func TestAReleaseThatCouldNotLookSaysSo(t *testing.T) {
 		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("no exit")
+	}
+}
+
+// a reply the connection took before the deadline is the answer, never the
+// deadline: a reply ready when the deadline is seen wins, and one taken off
+// the connection but not yet handed over is waited for. only a call still
+// listed when the deadline is seen has no reply coming.
+func TestAReplyTakenBeforeTheDeadlineIsTheAnswer(t *testing.T) {
+	c := &conn{calls: make(map[int64]chan callResult), done: make(chan struct{})}
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := range 200 {
+		// handed over already: dispatch has taken the call off the list.
+		reply := make(chan callResult, 1)
+		reply <- callResult{result: map[string]any{}}
+		if err := c.wait(expired, &sentCall{id: int64(i), method: "turn/steer", reply: reply}, nil); err != nil {
+			t.Fatalf("a reply ready as the deadline was seen was dropped: %v", err)
+		}
+	}
+	// taken off the list, and handed over a moment after the deadline.
+	reply := make(chan callResult, 1)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		reply <- callResult{err: &replyError{message: "no active turn"}}
+	}()
+	var refused *replyError
+	if err := c.wait(expired, &sentCall{id: 1000, method: "turn/steer", reply: reply}, nil); !errors.As(err, &refused) {
+		t.Errorf("a reply on its way as the deadline was seen: %v", err)
+	}
+	// still listed: no reply was taken, and none will be handed over.
+	reply = make(chan callResult, 1)
+	c.calls[2000] = reply
+	if err := c.wait(expired, &sentCall{id: 2000, method: "turn/steer", reply: reply}, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("a call with no reply taken: %v", err)
+	}
+	if _, listed := c.calls[2000]; listed {
+		t.Error("the call is still listed after its deadline")
 	}
 }

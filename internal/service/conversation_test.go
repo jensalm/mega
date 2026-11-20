@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/michaelquigley/mega/internal/events"
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/harnesstest"
 	"github.com/michaelquigley/mega/internal/model"
@@ -648,6 +649,19 @@ func (r *rig) closeLog(id string) {
 	r.svc.live[id].log.Close()
 }
 
+// reopenLog gives a conversation its log back after closeLog, as a log whose
+// failed append was truncated back takes appends again.
+func (r *rig) reopenLog(id string) {
+	r.t.Helper()
+	r.svc.mu.Lock()
+	defer r.svc.mu.Unlock()
+	log, err := events.Open(r.svc.logPath(id))
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.svc.live[id].log = log
+}
+
 func TestUnrecordedReleaseStillStopsTheProcessOnce(t *testing.T) {
 	r := newRig(t)
 	conv := r.start("one") // the turn stays active, so a release interrupts
@@ -888,8 +902,8 @@ func TestUserMessageFromTheRuntimeOpensATurn(t *testing.T) {
 	conv := r.start("one")
 	rt := r.fake.Last()
 	finishTurn(rt, "a-1", "done")
-	// an answer to a question whose turn completed starts the next turn, which
-	// the runtime first reports as the user message it began with.
+	// a turn the runtime opened itself, which it first reports as the user
+	// message it began with.
 	rt.Emit(&model.Event{Kind: model.EventUser, Text: "Blue", NativeID: "u-2"})
 	if !r.view(conv.ID).TurnActive {
 		t.Error("the turn the answer started is not shown as active")

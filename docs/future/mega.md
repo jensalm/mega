@@ -78,7 +78,7 @@ An unreachable environment is not proof its agents stopped. Its projects stay in
 
 ## A simpler core
 
-Decided on 2026-11-19 and not yet built. It is built as a sequence of small pieces, one roadmap card each, listed on `docs/future/roadmap/simplify-the-core.md`, which also records the decisions Michael settled and what review took out. Where this section differs from the ones above, this one is the target, and those are brought in step as each piece lands.
+Decided on 2026-11-19. The sequence and its decisions are on `docs/future/roadmap/simplify-the-core.md`. The first piece is built and described under “The Codex adapter” in `docs/current/mega.md`. Where this section differs from the ones above, this one is the target, and those are brought in step as each piece lands.
 
 The first slice kept two facts about a conversation in two places: its runtime state and its unread marker were in the registry, and the events that decided them were in its log, written one after the other. Every operation then needed its own answer to what happens when the second write fails, and start-up needed its own code to work out what the service had decided before it stopped. Most of what the reviews of 2026-11-18 and 2026-11-19 found lived in those answers and that code, not in any feature. The core is to be made smaller, so those faults have nowhere to live.
 
@@ -96,13 +96,11 @@ The first slice kept two facts about a conversation in two places: its runtime s
 
 **The page has one value for where it stands.** It has two parts, both true at once: what the page knows of the workspace (nothing yet, unreachable, unreadable, current, or only what it last read), and what the service last said about itself, if anything (shutdown asked, or shut down). It is worked out in one place, and everything on the page reads it from there.
 
-**An answer never starts a turn.** A question Codex asks in a message can be answered into the turn that asked it while that turn is running. Once the turn has ended it is a message like any other, answered in the reply box. What Codex asks through its own protocol keeps its card.
-
 **Reading the workspace starts nothing.** A read reports what mega last observed. An environment is resolved when something needs it or the operator asks, never because a page or the tray looked.
 
 **Recorded history has one route to the page.** The stream says how far a conversation has got and carries the text still being written; the events come from the history read, and a read that fails is still owed.
 
-None of this changes what an operator sees when nothing has gone wrong, beyond the unread mark on a resumed or adopted conversation and the way a Codex question is answered after its turn has ended, and none of it touches the promises: a session is resumed by its exact id, permissions are never weakened, nothing is answered for the operator, and a state mega cannot vouch for is never shown as certain.
+None of this changes what an operator sees when nothing has gone wrong, beyond the unread mark on a resumed or adopted conversation, and none of it touches the promises: a session is resumed by its exact id, permissions are never weakened, nothing is answered for the operator, and a state mega cannot vouch for is never shown as certain.
 
 ## First slice
 

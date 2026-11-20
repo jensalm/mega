@@ -157,32 +157,42 @@ func (c *conn) begin(method string, params any) (*sentCall, error) {
 	return &sentCall{id: id, method: method, reply: reply}, nil
 }
 
-// wait waits for a sent request's reply and binds it into out.
+// wait waits for a sent request's reply and binds it into out. a reply the
+// connection took before the deadline is the answer, never the deadline.
 func (c *conn) wait(ctx context.Context, sent *sentCall, out any) error {
-	id, method, reply := sent.id, sent.method, sent.reply
+	method := sent.method
+	var r callResult
 	select {
-	case r := <-reply:
-		if r.err != nil {
-			return fmt.Errorf("%s: %w", method, r.err)
-		}
-		if out == nil {
-			return nil
-		}
-		data, ok := r.result.(map[string]any)
-		if !ok {
-			return fmt.Errorf("%s: unexpected result", method)
-		}
-		return dd.Bind(out, data)
+	case r = <-sent.reply:
 	case <-ctx.Done():
-		c.forget(id)
-		return fmt.Errorf("%s: %w", method, ctx.Err())
+		if c.forget(sent.id) {
+			return fmt.Errorf("%s: %w", method, ctx.Err())
+		}
+		// taken off the list already, so its reply, or the connection's
+		// failure, is being handed over.
+		r = <-sent.reply
 	}
+	if r.err != nil {
+		return fmt.Errorf("%s: %w", method, r.err)
+	}
+	if out == nil {
+		return nil
+	}
+	data, ok := r.result.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: unexpected result", method)
+	}
+	return dd.Bind(out, data)
 }
 
-func (c *conn) forget(id int64) {
+// forget takes a call off the list, and says whether it was still on it: one
+// that was not has had its reply taken, or failed with the connection.
+func (c *conn) forget(id int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	_, listed := c.calls[id]
 	delete(c.calls, id)
+	return listed
 }
 
 // respond answers a server request.
@@ -222,14 +232,20 @@ func (c *conn) read(stdout io.Reader, h handler) {
 			break
 		}
 	}
-	waitErr := c.cmd.Wait()
+	c.end(c.cmd.Wait())
+}
+
+// end closes the connection once the app-server has gone: every call still
+// waiting fails with errClosed before done is closed, so a caller waiting on
+// a reply has its answer by the time anything waiting on done runs.
+func (c *conn) end(exit error) {
 	c.mu.Lock()
 	c.closed = true
 	for id, reply := range c.calls {
 		reply <- callResult{err: errClosed}
 		delete(c.calls, id)
 	}
-	c.err = waitErr
+	c.err = exit
 	c.mu.Unlock()
 	close(c.done)
 }

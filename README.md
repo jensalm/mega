@@ -54,7 +54,7 @@ The first page says what mega found: each harness with its version, or why it ca
 
 1. **Register the project.** Press **Register a project**, the folder button at the top of the side panel, and give the checkout's absolute path.
 2. **Launch.** On the project's page, press **New conversation**, choose the harness, write the opening prompt, and launch. The model and effort start as the harness's own settings name them.
-3. **Answer.** An approval or a question docks above the reply box until you answer it. Ctrl+Enter sends a reply. With the reply box empty, it allows the oldest docked approval.
+3. **Answer.** An approval or a question docks above the reply box until you answer it. A question Codex asks in its message docks only while the turn that asked is running; once that turn ends, answer it in the reply box. Ctrl+Enter sends a reply. With the reply box empty, it allows the oldest docked approval.
 4. **Keys.** Opening a conversation puts the cursor in its reply box, which opens as you type.
    - **Ctrl+Space** puts the cursor back in the reply box from anywhere on the page, except while a dialog is open.
    - **Escape** leaves the box for the history, whose keys then scroll it.

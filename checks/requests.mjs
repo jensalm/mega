@@ -14,7 +14,11 @@
 // approval from the fake codex, with its server, tool and parameter and no
 // reason box, allowed for the session or denied; a typed form needing its
 // required field; Interrupt aborting a pending card, with a late answer
-// refused. and pi, from the fake pi: its extension's gate docked as a question
+// refused; a question the fake codex asks in its message, its card steering
+// the answer into the waiting turn, and a steer written that codex never
+// replies to closing the card, the question's history saying delivery is
+// unconfirmed after a reload too, with one steer, one resolution, and a
+// second answer sending nothing. and pi, from the fake pi: its extension's gate docked as a question
 // from a pi extension, with Dismiss and no answer of one's own or allow for
 // the session, answered; Dismiss sending pi's cancel; an input and an editor
 // dialog; a dialog that expires; an interrupt that waits on a dialog until it
@@ -25,11 +29,14 @@
 // with a draft, on a repeat, on a request that just docked, with a dialog
 // open, on a question or on a pi dialog; Ctrl+Shift+Enter allowing for the
 // session where codex offers it, and nothing where Claude does not. it saves
-// the pi dialog, the release warning and the keyed approval as
-// shots/{pi-dialog,pi-release-warning,approval-key}.png. it approves only
+// the pi dialog, the release warning, the keyed approval and the unconfirmed
+// question as shots/{pi-dialog,pi-release-warning,approval-key,
+// question-unconfirmed}.png. it approves only
 // where the approval itself is under test, and only once it has checked, as
 // a step it cannot go past, that the request is exactly the one the fake
 // raised; where the decision is incidental, it denies.
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { reconnectable, suite } from './lib/mega.mjs'
 
 const t = await suite('requests')
@@ -321,6 +328,55 @@ await until('its row says aborted', async () => (await rows(page, 'aborted').cou
 const late = await api('POST', `/api/conversations/${X}/answer`, { request_id: lateID, decision: 'deny' })
 check(late.status === 409 && late.body.code === 'not_pending', `Interrupt aborts the card, and a late answer is refused: ${late.status} ${late.body.code}`)
 await t.shot(page, 'requests')
+
+// a question codex asks in its message, while its turn waits: the card steers
+// the answer into that turn, once. each steer the fake receives is in its
+// log, beside its threads in the scratch HOME.
+const steerLog = join(t.dir, 'home', '.fake-codex', 'steers.jsonl')
+const steers = () => (existsSync(steerLog) ? readFileSync(steerLog, 'utf8').split('\n').filter(Boolean).length : 0)
+const outcomes = async (id, requestID) =>
+  (await api('GET', `/api/conversations/${id}/events?since=0`)).body.events.filter((e) => e.kind === 'request_resolved' && e.req?.id === requestID).map((e) => e.req.outcome)
+const answerBlue = async () => {
+  const asked = docked.first()
+  await asked.getByLabel('Blue').check()
+  await asked.getByRole('button', { name: 'Answer', exact: true }).click()
+}
+await prompt(X, 'askq')
+await docked.waitFor()
+const steered = await pending(X)
+must(steered.length === 1 && steered[0].kind === 'question' && JSON.stringify(steered[0].payload).includes('Which color do you prefer?'), 'the question codex asks in its message docks while its turn waits, and is the fake’s own')
+const steersBefore = steers()
+await answerBlue()
+await until('the answer steered into the turn', async () => (await reply(page, 'answered: Blue').count()) === 1 && (await docked.count()) === 0)
+check(steers() === steersBefore + 1 && (await outcomes(X, steered[0].id)).join() === 'answered', 'the card steers the answer into the turn that asked, once, and the question is answered')
+await t.idle(X)
+
+// a steer written that codex never replies to, here because the app-server
+// exits on it: the card closes, and the question's history says Codex did not
+// confirm the answer, after a reload too. one steer, one resolution, and a
+// second answer sends nothing.
+const unconfirmed = 'Question: Codex did not confirm whether it received your answer'
+const L = (await t.launch(P.id, 'codex', 'hello')).id
+await t.idle(L)
+await page.goto(`${url}/#/c/${L}`)
+await page.locator('.panel-cluster').waitFor()
+await prompt(L, 'askq lose')
+await docked.waitFor()
+const lost = await pending(L)
+must(lost.length === 1 && lost[0].kind === 'question' && JSON.stringify(lost[0].payload).includes('Which color do you prefer?'), 'the question answered is the fake’s own')
+const lostBefore = steers()
+await answerBlue()
+await until('the card to close', async () => (await docked.count()) === 0 && (await pending(L)).length === 0)
+await until('the question’s history to say the answer is unconfirmed', async () => (await rows(page, unconfirmed).count()) === 1)
+const lostOutcomes = await outcomes(L, lost[0].id)
+check(steers() === lostBefore + 1 && lostOutcomes.join() === 'unconfirmed', `one steer, and one resolution, unconfirmed: ${steers() - lostBefore} sent, ${JSON.stringify(lostOutcomes)}`)
+await t.shot(page, 'question-unconfirmed')
+await page.reload()
+await page.locator('.panel-cluster').waitFor()
+await until('the history after a reload', async () => (await rows(page, unconfirmed).count()) === 1)
+check((await docked.count()) === 0, 'after a reload there is no card, and the question’s history still says Codex did not confirm the answer')
+const lostAgain = await api('POST', `/api/conversations/${L}/answer`, { request_id: lost[0].id, answers: { 'Which color do you prefer?': 'Red' } })
+check(lostAgain.status === 409 && lostAgain.body.code === 'not_pending' && steers() === lostBefore + 1, `a second answer is refused, and sends nothing: ${lostAgain.status} ${lostAgain.body.code}`)
 
 // pi: every dialog an extension raises is a question, docked as the others,
 // never an approval and never allowed for the session. each offers Dismiss,

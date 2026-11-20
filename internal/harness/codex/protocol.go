@@ -200,7 +200,8 @@ type itemNotification struct {
 }
 
 type deltaNotification struct {
-	Delta string `dd:"delta"`
+	TurnID string `dd:"turnId,+nullable"`
+	Delta  string `dd:"delta"`
 }
 
 type resolvedNotification struct {

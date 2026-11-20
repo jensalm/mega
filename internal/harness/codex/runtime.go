@@ -44,14 +44,12 @@ type serverRequest struct {
 }
 
 // question is the adapter's own request for an agentMessage carrying
-// questions. codex sends no resolution for it, so its lifecycle is kept here:
-// an answer resolves it; interrupt, release, a turn ending failed or
-// interrupted, and runtime loss abort it; only a turn that completes keeps it
-// pending, and then the answer starts the next turn.
+// questions. codex sends no resolution for it, so its life is kept here: an
+// answer steered into its turn resolves it; its turn ending, an interrupt, a
+// release and runtime loss abort it. an answer never starts a turn.
 type question struct {
 	turn      string
 	questions []asyncQuestion
-	completed bool // its turn completed with the question unanswered
 }
 
 type runtime struct {
@@ -68,9 +66,8 @@ type runtime struct {
 	byNative    map[string]string          // server request id -> service request id
 	questions   map[string]*question       // service request id -> synthetic question
 	fileChanges map[string][]fileChange    // item id -> changes, for approval payloads
-	completed   map[string]bool            // turns that completed, for answers racing their end
+	ended       map[string]bool            // turns codex reported ended, in any status; written only by the reader
 	interrupted map[string]bool            // turns the operator interrupted; no question of theirs may wait
-	stops       int                        // interrupts and closes so far; an answer started before one never starts a turn
 	started     map[int]proc               // processes seen under the app-server, for the exit check
 	unlisted    error                      // why the processes under it could not be listed, if they could not
 	mcpCalls    []mcpCall                  // MCP tool calls in flight, oldest first, to name the tool an approval is for
@@ -87,6 +84,12 @@ type runtime struct {
 	mcpReport sync.Mutex
 	mcpExited bool
 	stopping  bool // a fenced stop: no answer that would let work go on is delivered (harness.CarriesWork)
+	// aborting is held by abortQuestions throughout. steering counts written
+	// steers not yet settled, each in the hold of r.mu that writes it, which
+	// watch takes before it waits for them.
+	aborting     sync.Mutex
+	steering     sync.WaitGroup
+	steerTimeout time.Duration
 }
 
 func newRuntime(sink harness.Sink) *runtime {
@@ -97,9 +100,11 @@ func newRuntime(sink harness.Sink) *runtime {
 		questions:   make(map[string]*question),
 		fileChanges: make(map[string][]fileChange),
 		commands:    make(map[string]*runningCommand),
-		completed:   make(map[string]bool),
+		ended:       make(map[string]bool),
 		interrupted: make(map[string]bool),
 		started:     make(map[int]proc),
+		// steerTimeout is callTimeout but in tests.
+		steerTimeout: callTimeout,
 	}
 }
 
@@ -144,7 +149,7 @@ func (r *runtime) startTurn(threadID, uuid, body string) error {
 		return err
 	}
 	r.mu.Lock()
-	if r.activeTurn == "" && !r.completed[resp.Turn.ID] {
+	if r.activeTurn == "" && !r.ended[resp.Turn.ID] {
 		r.activeTurn = resp.Turn.ID
 	}
 	r.mu.Unlock()
@@ -154,7 +159,9 @@ func (r *runtime) startTurn(threadID, uuid, body string) error {
 // Answer delivers the operator's answer. codex gives no acknowledgment for a
 // response to its server request; one it already resolved is ignored by the
 // server, and its serverRequest/resolved notice has removed the mapping here,
-// so an answer after that reports ErrNotPending.
+// so an answer after that reports ErrNotPending. an answer to the adapter's
+// own question is steered into the turn that asked while that turn runs,
+// settles from codex's reply, and never starts a turn.
 func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 	r.mu.Lock()
 	if r.stopping && harness.CarriesWork(answer) {
@@ -172,88 +179,53 @@ func (r *runtime) Answer(requestID string, answer harness.Answer) error {
 		r.mu.Unlock()
 		return err
 	}
+	// a question leaves the adapter only once its steer is written: one
+	// refused here stays for the abort that ends it, which reports it.
 	q, ok := r.questions[requestID]
-	if !ok {
+	if !ok || q.turn == "" || r.activeTurn != q.turn || r.interrupted[q.turn] {
 		r.mu.Unlock()
+		return harness.ErrNotPending
+	}
+	// the checks above and the steer's write are one hold of the lock, under
+	// which Stopping and Interrupt mark a stop, so none lands between; the
+	// wait for codex's reply holds none.
+	steer := &turnSteerParams{ThreadID: r.threadID, ExpectedTurnID: q.turn, Input: text(answerText(answer.Answers, q.questions)), ClientUserMessageID: newID()}
+	sent, err := r.conn.begin("turn/steer", steer)
+	if err != nil {
+		// nothing was written: the app-server has gone.
+		r.mu.Unlock()
+		dl.Debugf("steering an answer into turn '%s': %v", q.turn, err)
 		return harness.ErrNotPending
 	}
 	delete(r.questions, requestID)
-	threadID, active, stops := r.threadID, r.activeTurn == q.turn && q.turn != "", r.stops
+	r.steering.Add(1)
 	r.mu.Unlock()
-
-	body := answerText(answer.Answers, q.questions)
-	uuid := newID()
-	if active {
-		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-		defer cancel()
-		err := r.conn.call(ctx, "turn/steer", &turnSteerParams{ThreadID: threadID, ExpectedTurnID: q.turn, Input: text(body), ClientUserMessageID: uuid}, nil)
-		if err == nil {
-			return nil
-		}
-		// the turn may have just ended; only a completed one takes the answer
-		// as the next turn.
-		r.mu.Lock()
-		completed := r.completed[q.turn]
-		r.mu.Unlock()
-		if !completed {
-			dl.Debugf("steering an answer into turn '%s': %v", q.turn, err)
-			return harness.ErrNotPending
-		}
-	} else if !q.completed {
-		return harness.ErrNotPending
-	}
-	return r.answerAsTurn(threadID, uuid, body, stops)
-}
-
-// answerAsTurn starts the next turn with an answer, unless the operator
-// interrupted or released since the answer began: a question never carries
-// execution across a stop. the check and the sending of turn/start are one
-// step under the runtime's lock, which an interrupt or a close takes too, so
-// no stop lands between them; the wait for codex's reply holds no lock. a
-// stop that lands after the turn was sent interrupts it as soon as it exists.
-func (r *runtime) answerAsTurn(threadID, uuid, body string, stops int) error {
-	// built first: it reads the model and effort under the lock itself.
-	params := r.turnStart(threadID, uuid, body)
-	r.mu.Lock()
-	if r.stops != stops || r.stopping {
-		r.mu.Unlock()
-		return harness.ErrNotPending
-	}
-	if afterStopCheck != nil {
-		afterStopCheck()
-	}
-	sent, err := r.conn.begin("turn/start", params)
-	r.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	// done once the settlement below has reached the sink.
+	defer r.steering.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), r.steerTimeout)
 	defer cancel()
-	resp := &turnResponse{}
-	if err := r.conn.wait(ctx, sent, resp); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	stopped := r.stops != stops
-	if !stopped && r.activeTurn == "" && !r.completed[resp.Turn.ID] {
-		r.activeTurn = resp.Turn.ID
-	}
-	if stopped {
-		r.interrupted[resp.Turn.ID] = true
-	}
-	r.mu.Unlock()
-	if !stopped {
+	// a written steer is settled here, from codex's reply, before the exit
+	// can be reported, so the exit's retirement never settles it another way.
+	err = r.conn.wait(ctx, sent, nil)
+	var refused *replyError
+	switch {
+	case err == nil:
+		r.sink.Resolved(requestID, model.OutcomeAnswered)
 		return nil
+	case errors.As(err, &refused):
+		// codex refused it, as when the turn has just ended: the answer is
+		// not taken, and the message is answered in the reply box.
+		dl.Debugf("steering an answer into turn '%s': %v", q.turn, err)
+		r.sink.Resolved(requestID, model.OutcomeAborted)
+		return harness.ErrNotPending
+	default:
+		// no reply before the deadline or the exit: codex may have taken it
+		// or not, and it is never sent again.
+		dl.Warnf("codex thread '%s': no reply to an answer steered into turn '%s': %v", r.NativeID(), q.turn, err)
+		r.sink.Resolved(requestID, model.OutcomeUnconfirmed)
+		return fmt.Errorf("Codex %w", harness.ErrUnconfirmed)
 	}
-	if err := r.conn.call(ctx, "turn/interrupt", &turnInterruptParams{ThreadID: threadID, TurnID: resp.Turn.ID}, nil); err != nil {
-		dl.Warnf("interrupting a turn an answer started after a stop: %v", err)
-	}
-	return harness.ErrNotPending
 }
-
-// afterStopCheck, when a test sets it, runs between the check for a stop and
-// the sending of the answer's turn, under the runtime's lock.
-var afterStopCheck func()
 
 func responseFor(req *serverRequest, answer harness.Answer) any {
 	allow := answer.Decision == harness.DecisionAllow
@@ -308,21 +280,19 @@ func (r *runtime) SetPermissionMode(string) error {
 	return errors.New("codex has no permission modes; its approval policy comes from its own configuration")
 }
 
-// Interrupt stops the active turn. the adapter's own questions are aborted at
-// once: none may outlive an interrupt and start new work when answered.
+// Interrupt stops the active turn. it marks the turn interrupted, which an
+// answer checks before it steers, then aborts that turn's questions.
 func (r *runtime) Interrupt() error {
 	r.remember()
 	r.mu.Lock()
-	r.stops++
 	threadID, turnID := r.threadID, r.activeTurn
 	if turnID != "" {
 		r.interrupted[turnID] = true
 	}
-	aborted := r.takeQuestions(func(*question) bool { return true })
 	r.mu.Unlock()
-	for _, id := range aborted {
-		r.sink.Resolved(id, model.OutcomeAborted)
-	}
+	// only the questions of the turn it stops: a question exists only for
+	// the turn running, and one of a turn begun since is that turn's.
+	r.abortQuestions(func(q *question) bool { return q.turn == turnID })
 	if turnID == "" {
 		return nil
 	}
@@ -332,38 +302,43 @@ func (r *runtime) Interrupt() error {
 }
 
 // Stopping fences a stop before it is carried out: it latches, so no answer
-// that would let work go on is delivered after it, even one accepted before
-// the stop, and counts as a stop, which an answer starting a turn checks
-// under the same lock as it sends.
+// that would let work go on is delivered after it, even one accepted before,
+// and aborts the questions only such an answer could settle.
 func (r *runtime) Stopping() {
 	r.mu.Lock()
-	r.stops++
 	r.stopping = true
 	r.mu.Unlock()
+	r.abortQuestions(allQuestions)
 }
 
 // Close ends input; the app-server exits when it sees the end, and closing is
 // itself a clean cancel for a pending approval (capability report).
 func (r *runtime) Close() error {
 	r.remember()
-	r.mu.Lock()
-	r.stops++
-	r.mu.Unlock()
 	return r.conn.closeInput()
 }
 
-// takeQuestions removes and returns the synthetic questions match selects.
-// callers hold r.mu.
-func (r *runtime) takeQuestions(match func(*question) bool) []string {
+// abortQuestions takes the adapter's own questions match selects and reports
+// them aborted, holding aborting throughout, so a release's fence never
+// returns while another abort is still to be reported. callers hold no lock.
+func (r *runtime) abortQuestions(match func(*question) bool) {
+	r.aborting.Lock()
+	defer r.aborting.Unlock()
 	var ids []string
+	r.mu.Lock()
 	for id, q := range r.questions {
 		if match(q) {
 			ids = append(ids, id)
 			delete(r.questions, id)
 		}
 	}
-	return ids
+	r.mu.Unlock()
+	for _, id := range ids {
+		r.sink.Resolved(id, model.OutcomeAborted)
+	}
 }
+
+func allQuestions(*question) bool { return true }
 
 // watch reports the exit once the app-server is gone and every process seen
 // under it at an interrupt or a close has gone too, or names what is still
@@ -372,16 +347,18 @@ func (r *runtime) takeQuestions(match func(*question) bool) []string {
 func (r *runtime) watch() {
 	<-r.conn.done
 	r.mu.Lock()
-	aborted := r.takeQuestions(func(*question) bool { return true })
 	var seen []proc
 	for _, p := range r.started {
 		seen = append(seen, p)
 	}
 	unlisted := r.unlisted
 	r.mu.Unlock()
-	for _, id := range aborted {
-		r.sink.Resolved(id, model.OutcomeAborted)
-	}
+	r.abortQuestions(allQuestions)
+	// an answer whose steer was written settles itself, from codex's reply or
+	// as unconfirmed. the exit is reported after it, so the service's
+	// retirement of what is left never settles that question a second way.
+	// every steer was counted before the holds of r.mu above.
+	r.steering.Wait()
 	r.mcpEnd()
 	err := r.conn.err
 	pids, scan := survivors(seen, survivorGrace)
@@ -465,8 +442,9 @@ func (r *runtime) notify(method string, params map[string]any) {
 		}
 		r.itemCompleted(params)
 	case "item/agentMessage/delta":
+		// streaming text of a turn codex has reported ended is dropped.
 		n := &deltaNotification{}
-		if bind(n, params) && n.Delta != "" {
+		if bind(n, params) && n.Delta != "" && !r.hasEnded(n.TurnID) {
 			r.sink.Delta(n.Delta)
 		}
 	case "thread/settings/updated":
@@ -511,15 +489,21 @@ func (r *runtime) notify(method string, params map[string]any) {
 	}
 }
 
+// hasEnded is whether codex has reported turn ended. ended is written only
+// on the reader, which every caller runs on.
+func (r *runtime) hasEnded(turn string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ended[turn]
+}
+
 func (r *runtime) turnCompleted(params map[string]any) {
 	n := &turnNotification{}
 	if !bind(n, params) {
 		return
 	}
 	r.mu.Lock()
-	// a turn the operator interrupted keeps no question, even if it reports
-	// completing because it finished before the interrupt landed.
-	completed := n.Turn.Status == "completed" && !r.interrupted[n.Turn.ID]
+	r.ended[n.Turn.ID] = true
 	if r.activeTurn == n.Turn.ID {
 		r.activeTurn = ""
 	}
@@ -535,19 +519,11 @@ func (r *runtime) turnCompleted(params map[string]any) {
 	if moved {
 		jobs = r.backgroundLocked()
 	}
-	if completed {
-		r.completed[n.Turn.ID] = true
-		for _, q := range r.questions {
-			if q.turn == n.Turn.ID {
-				q.completed = true
-			}
-		}
-	}
-	aborted := r.takeQuestions(func(q *question) bool { return q.turn == n.Turn.ID && !completed })
 	r.mu.Unlock()
-	for _, id := range aborted {
-		r.sink.Resolved(id, model.OutcomeAborted)
-	}
+	// no question outlives its turn, in any status: its message stays in the
+	// conversation, and the reply box answers it. no question of this turn
+	// can be raised meanwhile, since that too happens on the reader.
+	r.abortQuestions(func(q *question) bool { return q.turn == n.Turn.ID })
 	r.sink.Event(&model.Event{Kind: model.EventTurnEnd, Origin: model.OriginManaged, Status: turnStatus(n.Turn.Status), Text: n.Turn.Status, Raw: params})
 	if moved {
 		r.sink.Background(jobs)
@@ -624,27 +600,32 @@ func (r *runtime) itemCompleted(params map[string]any) {
 		dl.Warnf("codex thread '%s': %v", r.NativeID(), err)
 		return
 	}
+	it, err := bindItem(n.Item)
+	asks := err == nil && it.Type == "agentMessage" && len(it.Questions) > 0
+	// an item of a turn codex has reported ended is output after its turn,
+	// so the service opens no turn for it; a question among them is a
+	// message like any other.
+	after := r.hasEnded(n.TurnID)
 	for _, ev := range evs {
 		ev.Origin = model.OriginManaged
+		ev.AfterTurn = after
 		r.sink.Event(ev)
 	}
-	it, err := bindItem(n.Item)
-	if err != nil || it.Type != "agentMessage" || len(it.Questions) == 0 {
+	if !asks || after {
 		return
 	}
 	// hold r.mu across the sink call, so an answer cannot arrive before the
 	// question is known here.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.interrupted[n.TurnID] || r.stopping {
-		// the operator interrupted this turn, or the runtime is being stopped:
-		// a question it still produced must not wait for an answer that would
-		// start new work, which a fenced runtime refuses anyway. the question
-		// is the adapter's own, from the agent's text: nothing waits on it.
+	if n.TurnID == "" || n.TurnID != r.activeTurn || r.interrupted[n.TurnID] || r.stopping {
+		// only the running turn takes an answer, and not once the operator
+		// interrupted it or a stop is fenced. the question is the adapter's
+		// own, from the agent's text: nothing waits on it.
 		return
 	}
 	id := r.sink.Request(model.RequestQuestion, questionPayload(it.Questions))
-	r.questions[id] = &question{turn: n.TurnID, questions: it.Questions, completed: r.completed[n.TurnID]}
+	r.questions[id] = &question{turn: n.TurnID, questions: it.Questions}
 }
 
 func (r *runtime) request(id any, method string, params map[string]any) {

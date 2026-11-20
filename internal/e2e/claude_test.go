@@ -555,12 +555,20 @@ func TestClaudeModeSwitch(t *testing.T) {
 // newE2EService is a service over h with a throwaway data directory.
 func newE2EService(t *testing.T, h harness.Harness) *service.Service {
 	t.Helper()
+	return newE2EServiceResolving(t, h, nil)
+}
+
+// newE2EServiceResolving is newE2EService with the resolver given, or mega's
+// own for nil.
+func newE2EServiceResolving(t *testing.T, h harness.Harness, resolver service.Resolver) *service.Service {
+	t.Helper()
 	data := t.TempDir()
 	reg, err := registry.Load(filepath.Join(data, "registry.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	svc, err := service.New(reg, service.Options{
+		Resolver:     resolver,
 		EventLogPath: func(id string) string { return filepath.Join(data, "conversations", id, "events.jsonl") },
 		Harnesses:    []harness.Harness{h},
 	})

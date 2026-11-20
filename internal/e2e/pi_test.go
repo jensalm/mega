@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/michaelquigley/mega/internal/environ"
 	"github.com/michaelquigley/mega/internal/harness"
 	"github.com/michaelquigley/mega/internal/harness/pi"
 	"github.com/michaelquigley/mega/internal/model"
@@ -308,12 +309,20 @@ func processesNaming(s string) []int {
 	return out
 }
 
-// TestPiDiscoveryAndAdoption: a fresh workspace discovers the fixture's pi
-// sessions by scanning pi's session folder and adopts the newest, importing
-// its history with an identity for every message.
+// TestPiDiscoveryAndAdoption finds a session of its own and adopts it: a copy
+// of a recorded session (the pi adapter's testdata/p1-and-p4.jsonl), planted
+// by the adapter under a fresh id in a session root of this test's own, which
+// the service's resolver points pi at. it depends on no other run's sessions
+// and on no model, so it passes with a reply-less session newest in the
+// fixture's folder, and with pi's model server down.
 func TestPiDiscoveryAndAdoption(t *testing.T) {
 	fixture := fixture(t, "MEGA_E2E_PI_FIXTURE")
-	svc := newE2EService(t, newPiHarness())
+	root := t.TempDir()
+	svc := newE2EServiceResolving(t, newPiHarness(), piSessionRoot{root: root, base: service.DefaultResolver(os.Environ())})
+	id, err := pi.PlantSession([]string{piSessionDir + "=" + root}, fixture, filepath.Join("..", "harness", "pi", "testdata", "p1-and-p4.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	project, err := svc.RegisterProject("pi-rt1", fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -322,11 +331,12 @@ func TestPiDiscoveryAndAdoption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(found) == 0 {
-		t.Skip("no pi sessions in the fixture yet; run the other pi round trips first")
+	i := slices.IndexFunc(found, func(s harness.Session) bool { return s.NativeID == id })
+	if i < 0 {
+		t.Fatalf("discovery did not find the planted session %s among %d", id, len(found))
 	}
-	t.Logf("%d sessions; newest %s: %.60q", len(found), found[0].NativeID, found[0].Preview)
-	conv, err := svc.Adopt(project.ID, model.HarnessPi, found[0].NativeID, "adopted")
+	t.Logf("%d sessions; planted %s: %.60q", len(found), id, found[i].Preview)
+	conv, err := svc.Adopt(project.ID, model.HarnessPi, id, "adopted")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,8 +351,28 @@ func TestPiDiscoveryAndAdoption(t *testing.T) {
 			t.Errorf("an imported %s has no identity", ev.Kind)
 		}
 	}
-	t.Logf("adopted %s: %v", found[0].NativeID, counts)
+	t.Logf("adopted %s: %v", id, counts)
 	if counts[model.EventUser] == 0 || counts[model.EventAssistant] == 0 {
 		t.Errorf("the import lacks prompts or replies: %v", counts)
 	}
+}
+
+// piSessionDir is the variable that moves pi's session store (pi 1.5.2).
+const piSessionDir = "PI_CODING_AGENT_SESSION_DIR"
+
+// piSessionRoot resolves a project's environment as mega does, then points
+// pi's session store at root, leaving the rest of the environment as it
+// resolved.
+type piSessionRoot struct {
+	root string
+	base service.Resolver
+}
+
+func (r piSessionRoot) Resolve(ctx context.Context, dir, activate string) (*environ.Resolution, error) {
+	res, err := r.base.Resolve(ctx, dir, activate)
+	if err != nil {
+		return nil, err
+	}
+	res.Env = append(slices.DeleteFunc(res.Env, func(kv string) bool { return strings.HasPrefix(kv, piSessionDir+"=") }), piSessionDir+"="+r.root)
+	return res, nil
 }

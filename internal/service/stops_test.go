@@ -171,6 +171,65 @@ func TestAnAnswerHidesNoRequest(t *testing.T) {
 	}
 }
 
+// an interrupt is under way while a turn or a request is outstanding. one
+// pressed with no turn running, while a request is still on its way to being
+// settled, as a codex answer's steer awaiting its reply after its turn ended,
+// is over once that request is settled, not at the next prompt. with a turn
+// running, it lasts until the turn ends.
+func TestAnInterruptEndsWhenNothingIsLeftOutstanding(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	rt.HoldInterrupts()
+	question := map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}}
+	during := rt.Ask(model.RequestQuestion, question)
+	if err := r.svc.Interrupt(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	rt.Settle(during, model.OutcomeAborted)
+	if view := r.view(conv.ID); !view.Interrupting || !view.TurnActive {
+		t.Errorf("with the turn still running, the interrupt is over: %+v", view)
+	}
+	finishTurn(rt, "a-1", "done")
+	after := rt.Ask(model.RequestQuestion, question)
+	if err := r.svc.Interrupt(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if view := r.view(conv.ID); !view.Interrupting || view.TurnActive {
+		t.Fatalf("the interrupt under way, with no turn: %+v", view)
+	}
+	rt.Settle(after, model.OutcomeUnconfirmed)
+	if view := r.view(conv.ID); view.Interrupting || len(view.Pending) != 0 {
+		t.Errorf("with nothing left outstanding, an interrupt is still shown under way: interrupting %v, pending %+v", view.Interrupting, view.Pending)
+	}
+}
+
+// a request the harness has settled, whose record failed, stays listed as
+// last confirmed but is no longer the harness's to stop: with no turn running
+// and only such a request listed, an interrupt is not shown under way, since
+// nothing would ever end it.
+func TestAnInterruptHasNothingToStopInARequestTheHarnessSettled(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	finishTurn(rt, "a-1", "done")
+	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
+	r.closeLog(conv.ID)
+	rt.Settle(id, model.OutcomeUnconfirmed)
+	if err := r.svc.Interrupt(conv.ID); err != nil {
+		t.Fatal(err)
+	}
+	view := r.view(conv.ID)
+	if view.Interrupting {
+		t.Error("an interrupt with nothing to stop is shown under way")
+	}
+	if len(view.Pending) != 1 || view.Pending[0].ID != id {
+		t.Errorf("the last confirmed request is gone: %+v", view.Pending)
+	}
+}
+
 // once an interrupt or a release has begun, an answer that would let work go
 // on is refused as a conflict, the request still pending; deny and dismiss
 // still settle it, toward the stop.

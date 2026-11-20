@@ -1,4 +1,4 @@
-building: []
+building:
 horizon:
   - start-up-reads-every-log.md
   - request-and-what-ran-follow-ups.md
@@ -16,7 +16,6 @@ horizon:
   - updating-harnesses-from-mega.md
 researching:
   - simplify-the-core.md
-  - a-codex-question-is-a-message.md
   - megas-history-may-have-a-gap.md
   - unread-is-output-beyond-where-you-have-read.md
   - a-turn-is-inferred-from-a-message.md
@@ -42,7 +41,7 @@ researching:
   - reads-after-the-service-closes.md
   - mega-on-macos-and-windows.md
 evaluating:
-  - loose-ends-around-stops-and-restarts.md
+  - a-codex-question-is-a-message.md
   - a-model-switch-on-an-idle-runtime-is-untested.md
   - the-page-says-more-than-it-has-seen.md
   - read-behind-a-dialog.md

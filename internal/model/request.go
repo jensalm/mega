@@ -18,6 +18,11 @@ const (
 	// ended: a pi dialog, which holds pi open until it is answered, so a
 	// release ends pi's process with it never answered.
 	OutcomeUnanswered = "unanswered"
+	// OutcomeUnconfirmed is an answer the harness was sent and never said it
+	// received: a codex steer whose reply did not come before the deadline
+	// or the runtime's exit. it may or may not have been taken, and is never
+	// sent again.
+	OutcomeUnconfirmed = "unconfirmed"
 )
 
 // Request is a question or approval from a harness. ID is minted by the service

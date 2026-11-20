@@ -94,6 +94,125 @@ func TestARejectedAnswerLeavesTheRequestPending(t *testing.T) {
 	}
 }
 
+// an answer the harness was sent and never confirmed is settled once, as
+// unconfirmed, by the adapter before it returns: the operator is told so in
+// the harness's words, the request is no longer pending, and a second answer
+// is refused without reaching the harness.
+func TestAnUnconfirmedAnswerIsSettledOnceAndSaidSo(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
+	rt.SettleAnswers(model.OutcomeUnconfirmed, fmt.Errorf("Fake %w", harness.ErrUnconfirmed))
+	r.looked(conv.ID, id, `"question":"Which?"`)
+	err := r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}})
+	wantCode(t, err, CodeHarnessFailed)
+	if err == nil || err.Error() != "Fake did not confirm whether it received your answer" {
+		t.Errorf("the operator is told %v", err)
+	}
+	if pending := r.view(conv.ID).Pending; len(pending) != 0 {
+		t.Errorf("still pending: %+v", pending)
+	}
+	var outcomes []string
+	for _, ev := range r.events(conv.ID) {
+		if ev.Kind == model.EventRequestResolved && ev.Req.ID == id {
+			outcomes = append(outcomes, ev.Req.Outcome)
+		}
+	}
+	if !slices.Equal(outcomes, []string{model.OutcomeUnconfirmed}) {
+		t.Errorf("resolutions recorded: %v", outcomes)
+	}
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}}), CodeNotPending)
+	if delivered := rt.Deliveries(); len(delivered) != 0 {
+		t.Errorf("delivered %+v", delivered)
+	}
+}
+
+// a settlement whose record failed keeps its outcome: when the runtime's exit
+// retires what is still listed, once the log takes appends again, it records
+// that outcome, not aborted, so the history says what the operator was told.
+func TestAnExitRecordsAnUnrecordedSettlementAsItWas(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
+	r.closeLog(conv.ID)
+	rt.Settle(id, model.OutcomeUnconfirmed)
+	if pending := r.view(conv.ID).Pending; len(pending) != 1 {
+		t.Fatalf("the unrecorded settlement is not listed as last confirmed: %+v", pending)
+	}
+	r.reopenLog(conv.ID)
+	rt.Exit(nil)
+	var outcomes []string
+	for _, ev := range r.events(conv.ID) {
+		if ev.Kind == model.EventRequestResolved && ev.Req.ID == id {
+			outcomes = append(outcomes, ev.Req.Outcome)
+		}
+	}
+	if !slices.Equal(outcomes, []string{model.OutcomeUnconfirmed}) {
+		t.Errorf("resolutions recorded: %v", outcomes)
+	}
+}
+
+// an answer the harness took, and settled itself, whose settlement cannot be
+// recorded is not reported delivered as if all were well: the caller hears
+// that it could not be recorded, and the request stays listed as last
+// confirmed, taking no further answer.
+func TestADeliveredAnswerWhoseSettlementIsNotRecordedSaysSo(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
+	rt.SettleAnswers(model.OutcomeAnswered, nil)
+	r.looked(conv.ID, id, `"question":"Which?"`)
+	rt.OnAnswer(func() { r.closeLog(conv.ID) })
+	if err := r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}}); err == nil {
+		t.Error("an answer whose settlement was not recorded is reported delivered")
+	}
+	if pending := r.view(conv.ID).Pending; len(pending) != 1 || pending[0].ID != id {
+		t.Errorf("the last confirmed request is gone: %+v", pending)
+	}
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}}), CodeNotPending)
+	if delivered := rt.Deliveries(); len(delivered) != 1 {
+		t.Errorf("delivered %d times", len(delivered))
+	}
+}
+
+// a settlement the harness reports while an answer is on its way, and that
+// could not be recorded, stands when the answer returns: it is recorded as
+// it was settled, not as the answer's own result, and the request takes no
+// further answer.
+func TestAnAnswerKeepsASettlementThatCrossedIt(t *testing.T) {
+	r := newRig(t)
+	conv := r.start("one")
+	rt := r.fake.Last()
+	started(rt)
+	id := rt.Ask(model.RequestQuestion, map[string]any{"questions": []any{map[string]any{"question": "Which?", "options": []any{map[string]any{"label": "A"}}}}})
+	rt.OnAnswer(func() {
+		rt.OnAnswer(nil)
+		r.closeLog(conv.ID)
+		rt.Settle(id, model.OutcomeExpired)
+		r.reopenLog(conv.ID)
+	})
+	r.looked(conv.ID, id, `"question":"Which?"`)
+	wantCode(t, r.svc.Answer(conv.ID, id, harness.Answer{Answers: map[string]string{"Which?": "A"}}), CodeNotPending)
+	var outcomes []string
+	for _, ev := range r.events(conv.ID) {
+		if ev.Kind == model.EventRequestResolved && ev.Req.ID == id {
+			outcomes = append(outcomes, ev.Req.Outcome)
+		}
+	}
+	if !slices.Equal(outcomes, []string{model.OutcomeExpired}) {
+		t.Errorf("resolutions recorded: %v", outcomes)
+	}
+	if pending := r.view(conv.ID).Pending; len(pending) != 0 {
+		t.Errorf("still listed: %+v", pending)
+	}
+}
+
 // a resume whose recovered output cannot be recorded unread stays
 // unsupervised and says so, so a retry counts it; it never clears the state
 // that would have counted it.

@@ -26,6 +26,12 @@ type recordingSink struct {
 	background [][]model.BackgroundJob
 	mcp        [][]model.MCPServer
 	next       int
+	// atExit is what had been resolved when the exit was reported.
+	exited bool
+	atExit []string
+	// onResolved, when set, runs as a resolution is reported, before it is
+	// recorded.
+	onResolved func()
 }
 
 func (s *recordingSink) MCPServers(servers []model.MCPServer) {
@@ -65,11 +71,22 @@ func (s *recordingSink) Request(kind string, payload any) string {
 
 func (s *recordingSink) Resolved(id, outcome string) {
 	s.mu.Lock()
+	hook := s.onResolved
+	s.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.resolved = append(s.resolved, id+":"+outcome)
 }
 
-func (s *recordingSink) Exited(error) {}
+func (s *recordingSink) Exited(error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.exited = true
+	s.atExit = slices.Clone(s.resolved)
+}
 
 // wire captures what the runtime writes to the app-server.
 type wire struct {
@@ -308,26 +325,6 @@ func TestAsyncQuestionDiesWithAnInterruptedOrFailedTurn(t *testing.T) {
 	}
 }
 
-func TestAsyncQuestionOutlivesACompletedTurnAndStartsTheNext(t *testing.T) {
-	r, sink, w := testRuntime()
-	askQuestion(t, r)
-	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
-	if len(sink.resolved) != 0 {
-		t.Fatalf("a question from a completed turn was resolved: %v", sink.resolved)
-	}
-	result := make(chan error, 1)
-	go func() {
-		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
-	}()
-	frame := r.reply(t, w, "turn/start", `{"turn":{"id":"turn-2","status":"inProgress","items":[]}}`)
-	if text := frame["params"].(map[string]any)["input"].([]any)[0].(map[string]any)["text"]; text != "Blue" {
-		t.Errorf("turn/start text = %v", text)
-	}
-	if err := <-result; err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestInterruptAbortsQuestionsAtOnce(t *testing.T) {
 	r, sink, w := testRuntime()
 	askQuestion(t, r)
@@ -412,75 +409,6 @@ func TestQuestionFromAnInterruptedTurnNeverWaits(t *testing.T) {
 	w.quiet(t)
 }
 
-// an answer is waiting on turn/steer when its turn completes and the operator
-// interrupts; the steer then fails. the answer must not start a new turn.
-func TestAnswerInFlightNeverStartsATurnAcrossAnInterrupt(t *testing.T) {
-	r, _, w := testRuntime()
-	askQuestion(t, r)
-	result := make(chan error, 1)
-	go func() {
-		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
-	}()
-	steer := w.sent(t)
-	if steer["method"] != "turn/steer" {
-		t.Fatalf("sent %v", steer["method"])
-	}
-	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
-	if err := r.Interrupt(); err != nil { // no active turn: nothing is sent
-		t.Fatal(err)
-	}
-	r.feed(fmt.Sprintf(`{"id":%v,"error":{"code":-32600,"message":"no active turn"}}`, steer["id"]))
-	if err := <-result; !errors.Is(err, harness.ErrNotPending) {
-		t.Errorf("answer: %v", err)
-	}
-	w.quiet(t)
-}
-
-// a stop that lands as an answer's turn is about to start, after the answer
-// checked for one, never lets the turn start after it: the check and the
-// start are one step, which an interrupt waits on, and the wait for codex's
-// reply holds no lock.
-func TestNoTurnStartsAfterAStopThatLandsBeforeIt(t *testing.T) {
-	r, _, w := testRuntime()
-	askQuestion(t, r)
-	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
-	var stopFirst atomic.Bool
-	stopped := make(chan struct{})
-	afterStopCheck = func() {
-		go func() {
-			if err := r.Interrupt(); err != nil {
-				t.Error(err)
-			}
-			close(stopped)
-		}()
-		select {
-		case <-stopped:
-			stopFirst.Store(true)
-		case <-time.After(300 * time.Millisecond):
-		}
-	}
-	t.Cleanup(func() { afterStopCheck = nil })
-	result := make(chan error, 1)
-	go func() {
-		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
-	}()
-	start := w.sent(t)
-	if start["method"] == "turn/start" && stopFirst.Load() {
-		t.Fatal("turn/start went out after an interrupt had returned")
-	}
-	// the turn began before the stop, which then interrupts it as soon as it
-	// exists.
-	<-stopped
-	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turn":{"id":"turn-2","status":"inProgress","items":[]}}}`, start["id"]))
-	interrupt := r.reply(t, w, "turn/interrupt", `{}`)
-	if interrupt["params"].(map[string]any)["turnId"] != "turn-2" {
-		t.Errorf("interrupted %v", interrupt["params"])
-	}
-	if err := <-result; !errors.Is(err, harness.ErrNotPending) {
-		t.Errorf("answer: %v", err)
-	}
-}
-
 // a question the agent asks after the stop is fenced is not raised: the
 // fenced runtime would refuse its answer, so it would only wait in Needs you
 // until the runtime exits.
@@ -493,43 +421,557 @@ func TestNoQuestionIsRaisedAfterTheStopIsFenced(t *testing.T) {
 	}
 }
 
-// once a stop is fenced, an answer that reaches the adapter afterwards, even
-// one the service accepted before the stop, starts no turn: a question from a
-// completed turn is not answered as the next one.
-func TestNoAnswerStartsATurnAfterTheStopIsFenced(t *testing.T) {
-	r, _, w := testRuntime()
+// a release ends an unanswered question as it fences: the question is
+// aborted before Stopping returns, so none is left listed for the page while
+// the interrupt is still on its way. a steer already written is left to
+// settle from its reply.
+func TestAReleaseAbortsUnansweredQuestionsAsItFences(t *testing.T) {
+	r, sink, w := testRuntime()
 	askQuestion(t, r)
-	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	r.Stopping()
-	if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
-		t.Errorf("answer after the fence: %v", err)
+	sink.mu.Lock()
+	resolved := slices.Clone(sink.resolved)
+	sink.mu.Unlock()
+	if strings.Join(resolved, ",") != "svc-1:aborted" {
+		t.Errorf("when the fence returned, resolved = %v", resolved)
 	}
 	w.quiet(t)
-}
 
-// a stop that lands while the answer's turn is being started interrupts that
-// turn as soon as it exists.
-func TestStopDuringAnswerTurnStartInterruptsIt(t *testing.T) {
-	r, _, w := testRuntime()
+	r, sink, w = testRuntime()
 	askQuestion(t, r)
-	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
 	result := make(chan error, 1)
 	go func() {
 		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
 	}()
+	steer := w.sent(t)
+	if steer["method"] != "turn/steer" {
+		t.Fatalf("sent %v", steer["method"])
+	}
+	r.Stopping()
+	sink.mu.Lock()
+	early := slices.Clone(sink.resolved)
+	sink.mu.Unlock()
+	if len(early) != 0 {
+		t.Errorf("the fence settled a written steer: %v", early)
+	}
+	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turnId":"turn-1"}}`, steer["id"]))
+	if err := <-result; err != nil {
+		t.Errorf("answer: %v", err)
+	}
+}
+
+// a release's fence returns only once no abort of the adapter's own questions
+// is still to be reported: whatever took them first, the release's other
+// fence, an interrupt or the turn's end, a release never returns with one
+// still listed.
+func TestAFenceWaitsForEveryAbortUnderWay(t *testing.T) {
+	for _, first := range []string{"fence", "interrupt", "turn end"} {
+		t.Run(first, func(t *testing.T) {
+			r, sink, w := testRuntime()
+			askQuestion(t, r)
+			reporting, release := make(chan struct{}), make(chan struct{})
+			sink.mu.Lock()
+			sink.onResolved = func() {
+				close(reporting)
+				<-release
+			}
+			sink.mu.Unlock()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				switch first {
+				case "fence":
+					r.Stopping()
+				case "interrupt":
+					if err := r.Interrupt(); err != nil {
+						t.Error(err)
+					}
+				case "turn end":
+					r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+				}
+			}()
+			<-reporting
+			fenced := make(chan struct{})
+			go func() {
+				r.Stopping()
+				close(fenced)
+			}()
+			select {
+			case <-fenced:
+				t.Error("the fence returned before the abort under way was reported")
+			case <-time.After(100 * time.Millisecond):
+			}
+			close(release)
+			<-fenced
+			if first == "interrupt" {
+				r.reply(t, w, "turn/interrupt", `{}`)
+			}
+			<-done
+			sink.mu.Lock()
+			resolved := slices.Clone(sink.resolved)
+			sink.mu.Unlock()
+			if strings.Join(resolved, ",") != "svc-1:aborted" {
+				t.Errorf("resolved = %v", resolved)
+			}
+		})
+	}
+}
+
+// an interrupt marks its turn before it takes the turn's questions: an answer
+// that reaches the adapter in between is refused, not steered into the turn
+// being stopped.
+func TestNoSteerIntoATurnBeingInterrupted(t *testing.T) {
+	r, _, w := testRuntime()
+	askQuestion(t, r)
+	r.mu.Lock()
+	r.interrupted["turn-1"] = true
+	r.mu.Unlock()
+	result := make(chan error, 1)
+	go func() {
+		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+	}()
+	select {
+	case err := <-result:
+		if !errors.Is(err, harness.ErrNotPending) {
+			t.Errorf("answer: %v", err)
+		}
+	case line := <-w.lines:
+		t.Fatalf("an answer was steered into a turn being interrupted: %s", line)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the answer did not return")
+	}
+	w.quiet(t)
+}
+
+// an answer the adapter refuses without writing a steer leaves its question
+// to the abort that is under way: the turn's end, an interrupt or a release
+// still takes it and reports it, so none of them is reported while its card
+// is listed.
+func TestARefusedAnswerLeavesItsQuestionToTheAbort(t *testing.T) {
+	r, sink, w := testRuntime()
+	askQuestion(t, r)
+	// the turn's end has cleared the active turn, and not yet taken its
+	// questions.
+	r.mu.Lock()
+	r.activeTurn = ""
+	r.mu.Unlock()
+	if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}}); !errors.Is(err, harness.ErrNotPending) {
+		t.Errorf("answer: %v", err)
+	}
+	w.quiet(t)
+	r.abortQuestions(allQuestions)
+	sink.mu.Lock()
+	resolved := slices.Clone(sink.resolved)
+	sink.mu.Unlock()
+	if strings.Join(resolved, ",") != "svc-1:aborted" {
+		t.Errorf("the abort under way reported %v", resolved)
+	}
+}
+
+// an interrupt aborts the questions of the turn it stops, and no other: a
+// question of a turn that started after it caught its turn is left to that
+// turn.
+func TestAnInterruptAbortsOnlyItsTurnsQuestions(t *testing.T) {
+	r, sink, w := testRuntime()
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-0","status":"inProgress","items":[]}}}`)
+	r.mu.Lock()
+	r.questions["svc-9"] = &question{turn: "turn-9"}
+	r.mu.Unlock()
+	result := make(chan error, 1)
+	go func() { result <- r.Interrupt() }()
+	if frame := r.reply(t, w, "turn/interrupt", `{}`); frame["params"].(map[string]any)["turnId"] != "turn-0" {
+		t.Errorf("interrupted %v", frame["params"])
+	}
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	sink.mu.Lock()
+	resolved := slices.Clone(sink.resolved)
+	sink.mu.Unlock()
+	if len(resolved) != 0 {
+		t.Errorf("an interrupt of turn-0 aborted %v", resolved)
+	}
+}
+
+// once the adapter has fenced a stop while a question is pending in its
+// running turn, an answer is refused and no steer is sent: a release fences
+// when Stopping latches, before its interrupt, and an interrupt when it takes
+// the turn's questions.
+func TestNoSteerIsSentOnceAStopIsFenced(t *testing.T) {
+	for _, stop := range []string{"release", "interrupt"} {
+		t.Run(stop, func(t *testing.T) {
+			r, _, w := testRuntime()
+			askQuestion(t, r)
+			switch stop {
+			case "release":
+				r.Stopping()
+			case "interrupt":
+				result := make(chan error, 1)
+				go func() { result <- r.Interrupt() }()
+				r.reply(t, w, "turn/interrupt", `{}`)
+				if err := <-result; err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := make(chan error, 1)
+			go func() {
+				result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+			}()
+			select {
+			case err := <-result:
+				if !errors.Is(err, harness.ErrNotPending) {
+					t.Errorf("answer after the fence: %v", err)
+				}
+			case line := <-w.lines:
+				t.Fatalf("after the fence, %s was sent", line)
+			case <-time.After(2 * time.Second):
+				t.Fatal("the answer did not return")
+			}
+			w.quiet(t)
+		})
+	}
+}
+
+// a turn that completes with its question unanswered aborts the question, as
+// an interrupted or failed one does: no question outlives its turn.
+func TestAsyncQuestionDiesWithACompletedTurn(t *testing.T) {
+	r, sink, w := testRuntime()
+	askQuestion(t, r)
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+	if strings.Join(sink.resolved, ",") != "svc-1:aborted" {
+		t.Errorf("resolved = %v", sink.resolved)
+	}
+	w.quiet(t)
+}
+
+// an answer to a question whose turn has ended is refused, and nothing is
+// sent: it never starts the next turn.
+func TestAnAnswerAfterItsTurnHasEndedIsRefused(t *testing.T) {
+	for _, status := range []string{"completed", "interrupted", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			r, _, w := testRuntime()
+			askQuestion(t, r)
+			r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"` + status + `","items":[]}}}`)
+			result := make(chan error, 1)
+			go func() {
+				result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+			}()
+			select {
+			case err := <-result:
+				if !errors.Is(err, harness.ErrNotPending) {
+					t.Errorf("answer: %v", err)
+				}
+			case line := <-w.lines:
+				t.Fatalf("an answer after its turn sent %s", line)
+			case <-time.After(2 * time.Second):
+				t.Fatal("the answer did not return")
+			}
+			w.quiet(t)
+		})
+	}
+}
+
+// a message with questions that arrives once its turn has ended raises no
+// request: it is recorded as output after its turn, so the service opens no
+// turn for it, and the reply box answers it like any message.
+func TestAQuestionAfterItsTurnIsAMessage(t *testing.T) {
+	for _, status := range []string{"completed", "interrupted", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			r, sink, w := testRuntime()
+			r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}`)
+			r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"` + status + `","items":[]}}}`)
+			r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"agentMessage","id":"a-1","text":"Which color?","delivery":"async","questions":[{"title":"Which color do you prefer?","options":["Red","Blue"]}]}}}`)
+			if len(sink.requests) != 0 {
+				t.Errorf("a question after its turn was raised: %v", sink.requests)
+			}
+			last := sink.events[len(sink.events)-1]
+			if last.Kind != model.EventAssistant || last.Text != "Which color?" || !last.AfterTurn {
+				t.Errorf("the message is recorded as %+v", last)
+			}
+			w.quiet(t)
+		})
+	}
+}
+
+// streaming text codex sends for a turn it has reported ended is never the
+// running turn's: it is dropped, and the completed item, marked as after its
+// turn, records the whole message.
+func TestStreamingTextOfAnEndedTurnIsDropped(t *testing.T) {
+	r, sink, _ := testRuntime()
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}`)
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-2","status":"inProgress","items":[]}}}`)
+	r.feed(`{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"a-1","delta":"LATE"}}`)
+	r.feed(`{"method":"item/agentMessage/delta","params":{"threadId":"thread-1","turnId":"turn-2","itemId":"a-2","delta":"LIVE"}}`)
+	if got := strings.Join(sink.deltas, ""); got != "LIVE" {
+		t.Errorf("streamed %q, want only the running turn's", got)
+	}
+}
+
+// a card is raised only for a question of the turn that is running, the one
+// its answer can be steered into: a question naming another turn, or arriving
+// with no turn known to run, is recorded as the message it is and raises none.
+func TestOnlyTheRunningTurnsQuestionRaisesACard(t *testing.T) {
+	question := func(turn string) string {
+		return `{"method":"item/completed","params":{"threadId":"thread-1","turnId":"` + turn + `","item":{"type":"agentMessage","id":"a-` + turn + `","text":"Which color?","questions":[{"title":"Which color do you prefer?","options":["Red","Blue"]}]}}}`
+	}
+	r, sink, w := testRuntime()
+	r.feed(question("turn-1"))
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-2","status":"inProgress","items":[]}}}`)
+	r.feed(question("turn-3"))
+	if len(sink.requests) != 0 {
+		t.Errorf("a question of no running turn was raised: %v", sink.requests)
+	}
+	if len(sink.events) != 2 || sink.events[0].Kind != model.EventAssistant || sink.events[1].Kind != model.EventAssistant {
+		t.Errorf("the messages are recorded as %v", summary(sink.events))
+	}
+	r.feed(question("turn-2"))
+	if strings.Join(sink.requests, ",") != "question:svc-1" {
+		t.Errorf("the running turn's question: %v", sink.requests)
+	}
+	w.quiet(t)
+}
+
+// any item codex reports for a turn whose end it has already reported is
+// output after its turn, as a late question is: the service opens no turn for
+// it, and counts it unread at once. output of a turn still running is not.
+func TestEveryItemAfterItsTurnIsMarked(t *testing.T) {
+	r, sink, _ := testRuntime()
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"inProgress","items":[]}}}`)
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+	r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"agentMessage","id":"a-1","text":"late"}}}`)
+	r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"type":"commandExecution","id":"c-1","command":"true","cwd":"/f","commandActions":[],"status":"completed","exitCode":0,"aggregatedOutput":""}}}`)
+	r.feed(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-2","status":"inProgress","items":[]}}}`)
+	r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-2","item":{"type":"agentMessage","id":"a-2","text":"running"}}}`)
+	var marks []string
+	for _, ev := range sink.events {
+		if ev.Kind != model.EventTurnEnd {
+			marks = append(marks, fmt.Sprintf("%s %s %v", ev.Kind, ev.NativeID, ev.AfterTurn))
+		}
+	}
+	want := []string{"assistant a-1 true", "tool_use c-1 true", "tool_result c-1/result true", "assistant a-2 false"}
+	if !slices.Equal(marks, want) {
+		t.Errorf("marked %v, want %v", marks, want)
+	}
+}
+
+// a turn that fails before the reply to its turn/start arrives is not marked
+// running by that reply, and a question it asked raises no request.
+func TestALateReplyNeverMarksAnEndedTurnRunning(t *testing.T) {
+	r, sink, w := testRuntime()
+	result := make(chan error, 1)
+	go func() { result <- r.Prompt("svc-uuid", "Reply with ALPHA") }()
 	start := w.sent(t)
 	if start["method"] != "turn/start" {
 		t.Fatalf("sent %v", start["method"])
 	}
-	if err := r.Interrupt(); err != nil {
+	r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-7","status":"failed","items":[]}}}`)
+	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turn":{"id":"turn-7","status":"inProgress","items":[]}}}`, start["id"]))
+	if err := <-result; err != nil {
 		t.Fatal(err)
 	}
-	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turn":{"id":"turn-2","status":"inProgress","items":[]}}}`, start["id"]))
-	interrupt := r.reply(t, w, "turn/interrupt", `{}`)
-	if interrupt["params"].(map[string]any)["turnId"] != "turn-2" {
-		t.Errorf("interrupted %v", interrupt["params"])
+	r.mu.Lock()
+	active := r.activeTurn
+	r.mu.Unlock()
+	if active != "" {
+		t.Errorf("the failed turn is marked running: %q", active)
 	}
-	if err := <-result; !errors.Is(err, harness.ErrNotPending) {
+	r.feed(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-7","item":{"type":"agentMessage","id":"a-1","text":"Which color?","questions":[{"title":"Which color do you prefer?","options":["Red","Blue"]}]}}}`)
+	if len(sink.requests) != 0 {
+		t.Errorf("a question of the failed turn was raised: %v", sink.requests)
+	}
+}
+
+// a steer written while its turn runs settles from codex's reply, whatever
+// the turn does meanwhile: the turn's end aborts nothing, a reply that
+// succeeds delivers the answer, and one that fails refuses it. turn/steer is
+// the last thing sent either way, so nothing falls back to starting a turn.
+func TestASteerSettlesFromItsReplyAfterTheTurnEnds(t *testing.T) {
+	for _, reply := range []string{"success", "failure"} {
+		t.Run(reply, func(t *testing.T) {
+			r, sink, w := testRuntime()
+			askQuestion(t, r)
+			result := make(chan error, 1)
+			go func() {
+				result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+			}()
+			steer := w.sent(t)
+			if steer["method"] != "turn/steer" {
+				t.Fatalf("sent %v", steer["method"])
+			}
+			r.feed(`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}`)
+			if len(sink.resolved) != 0 {
+				t.Errorf("the turn's end aborted %v", sink.resolved)
+			}
+			want := error(nil)
+			if reply == "success" {
+				r.feed(fmt.Sprintf(`{"id":%v,"result":{"turnId":"turn-1"}}`, steer["id"]))
+			} else {
+				r.feed(fmt.Sprintf(`{"id":%v,"error":{"code":-32600,"message":"no active turn"}}`, steer["id"]))
+				want = harness.ErrNotPending
+			}
+			select {
+			case err := <-result:
+				if !errors.Is(err, want) {
+					t.Errorf("answer: %v, want %v", err, want)
+				}
+			case line := <-w.lines:
+				t.Fatalf("after the steer, %s was sent", line)
+			case <-time.After(2 * time.Second):
+				t.Fatal("the answer did not return")
+			}
+			w.quiet(t)
+		})
+	}
+}
+
+// a steer written that codex never replies to, before the deadline or before
+// the app-server goes, was neither taken nor refused as far as mega knows: the
+// question is settled once, as unconfirmed, and before the exit is reported,
+// so the exit's retirement cannot abort it as well; the operator is told
+// codex did not confirm it, and nothing is sent again.
+func TestASteerWithNoReplyIsUnconfirmed(t *testing.T) {
+	for _, lost := range []string{"timeout", "connection"} {
+		t.Run(lost, func(t *testing.T) {
+			r, sink, w := testRuntime()
+			if lost == "timeout" {
+				r.steerTimeout = 50 * time.Millisecond
+			}
+			askQuestion(t, r)
+			result := make(chan error, 1)
+			go func() {
+				result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+			}()
+			if steer := w.sent(t); steer["method"] != "turn/steer" {
+				t.Fatalf("sent %v", steer["method"])
+			}
+			exited := make(chan struct{})
+			if lost == "connection" {
+				go func() {
+					r.watch()
+					close(exited)
+				}()
+				r.conn.end(nil)
+			}
+			select {
+			case err := <-result:
+				if !errors.Is(err, harness.ErrUnconfirmed) || err.Error() != "Codex did not confirm whether it received your answer" {
+					t.Errorf("answer: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("the answer did not return")
+			}
+			if lost == "connection" {
+				select {
+				case <-exited:
+				case <-time.After(2 * time.Second):
+					t.Fatal("the exit was not reported")
+				}
+			}
+			sink.mu.Lock()
+			resolved, atExit, wasExited := slices.Clone(sink.resolved), sink.atExit, sink.exited
+			sink.mu.Unlock()
+			if strings.Join(resolved, ",") != "svc-1:unconfirmed" {
+				t.Errorf("resolved = %v", resolved)
+			}
+			if wasExited && strings.Join(atExit, ",") != "svc-1:unconfirmed" {
+				t.Errorf("when the exit was reported, resolved = %v", atExit)
+			}
+			if err := r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Red"}}); !errors.Is(err, harness.ErrNotPending) {
+				t.Errorf("second answer: %v", err)
+			}
+			w.quiet(t)
+		})
+	}
+}
+
+// a steer codex replies to and then exits at once is settled by that reply,
+// delivered or refused, before the exit is reported: the exit's retirement
+// never settles it a second way, so what the operator is told and what is
+// recorded agree.
+func TestASteerItsReplySettledIsSettledBeforeTheExit(t *testing.T) {
+	for _, reply := range []string{"success", "refusal"} {
+		t.Run(reply, func(t *testing.T) {
+			r, sink, w := testRuntime()
+			askQuestion(t, r)
+			result := make(chan error, 1)
+			go func() {
+				result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+			}()
+			steer := w.sent(t)
+			if steer["method"] != "turn/steer" {
+				t.Fatalf("sent %v", steer["method"])
+			}
+			want, outcome := error(nil), "svc-1:answered"
+			if reply == "success" {
+				r.feed(fmt.Sprintf(`{"id":%v,"result":{"turnId":"turn-1"}}`, steer["id"]))
+			} else {
+				r.feed(fmt.Sprintf(`{"id":%v,"error":{"code":-32600,"message":"no active turn"}}`, steer["id"]))
+				want, outcome = harness.ErrNotPending, "svc-1:aborted"
+			}
+			exited := make(chan struct{})
+			go func() {
+				r.watch()
+				close(exited)
+			}()
+			r.conn.end(nil)
+			select {
+			case <-exited:
+			case <-time.After(2 * time.Second):
+				t.Fatal("the exit was not reported")
+			}
+			if err := <-result; !errors.Is(err, want) {
+				t.Errorf("answer: %v, want %v", err, want)
+			}
+			sink.mu.Lock()
+			resolved, atExit := slices.Clone(sink.resolved), sink.atExit
+			sink.mu.Unlock()
+			if strings.Join(atExit, ",") != outcome || strings.Join(resolved, ",") != outcome {
+				t.Errorf("resolved %v, and %v when the exit was reported; want %s", resolved, atExit, outcome)
+			}
+		})
+	}
+}
+
+// the runtime's lock is held while turn/steer is written, and free while
+// codex's reply is awaited, so a stop can begin before codex answers. this
+// shows the lock at the write; that the fence is checked under the same hold
+// is for review of Answer.
+func TestTheSteerIsWrittenUnderTheRuntimesLock(t *testing.T) {
+	r, _, w := testRuntime()
+	askQuestion(t, r)
+	var held atomic.Bool
+	w.onWrite = func() {
+		// the writer holding r.mu cannot take it again.
+		if r.mu.TryLock() {
+			r.mu.Unlock()
+			return
+		}
+		held.Store(true)
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- r.Answer("svc-1", harness.Answer{Answers: map[string]string{"Which color do you prefer?": "Blue"}})
+	}()
+	steer := w.sent(t)
+	if steer["method"] != "turn/steer" {
+		t.Fatalf("sent %v", steer["method"])
+	}
+	if !held.Load() {
+		t.Error("turn/steer was written without the runtime's lock")
+	}
+	stopped := make(chan struct{})
+	go func() {
+		r.Stopping()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a stop could not begin while the steer's reply was awaited")
+	}
+	r.feed(fmt.Sprintf(`{"id":%v,"result":{"turnId":"turn-1"}}`, steer["id"]))
+	if err := <-result; err != nil {
 		t.Errorf("answer: %v", err)
 	}
 }

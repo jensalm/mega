@@ -44,7 +44,7 @@ What survives from the first answer is advice on how, not whether: where several
 
 ## the seed list: six older findings from the review of 2026-11-19
 
-Listed once by the implementer of `loose-ends-around-stops-and-restarts`, and left:
+The [November 19 journal](../../journal/2026-11-19.md#batch-loose-ends-around-stops-and-restarts-implementation-agent) records these findings from the preceding batch.
 
 1. Release does not fence a Codex answer already accepted, which can start a turn just after Release returns; the adapter then interrupts it.
 2. A harness's own resolution of a request that cannot be recorded leaves the request answerable.

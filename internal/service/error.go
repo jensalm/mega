@@ -38,7 +38,9 @@ const (
 	// was approved, until the operator approves it again.
 	CodeEnvironmentNamesChanged = "environment_names_changed"
 	// CodeHarnessFailed refuses work because the harness itself failed to
-	// start or answer: its own words, first line only, and never a stack.
+	// start or answer: its own words, first line only, and never a stack. it
+	// also says an answer was sent and the harness never confirmed it, in
+	// the adapter's words.
 	CodeHarnessFailed = "harness_failed"
 )
 

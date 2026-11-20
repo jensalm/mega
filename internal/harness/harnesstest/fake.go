@@ -436,6 +436,8 @@ type Runtime struct {
 	holdStops    bool   // an interrupt settles nothing, as pi's with a dialog pending
 	fences       int    // stops fenced
 	rejectWith   error  // an answer refused without settling the request
+	settleAs     string // an answer settled through the sink with this outcome, returning settleErr
+	settleErr    error
 	refusePrompt error  // a prompt refused, no turn started
 	onAnswer     func() // runs while an answer is in flight, before it is delivered
 	modes        []string
@@ -480,6 +482,16 @@ func (r *Runtime) Answer(requestID string, answer harness.Answer) error {
 		return r.rejectWith
 	}
 	delete(r.requests, requestID)
+	if r.settleAs != "" {
+		outcome, err := r.settleAs, r.settleErr
+		r.mu.Unlock()
+		r.sink.Resolved(requestID, outcome)
+		r.mu.Lock()
+		if err == nil {
+			r.deliveries = append(r.deliveries, Delivery{Native: native, Answer: answer})
+		}
+		return err
+	}
 	r.deliveries = append(r.deliveries, Delivery{Native: native, Answer: answer})
 	return nil
 }
@@ -628,6 +640,16 @@ func (r *Runtime) RejectAnswers(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.rejectWith = err
+}
+
+// SettleAnswers makes every answer go as a codex steer does: the adapter
+// settles the request itself, through the sink, with outcome, and the answer
+// returns err, as nil for one codex confirmed or harness.ErrUnconfirmed for
+// one it never did.
+func (r *Runtime) SettleAnswers(outcome string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.settleAs, r.settleErr = outcome, err
 }
 
 // HoldInterrupts makes an interrupt settle none of the pending requests, as

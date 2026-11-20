@@ -648,11 +648,11 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 		s.mu.Unlock()
 		return newError(CodeNotPending, fmt.Sprintf("request '%s' is not pending", requestID))
 	}
-	switch l.answering[requestID] {
-	case answerInFlight:
+	if l.reserved[requestID] == answerInFlight {
 		s.mu.Unlock()
 		return newError(CodeConflict, fmt.Sprintf("request '%s' is already being answered", requestID))
-	case answerDelivered:
+	}
+	if _, settled := l.unrecorded(requestID); settled {
 		// answered, or settled by the harness, and still listed only because
 		// that could not be recorded: the harness holds it no more.
 		s.mu.Unlock()
@@ -671,7 +671,7 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 	}
 	// the request stays listed until its resolution is recorded, reserved
 	// against a second answer meanwhile.
-	l.answering[requestID] = answerInFlight
+	l.reserved[requestID] = answerInFlight
 	rt := l.runtime
 	s.mu.Unlock()
 
@@ -682,44 +682,54 @@ func (s *Service) Answer(conversationID, requestID string, answer harness.Answer
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(l.answering, requestID)
-	if errors.Is(err, harness.ErrInvalidAnswer) {
-		// refused without settling: the request is still pending, and a
-		// fitting answer or a dismissal still reaches it.
-		return newError(CodeInvalid, err.Error())
-	}
-	if !slices.ContainsFunc(l.pending, func(r *model.Request) bool { return r.ID == requestID }) {
-		// the harness settled it meanwhile, or the runtime exited, and that
-		// resolution is recorded already.
-		if err == nil {
-			return nil
+	// the request is settled once: as the harness settled it while the answer
+	// was on its way, if it did and that could not be recorded, else by the
+	// answer's result.
+	listed := slices.ContainsFunc(l.pending, func(r *model.Request) bool { return r.ID == requestID })
+	outcome, settled := l.unrecorded(requestID)
+	if !settled {
+		delete(l.reserved, requestID)
+		if errors.Is(err, harness.ErrInvalidAnswer) {
+			// refused without settling: the request is still pending, and a
+			// fitting answer or a dismissal still reaches it.
+			return newError(CodeInvalid, err.Error())
 		}
-		return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled before the answer arrived", requestID))
+		switch {
+		case err == nil:
+			outcome = model.OutcomeAnswered
+		case errors.Is(err, harness.ErrUnconfirmed):
+			outcome = model.OutcomeUnconfirmed
+		default:
+			outcome = model.OutcomeAborted
+		}
+	}
+	var recordErr error
+	if listed {
+		recordErr = s.settleLocked(l, req, outcome)
 	}
 	switch {
 	case err == nil:
-		return s.settleLocked(l, req, model.OutcomeAnswered)
-	case errors.Is(err, harness.ErrNotPending):
-		// the harness settled it first, for example on an interrupt.
-		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
-			dl.Errorf("%v", err)
-		}
-		return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled before the answer arrived", requestID))
-	default:
-		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
-			dl.Errorf("%v", err)
-		}
+		// taken: one whose settlement cannot be recorded says so.
+		return recordErr
+	case recordErr != nil:
+		dl.Errorf("%v", recordErr)
+	}
+	switch {
+	case errors.Is(err, harness.ErrUnconfirmed):
+		// sent, and never confirmed: the operator is told in its words.
+		return newError(CodeHarnessFailed, err.Error())
+	case listed && !settled && !errors.Is(err, harness.ErrNotPending):
 		return fmt.Errorf("delivering answer to '%s': %w", conversationID, err)
 	}
+	// the harness settled it first, for example on an interrupt, or the
+	// runtime exited.
+	return newError(CodeNotPending, fmt.Sprintf("request '%s' was settled before the answer arrived", requestID))
 }
 
-// what an answer's reservation of a request says: one is on its way to the
-// harness, or one reached it (or the harness had settled the request) and
-// the resolution could not be recorded yet.
-const (
-	answerInFlight  = "in flight"
-	answerDelivered = "delivered"
-)
+// answerInFlight reserves a request whose answer is on its way to the
+// harness. otherwise a reservation is the outcome of a settlement that
+// could not be recorded yet (live.unrecorded).
+const answerInFlight = "in flight"
 
 // settleLocked is the one move of a request out of the pending set, for an
 // answer and for the harness's own settlement alike: it records the
@@ -727,13 +737,18 @@ const (
 // cannot be recorded stays listed, as the last confirmed state, and nothing
 // is broadcast, as after any durability fault; but the harness holds it no
 // more, so it is never answerable again: an answer gets not_pending without
-// reaching the harness. callers hold s.mu.
+// reaching the harness, and its outcome is kept for the runtime's retirement
+// to record. an interrupt under way with no turn running ends once the
+// harness holds no request: nothing is left for it to stop. callers hold s.mu.
 func (s *Service) settleLocked(l *live, req *model.Request, outcome string) error {
 	if err := s.resolve(l, req, outcome); err != nil {
-		l.answering[req.ID] = answerDelivered
+		l.reserved[req.ID] = outcome
 		return err
 	}
 	l.takePending(req.ID)
+	if !l.turnActive && !l.holdsRequests() {
+		l.interrupting = false
+	}
 	s.changed()
 	return nil
 }
@@ -789,9 +804,10 @@ func (s *Service) Interrupt(conversationID string) error {
 		s.mu.Unlock()
 		return newError(CodeConflict, "the conversation has no runtime")
 	}
-	// an interrupt with a turn or a request to stop is under way until the
-	// turn ends or the runtime exits.
-	if l.turnActive || len(l.pending) > 0 {
+	// an interrupt with a turn, or a request the harness still holds, to stop
+	// is under way while either is outstanding: until the turn ends, the
+	// harness holds no request with no turn running, or the runtime exits.
+	if l.turnActive || l.holdsRequests() {
 		l.interrupting = true
 		s.changed()
 	}

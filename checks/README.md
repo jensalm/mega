@@ -23,7 +23,7 @@ Where things go:
 
 ## What each suite covers
 
-- **`conversation.mjs`** (90 steps): the conversation view, on long conversations and in its layout. Its service runs in `Asia/Kolkata` (`TZ`) and its page in UTC, as a hardened browser reports, so every time it checks is the service's. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
+- **`conversation.mjs`** (97 steps): the conversation view, on long conversations and in its layout. Its service runs in `Asia/Kolkata` (`TZ`) and its page in UTC, as a hardened browser reports, so every time it checks is the service's. Two conversations are made about twenty thousand events long with `lib/gen.mjs` while the service is stopped. It checks the following:
   - opening reads only the tail: ten turns, at the newest reply, saying how much is earlier;
   - Show earlier and Show all, each holding the view;
   - the native events toggle refetching what is shown;
@@ -62,7 +62,8 @@ Where things go:
     - expanded, the whole command, which the collapsed line cut short, under "Command", then the result under "Result";
     - the command's copy control taking all of it;
     - another tool (Claude's Edit, a Codex file change, pi's read) shown as its name and its input, field by field;
-    - an action from the generated history, with nothing its adapter reads, showing the one line it has.
+    - an action from the generated history, with nothing its adapter reads, showing the one line it has;
+    - a web search the fake Codex reports for the turn before while the next one runs (its `late-search` verb): no spinner, only "no result recorded", and not named on the activity line as the turn's work; and a message it reports for the turn before while the next streams (`late-message`), leaving that streaming reply and "Writing" be, with nothing it streamed for the turn before in it.
 
   It saves the centred conversation as `shots/centred-{light,dark}-{panel,rail}.png`, the MCP list as `shots/mcp-claude.png`, a turn at rest, hovered and mismatched as `shots/turn-{rest,hover,mismatch}.png`, the start lines as `shots/start-{tested,newer,older}.png`, and each harness's expanded command and input as `shots/action-{claude,codex,pi}{,-input}.png`.
 - **`firstrun.mjs`** (59 steps): the first run on a machine that has never had mega, with no harness installed, then with Claude Code and Codex. It is a bare suite: no fakes, no Claude settings, a config naming no harness path, and no harness on any `PATH` it gives. Claude Code's default, the bare name `claude`, is on no `PATH`, and the scratch `HOME` has no build in the installer's versions folder; Codex's and pi's, bare names, are on no `PATH`. It checks the following:
@@ -159,7 +160,7 @@ Where things go:
 
   The dock's steps turn off chromium's scroll anchoring, which re-pins a view at the bottom by itself and so hides the defect; firefox does not. The suite moves the view up with the mouse wheel (`wheel`), as a reader does. Any move up that mega did not make ends following, so a scripted one would do too, and step 7 relies on it. It saves the control bar for each harness, collapsed and open, light and dark, as `shots/bar-{claude,codex}-{collapsed,open}[-dark].png`, and pi's as `shots/bar-pi-{collapsed,small}.png` and `shots/bar-pi-{collapsed,open}-dark.png`, and the `@~/` lists as `shots/path-search-{outside,second}.png`.
 - **`readme.mjs`** (5 steps): the README's picture of a workspace. A scratch workspace of three projects, with conversations on all three harnesses in the states the side panel shows: a Claude Code approval waiting, a Codex reply unread, a pi turn running, one read and idle, and one Claude Code conversation holding hand-written turns from `lib/scene.mjs`, so its history reads as real work. It checks that needs-you holds the approval and the unread reply and that the pi turn is running. It then opens the hand-written conversation, unfolds every project, opens the last action, and saves the page at 1440×900 as `shots/workspace.png`. `make readme-image` runs it and copies the picture to `docs/images/workspace.png`.
-- **`requests.mjs`** (67 steps): requests. It checks the following:
+- **`requests.mjs`** (73 steps): requests. It checks the following:
   - a permission card docked above the reply box, not in the history, with its one-line row there;
   - focus on the card neither opening the box nor moving the card;
   - Allow, and Deny with a reason, each clearing the card, with the answer reaching the turn;
@@ -170,6 +171,9 @@ Where things go:
   - an MCP approval from the fake Codex, allowed for the session or denied;
   - a typed form needing its required field;
   - Interrupt aborting a pending card, with a late answer refused;
+  - a question the fake Codex asks in its message, while its turn waits:
+    - its card steering the answer into that turn, once, and the question answered;
+    - a steer written that Codex never replies to, the fake exiting on it (`askq lose`): the card closes, and the question's row says "Codex did not confirm whether it received your answer", after a reload too. One steer reaches the fake, by its log, one `unconfirmed` resolution is recorded, and a second answer is refused as `not_pending` and sends nothing. The deadline that ends a steer with no reply is a minute, which the adapter's tests shorten; this suite loses the connection instead;
   - the allow keys:
     - Ctrl+Enter answering the oldest approval from the empty reply box, then the next from the page itself, one per press, the Allow that answers naming its key in its title and Deny none;
     - nothing from another field, with a draft in the box, on a repeating key, on a request docked under the press, or with a dialog open;
@@ -184,7 +188,7 @@ Where things go:
     - an interrupt waiting on a dialog, saying so, until the dialog is dismissed. Meanwhile a chosen answer, the gate's own Block after the request is checked to be the gate, is refused as `conflict` with the request still pending, and the card holds Answer, saying why, with Dismiss still live;
     - a release with a dialog pending, whose dialog warns that pi is ended and the gated command does not run, leaving the dialog's row "never answered".
 
-  It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`, and the approval the keys answer, with its Allow's title written under it by the check, since the browser draws a title outside the page, as `shots/approval-key.png`.
+  It saves the pi dialog and the release warning as `shots/pi-{dialog,release-warning}.png`, the closed question's history as `shots/question-unconfirmed.png`, and the approval the keys answer, with its Allow's title written under it by the check, since the browser draws a title outside the page, as `shots/approval-key.png`.
 - **`shutdown.mjs`** (28 steps): the shutdown gate. Its service runs in `Asia/Kolkata` and its pages in UTC. It checks the following:
   - arming from the footer, with the banner naming what it waits for by count and by name, and the request marked as the operator's;
   - a second page seeing it;

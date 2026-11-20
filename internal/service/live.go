@@ -124,8 +124,8 @@ type live struct {
 	facts        *model.RuntimeFacts
 	pending      []*model.Request
 	pendingAt    map[string]time.Time // when each pending request was recorded
-	answering    map[string]string    // requests an answer reached or is reaching: still listed until recorded, never answerable again
-	interrupting bool                 // an interrupt has begun and the turn has not ended
+	reserved     map[string]string    // listed requests no answer may reach: answerInFlight, or a settled outcome not yet recorded
+	interrupting bool                 // an interrupt has begun, and a turn or a request is still outstanding
 
 	// fault is whether the last runtime ended badly (an error, an exit during
 	// a turn, or a launch that did not start: runFault), or the last history
@@ -198,7 +198,7 @@ func (s *Service) liveLocked(conversationID string) (*live, error) {
 		log.Close()
 		return nil, err
 	}
-	l := &live{id: conversationID, log: log, seen: make(map[string]bool), pendingAt: make(map[string]time.Time), answering: make(map[string]string)}
+	l := &live{id: conversationID, log: log, seen: make(map[string]bool), pendingAt: make(map[string]time.Time), reserved: make(map[string]string)}
 	var outputSeq int64
 	if conv, err := s.conversationLocked(conversationID); err == nil {
 		outputSeq = conv.OutputSeq
@@ -487,6 +487,24 @@ func (s *Service) freshAllowedLocked(l *live) (bool, error) {
 	return !open, nil
 }
 
+// unrecorded is the outcome the harness settled a request with, if that
+// could not be recorded yet: the request stays listed, as last confirmed,
+// but no answer reaches it. callers hold s.mu.
+func (l *live) unrecorded(requestID string) (string, bool) {
+	state := l.reserved[requestID]
+	return state, state != "" && state != answerInFlight
+}
+
+// holdsRequests is whether the harness still holds any pending request: one
+// it settled is no longer the harness's to settle or an interrupt's to stop.
+// callers hold s.mu.
+func (l *live) holdsRequests() bool {
+	return slices.ContainsFunc(l.pending, func(r *model.Request) bool {
+		_, settled := l.unrecorded(r.ID)
+		return !settled
+	})
+}
+
 // takePending removes a request from the pending set. callers hold s.mu.
 func (l *live) takePending(requestID string) (*model.Request, bool) {
 	i := slices.IndexFunc(l.pending, func(r *model.Request) bool { return r.ID == requestID })
@@ -496,7 +514,7 @@ func (l *live) takePending(requestID string) (*model.Request, bool) {
 	req := l.pending[i]
 	l.pending = slices.Delete(l.pending, i, i+1)
 	delete(l.pendingAt, requestID)
-	delete(l.answering, requestID)
+	delete(l.reserved, requestID)
 	return req, true
 }
 
@@ -592,14 +610,15 @@ func (k *sink) Event(ev *model.Event) {
 	}
 	switch ev.Kind {
 	case model.EventUser, model.EventAssistant, model.EventToolUse, model.EventToolResult:
-		// a user message the runtime reports opens a turn too, such as an
-		// answer that starts the next turn. output the adapter marks as after
-		// its turn opens none: no turn is coming to end it.
+		// a user message the runtime reports opens a turn too. output the
+		// adapter marks as after its turn opens none, since no turn is coming
+		// to end it, and never settles what a turn under way runs with, since
+		// that turn did not produce it.
 		if !l.turnActive && !ev.AfterTurn {
 			s.beginTurnLocked(l, ev.At)
 			s.changed()
 		}
-		if ev.Kind != model.EventUser && l.turnActive && l.turnRan == nil {
+		if ev.Kind != model.EventUser && !ev.AfterTurn && l.turnActive && l.turnRan == nil {
 			// the turn's first output: what it runs with is settled.
 			s.ranLocked(l)
 			s.changed()
@@ -890,14 +909,19 @@ func (k *sink) Exited(err error) {
 }
 
 // retireRequestsLocked settles every request a runtime that has ended left
-// pending, as aborted, through settleLocked: one whose abort cannot be
-// recorded stays listed as last recorded, and takes no further answer, so
-// none reaches a runtime that replaces this one. it reports whether every
-// abort was recorded. callers hold s.mu.
+// pending, through settleLocked: as aborted, or as the settlement that could
+// not be recorded before, so the history says what the operator was told.
+// one whose settlement cannot be recorded stays listed as last recorded, and
+// takes no further answer, so none reaches a runtime that replaces this one.
+// it reports whether every settlement was recorded. callers hold s.mu.
 func (s *Service) retireRequestsLocked(l *live) bool {
 	confirmed := true
 	for _, req := range slices.Clone(l.pending) {
-		if err := s.settleLocked(l, req, model.OutcomeAborted); err != nil {
+		outcome, settled := l.unrecorded(req.ID)
+		if !settled {
+			outcome = model.OutcomeAborted
+		}
+		if err := s.settleLocked(l, req, outcome); err != nil {
 			dl.Errorf("%v", err)
 			confirmed = false
 		}

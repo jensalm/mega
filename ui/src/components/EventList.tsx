@@ -35,6 +35,9 @@ const outcomeLabels: Record<string, string> = {
   // a pi dialog pending when its runtime was ended, as a release ends pi
   // with a dialog waiting: the command it gated did not run.
   unanswered: 'never answered: the runtime was ended while it waited, and what it gated did not run',
+  // a codex steer whose reply never came, by its deadline or before the
+  // runtime went: the answer was sent, and may or may not have been taken.
+  unconfirmed: 'Codex did not confirm whether it received your answer',
 }
 
 // Began is when a turn began: its prompt's time, or its first event's when
@@ -133,7 +136,9 @@ export function EventList({ events, pending, turnActive, stale, showNative, delt
         )
       case 'tool_use': {
         const result = event.tool_use_id ? results.get(event.tool_use_id) : undefined
-        const live = turnActive && index > turnStart
+        // a call reported after its own turn ended is never the turn in
+        // flight's, whatever it follows.
+        const live = turnActive && index > turnStart && !event.after_turn
         let state: ReactNode = null
         if (result?.status === 'error') {
           state = <span className="tool-error"> failed</span>
